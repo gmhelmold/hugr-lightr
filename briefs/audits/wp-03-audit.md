@@ -1,0 +1,9 @@
+WP-03-AUDIT | RUN-01 | Full networking (DNS/VPN/network-create/IPAM)
+Branch audit: wp/network @ 9d2ecb8
+Contracts frozen: C-03 (runtime-network-volume.md — frozen interface: network/mod.rs + registry.rs + cli/subcommands.rs NetworkCmd; agent adds dns.rs/vpn.rs/bridge.rs/ipam.rs ONLY; does NOT edit frozen surfaces).
+Files FIRST: crates/lightr-run/src/network/mod.rs (frozen), crates/lightr-run/src/network/registry.rs (frozen — members/subnet), crates/lightr-core/src/network.rs (frozen — NetworkId), crates/lightr-cli/src/cli/cmd/subcommands.rs (frozen: NetworkCmd enum — ADD ONLY Create fields, not edit existing; agent may extend NetworkCmd but NOT invent new subcommand enum without C-01 freeze), crates/lightr-cli/src/handlers/network.rs (frozen: create/ls/rm/inspect — extend, not replace; connect/disconnect STAY exit 2 per doc).
+Mutation-probe: remove create() from network/registry.rs temporarily → `cargo test -p lightr-run --lib -- --skip vswitch::tests` RED → restore → measure (before PASS / after PASS / mutation time).
+Gates: fmt --check / clippy -p lightr-run -D / cargo test -p lightr-run --lib -j2 (skip vswitch) / cargo test -p lightr-acceptance --test acceptance_r2 (A17-A22, net-isolation) / binary flags verify.
+Contamination: check .worktrees/wp-03 independent; .worktrees/ selfhosted separate; .worktrees/wp-01 separate; NO .git.old/ (.git.old/ REMOVED per review).
+Return card (compact, no prose): "WP-03-AUDIT: PASS/FAIL | mutation: RED/restore/measure (before/after/ms) | contracts: C-03 verified (mod/registry untouched) | loose-ends: 0 | debt: 0 | contamination: NONE | PR: wp/network @ 9d2ecb8 | ambiguities: <DNS resolve grammar / VPN tunnel config> | LOC: <dns.rs + vpn.rs + bridge.rs + ipam.rs + lib.rs + cli-subcommand-extensions>"
+Stop: open PR; wait CI green; STOP at "WP-03 SEAL: PR green, waiting lead". No merge.
