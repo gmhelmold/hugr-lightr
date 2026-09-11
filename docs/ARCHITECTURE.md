@@ -123,7 +123,7 @@ never a silent skip.
 | `rootfs` | `Option<&Path>` | `None` for native; CoW-materialized tree for ns/vz |
 | `limits` | `ResourceLimits` | F-203 caps; NOT part of any memo key |
 | `net` | `bool` | Enables NAT NIC + `ip=dhcp` on vz; other engines ignore |
-| `net_fd` | `Option<RawFd>` | ADR-0018: guest-side fd of `socketpair(AF_UNIX, SOCK_DGRAM)` for the mesh NIC (eth1); `None` = single-NAT-NIC path |
+| `net_fd` | `Option<RawFd>` | `C-SELF-05` (`F-405` `wire bridge`): `socketpair(AF_UNIX, SOCK_DGRAM)` fd; `independente` `mesh` (`C-SELF-07` `F-404` `defere`); `None` = single-NAT-NIC path (`selfhosted` `base` `local`) |
 | `net_mac` | `Option<[u8;6]>` | MAC for the mesh NIC, assigned by the network registry |
 
 ### probe — side-effect-free capability checks
@@ -146,7 +146,7 @@ The shim exports the C symbol `lightr_vz_run`; the Rust side declares it as `ext
 - A writable virtiofs share at tag `rootfs` (the CoW rootfs dir).
 - A read-only virtiofs share at tag `store` (the host store root).
 - One `VZNATNetworkDeviceAttachment` (eth0, internet egress), opt-in via `LIGHTR_VZ_NET`.
-- Optionally a second `VZFileHandleNetworkDeviceAttachment` over `net_fd` (eth1, mesh, ADR-0018) when `net_fd >= 0`.
+- Optionally a second `VZFileHandleNetworkDeviceAttachment` over `net_fd` (`C-SELF-05` `F-405` `wire bridge`; `independente` `mesh` `C-SELF-07`) when `net_fd >= 0`. `mesh` (`F-404`) `defere` — `net_fd` `validado` `independente`.
 
 **Why files, not vsock:** macOS has no host `AF_VSOCK`. The kernel cmdline cannot carry arguments with spaces. The host/guest channel is two small files on the shared writable virtiofs rootfs (`crates/lightr-init/src/lib.rs`):
 
@@ -343,8 +343,8 @@ no extra entitlement beyond `com.apple.security.virtualization`, which
    connects via one half of a `socketpair(AF_UNIX, SOCK_DGRAM)` — one datagram
    == one Ethernet frame. A container on no user network is byte-for-byte the
    existing single-NAT-NIC path (zero regression). `ExecSpec.net_fd` carries the
-   guest-side fd; `ExecSpec.net_mac` carries the deterministic MAC from the
-   network registry.
+   guest-side fd (`independente` `mesh` `C-SELF-07`; `mesh` `F-404` `defere`);
+   `ExecSpec.net_mac` carries the deterministic MAC from the network registry.
 
 3. **Network registry** (`crates/lightr-run/src/network/registry.rs`): on-disk,
    `flock`-guarded membership under `$LIGHTR_HOME/net/<id>/`. Mutators (`create`,
@@ -462,10 +462,7 @@ Per `CLAUDE.md` and ADR-0011:
   like `clw`; it does not fork or modify `corelink-server`.
 - **Stage 1 is offline-absolute**: the local `Store` is the CAS/AC; no server is
   contacted.
-- **Stage 2** (planned): the `lightr-wire` bridge crate (async, tokio, clw
-  path-deps — ADR-0002 narrowed to bridge crates only by ADR-0011) syncs local
-  objects to CoreLink in background. FastCDC chunking at the wire border; local
-  store stays file-level.
+- **Stage 2** (`F-405`, `C-SELF-05` frozen): `wire bridge` (`net_fd`: `socketpair(AF_UNIX, SOCK_DGRAM)`; `independente` `mesh` `C-SELF-07`). Default `opt-in` `none` = `local` (`selfhosted` `base` `free` `local`). `Future` `cloud` `tier` (`fc` `F-209`) = `spike` (`defere`). `net_fd` `validado` `independente` (`docs/ARCHITECTURE.md` §5 `lines` 126/149/345). `lightr-wire` (`planned` `async` `clw` path-dep `ADR-0011`) `revisado` (`independente` `mesh`).
 - **Engine lineage from `corelink-runners`**: the `Engine` trait shape (spawn /
   probe / exec / teardown, fail-closed lifecycle) follows
   `corelink-runners/src/isolation.rs`. In the cloud, Lightr is what a runner

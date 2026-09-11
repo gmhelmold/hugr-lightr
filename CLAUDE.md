@@ -76,8 +76,16 @@ pricing posture, open decisions) · `docs/VISION.md` (the funnel) ·
 - **Consumes CoreLink Cache** (CAS/AC, tenancy, PAT auth) — pure client,
   like clw; does not fork or modify it.
 - **clw (`corelink-workspaces`) is the distribution layer** — snapshot/
-  hydrate/memoize pipeline + local L1 cache. Seam form (direct crate dep vs
-  transcribed contract) is an open owner decision — `product.md` §9.
+  hydrate/memoize pipeline + local L1 cache. Seam `C-SELF-01` frozen
+  (`ARCH-02` approved, direct dependency): `clw` crates (`clw-types`,
+  `clw-cache`, `clw-snapshot`, `clw-hydrate`, `clw-run`, `clw-manifest`)
+  are direct path-deps of `lightr-index` / `lightr-run`; `WP-SELF-10` prepares
+  `clw` absorption into `lightr-views` (`F-103` `CoW` `hydrate` → `O(1)` view,
+  `ADR-0013` spike, not wired to run path). Interface: `Store` (`put_bytes`,
+  `get_bytes`, `materialize_file`, `ref_put`/`ref_get`), `Manifest` (binary
+  `LMF1` codec, `Digest` `BLAKE3`), `RefRecord` (`name` → `root` + `parent`).
+  `contrato` → `seam` `interface` `lightr_index`; `direct dep` supersedes wire
+  contract for `v0.1` (`build-spec-v2.md` §2: zero `clw` in `R0` core).
 - **`Engine` lineage from `corelink-runners`** (`corelink-runner/src/
   isolation.rs`): same spawn/probe/exec/teardown contract, same fail-closed
   lifecycle. In the cloud, Lightr is what a runner lease executes; Runners is
@@ -89,6 +97,16 @@ pricing posture, open decisions) · `docs/VISION.md` (the funnel) ·
 `corelink-runners`, `corelink-workspaces`, `hugit`, …) frequently have
 **other live sessions**. Read-only inspection is fine; **mutation across
 repos is not.** Only work on hugr-lightr here.
+
+## §9  Stage-2 Sync (`F-405`) — Wire Bridge Opt-In
+
+`C-SELF-05` frozen (`opt-in`): `Stage-2` (`F-405`) = `wire bridge` (`net_fd`: `socketpair(AF_UNIX, SOCK_DGRAM)`; `docs/ARCHITECTURE.md` §5 `net_fd` lines 126/149). Default `none` = `local` (`selfhosted` `base`; `free`; `local`). `Future` `cloud` `tier` (`fc` `F-209`) = `spike` (`defere`; `plan.md` line 13) — `honest Unsupported`; `selfhosted` `base` `funciona` `fc: None` (`zero regression`).
+
+`net_fd` (`ExecSpec.net_fd`) `validado` `independente` `mesh` (`C-SELF-07`): `mesh` (`F-404`) = `LAN` `cache`; `design` `docs/ARCHITECTURE.md`; `defere` (`plan.md` line 13). `wire bridge` (`F-405`) `nao` `exige` `mesh`. `net_fd` `independente` — `selfhosted` `base` (`store`/`run`/`cli`/`engine`) `funciona` `net_fd: None` (single-NAT-NIC path, `zero regression`).
+
+`pure client` (`§6`): `selfhosted` `base` = `local`; `free`; `auth` `None` default (`C-SELF-02`). `Stage-2` sync `CoreLink` = `future` (`lightr-wire` `planned` `async` `clw` path-dep; `ADR-0011`; `docs/ARCHITECTURE.md` §9 `revisado`). `Wave` (`WP-16` `Compose`) `local` (`supervisor` `F-308`) — `nao` `precisa` `Stage-2`.
+
+`C-SELF-07` (`mesh` `defere`) `revisado` `independente`: `mesh` `design` `docs/ARCHITECTURE.md` (`net_fd` `socketpair`) `revisado` (`independente` `C-SELF-05` `Stage-2`). `mesh` `futuro` (`F-404`) — `nenhum` `WP` `tenta` (`honest-gated`).
 
 ## Conventions
 

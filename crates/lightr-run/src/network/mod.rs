@@ -25,5 +25,12 @@ mod fsutil;
 mod registry;
 mod types;
 
+// WP-03 (C-03) — new networking modules; frozen surfaces above untouched.
+pub mod bridge;
+pub mod dns;
+pub mod ipam;
+pub mod lib;
+pub mod vpn;
+
 pub use registry::NetworkRegistry;
 pub use types::{MacAddr, Member, NetworkId, Subnet};

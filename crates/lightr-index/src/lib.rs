@@ -11,7 +11,7 @@ pub use index::hydrate::{hydrate, hydrate_verified, HydrateReport};
 pub use index::scan::{scan, WalkReport};
 pub use index::snapshot::{snapshot, SnapshotReport};
 pub use index::status::{status, StatusReport};
-pub use index::timeaxis::{bisect, diff_manifests, parse_lrr1, undo, DiffReport};
+pub use index::timeaxis::{bisect, diff_manifests, parse_lrr1, undo, undo_to, DiffReport};
 
 /// Process-global lock shared by ALL test modules that mutate LIGHTR_HOME.
 /// Lives at crate level so both `mod tests` and `mod r1_tests` sub-files share

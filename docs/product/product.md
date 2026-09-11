@@ -116,10 +116,10 @@ Workspaces never sees a "Lightr" line item.
 
 1. **License** — MIT/Apache (max adoption) vs BSL (hyperscaler protection).
    The funnel needs *free*, not necessarily *open*; strategic call.
-2. **clw seam** — depend on clw crates directly (same org/language, client
-   lib by design) vs the transcribed-contract + conformance-vector pattern
-   (built for cross-repo *frozen* seams, which this is not yet). Leaning:
-   direct dependency.
+2. **clw seam** — frozen `C-SELF-01` (`CLAUDE.md` §9): direct dependency
+   (`ARCH-02` approved); `WP-SELF-10` (`clw` absorption into `lightr-views`,
+   `F-103` `CoW` `hydrate`). No wire contract (`docs/spec/` `lightr_index_contract.md`
+   documents `interface` `lightr_index` `snapshot`/`hydrate` as frozen reference).
 3. **Ref grammar** — see §4; freeze pre-demo.
 4. **Naming collisions** — verify `lightr` availability (crates.io, brew, trademark scan) before announcing: crate
    `hugr-lightr`, binary `lightr`. Verify brew formula availability before

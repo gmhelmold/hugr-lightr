@@ -1,4 +1,5 @@
 //! `lightr-cri-backend` — the CRI backend seam, in the hugr-lightr workspace.
+//! C-SELF-08: `seam` `netns` (`F-CRI-RUN` `VALIDATED` `#99`/`#100` `netns` `CNI` `join` `pod`); `ADR-0017` `revisado` (`independente` `WP-13` `APPARM` `C-09` `frozen`).
 //!
 //! PROVENANCE. The `CriBackend` trait and EVERY vocabulary type in this crate
 //! are TRANSCRIBED — wire-for-wire — from the frozen seam contract owned by the

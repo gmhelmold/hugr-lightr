@@ -51,7 +51,10 @@
 //! is no filesystem isolation -- RUN writes directly into the CoW working
 //! tree. This is stated loudly in build output by the CLI (W3).
 
-mod build;
+#[path = "exec/buildkit/mod.rs"]
+pub mod buildkit;
+
+pub mod build;
 
 pub use build::{
     build, build_target, compose_down, compose_supervise, compose_up, deep_merge, dir_basename,
@@ -64,3 +67,5 @@ pub use build::{
     NetworkAttachment, ResourceSpec, RestartPolicy, Service, ServiceDef, ServiceNetworks,
     ServiceSpec, StackSpec, StringOrList, VarScope, DEFAULT_PROJECT, OVERRIDE_FILENAMES,
 };
+
+pub use buildkit::{parse_cache_from, parse_secret, parse_ssh, CacheFrom, SecretEntry, SshEntry};

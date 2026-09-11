@@ -100,7 +100,7 @@ The go-live hardening wave merged gate-green: **411 tests, 0 failures**, clippy
 | F-401 | undo / diff @time | ✅ | A12, A12b |
 | F-402 | bisect memoized | ✅ | A13 (memo-HIT assertion dropped — bisect runs plain; documented) |
 | F-403 | deep-memo nitro | 🟡 | probe + honest whole-run fallback (A27); real shim = future ring |
-| F-404 | LAN mesh cache | ⏳ | future |
+| F-404 | LAN mesh cache | ⏳ | future (defere plan.md line 13; design ARCHITECTURE.md §5; C-SELF-07 independent) |
 | F-405 | Stage-2 sync (CoreLink) | ⏳ | wire bridge crate seam ready; future |
 | F-406 | run-state snapshot/restore | ⏳ | vz/fc, future |
 

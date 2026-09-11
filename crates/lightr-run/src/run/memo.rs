@@ -1,4 +1,5 @@
 //! Memo key assembly and memoized run entry points:
+//! C-SELF-04: `memo` `AC` (`F-105`) `key` `lightr-run/v1` `domain-separated` `frozen` (`WP-VZMEMO` `2026-06-18`).
 //! validate_mount_target, assemble_key, build_key, run_memoized,
 //! run_memoized_with, predict.
 //!

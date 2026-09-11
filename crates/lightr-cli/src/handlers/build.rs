@@ -11,7 +11,11 @@
 //! --json mirrors BuildReport: `{"name","root","steps","cached_steps"}`
 //! --explain: per-step note to stderr including non-reproducible RUN flag.
 
-use lightr_build::{build_target, parse_dockerfile, step_reads_clock_or_net, BuildReport, Instr};
+use lightr_build::{
+    build_target,
+    buildkit::{parse_cache_from, parse_secret, parse_ssh},
+    parse_dockerfile, step_reads_clock_or_net, BuildReport, Instr,
+};
 use lightr_core::validate_ref_name;
 use lightr_engine::EngineKind;
 use lightr_store::Store;
@@ -162,6 +166,45 @@ pub fn run(
 
     print_report(&report, json);
     0
+}
+
+/// BuildKit stub wire (WP-01, C-04-NEW). Frozen `run()` interface preserved.
+/// Secret/SSH blocked → exit 2; `--cache-from` parsed but not yet wired to build_target.
+#[allow(clippy::too_many_arguments)]
+pub fn run_buildkit_stubs(
+    context: &str,
+    dockerfile: Option<&str>,
+    name: &str,
+    engine_str: &str,
+    build_arg: &[String],
+    target: Option<&str>,
+    cache_from: &[String],
+    secret: &[String],
+    ssh: &[String],
+    json: bool,
+    explain: bool,
+) -> i32 {
+    // Ambiguity: frozen interface `run()` accepts no buildkit params.
+    // Minimal stub: secret/ssh → 2; cache-from → no-op (passes through); others → frozen run.
+    for s in secret {
+        let parsed = parse_secret(s);
+        let _ = parsed; // stub: parsed but not consumed
+    }
+    for s in ssh {
+        let parsed = parse_ssh(s);
+        let _ = parsed;
+    }
+    for s in cache_from {
+        let parsed = parse_cache_from(s);
+        let _ = parsed;
+    }
+    if !secret.is_empty() || !ssh.is_empty() {
+        eprintln!("lightr: not yet supported");
+        return 2;
+    }
+    run(
+        context, dockerfile, name, engine_str, build_arg, json, explain, target,
+    )
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
-//! `lightr undo` handler — revert a ref to its previous version.
+//! `lightr undo` handler — revert a ref to its previous version (or a specific version).
 
 use lightr_core::LightrError;
-use lightr_index::undo;
+use lightr_index::undo_to;
 use lightr_store::Store;
 use serde::Serialize;
 
@@ -16,13 +16,13 @@ struct UndoJson {
     tool_version: String,
 }
 
-pub fn run(name: &str, json: bool) -> i32 {
+pub fn run(name: &str, to: Option<&str>, json: bool) -> i32 {
     let store = match Store::open(Store::default_root()) {
         Ok(s) => s,
         Err(e) => return die_lightr(&e),
     };
 
-    let rec = match undo(&store, name) {
+    let rec = match undo_to(&store, name, to) {
         Ok(r) => r,
         Err(LightrError::RefNotFound(_)) | Err(LightrError::InvalidRef(_)) => {
             eprintln!("lightr: ref not found: {name}");
@@ -43,7 +43,11 @@ pub fn run(name: &str, json: bool) -> i32 {
     } else {
         let hex = rec.root.to_hex();
         let short = &hex[..16];
-        println!("undo: {} restored to {}", name, short);
+        if let Some(target) = to {
+            println!("undo: {} restored to {} (target: {})", name, short, target);
+        } else {
+            println!("undo: {} restored to {}", name, short);
+        }
     }
 
     0
