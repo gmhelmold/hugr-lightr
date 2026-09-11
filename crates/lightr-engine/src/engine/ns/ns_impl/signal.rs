@@ -79,6 +79,7 @@ pub(super) fn reaper_loop(workload_child: libc::pid_t) -> ! {
         }
         if r == workload_child {
             workload_code = wait_to_exit_code(status);
+            have_code = true;
             // Drain any remaining already-exited children (non-blocking), then
             // exit with the workload's code.
             loop {

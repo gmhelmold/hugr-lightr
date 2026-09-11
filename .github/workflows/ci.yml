@@ -10,6 +10,7 @@ on:
 env:
   RUSTFLAGS: "-D warnings"
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
 
 jobs:
   # ============================================================
@@ -80,7 +81,7 @@ jobs:
   linux-aarch64:
     name: Linux aarch64 (ns engine validation)
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
@@ -113,7 +114,9 @@ jobs:
             lld
 
       - name: Build release (ns engine is always available on Linux)
-        run: cargo build --release --workspace --features vz
+        run: |
+          export CARGO_BUILD_JOBS=1
+          cargo build --release --workspace --features vz
 
       - name: Run test suite (ns engine)
         run: cargo test --workspace --features vz
@@ -192,7 +195,7 @@ jobs:
   macos-arm64:
     name: macOS arm64 (vz engine native)
     runs-on: macos-14
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
@@ -212,7 +215,9 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build release (vz feature)
-        run: cargo build --release --bin lightr --features vz
+        run: |
+          export CARGO_BUILD_JOBS=1
+          cargo build --release --bin lightr --features vz
 
       - name: Install vz kernel pack
         run: |
@@ -245,7 +250,7 @@ jobs:
   windows:
     name: Windows (WSL + cross-check)
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     defaults:
       run:
         shell: powershell
@@ -255,7 +260,8 @@ jobs:
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-pc-windows-gnu
+          targets: x86_64-pc-windows-msvc
+          components: clippy
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -293,7 +299,7 @@ jobs:
   cross-compile:
     name: Cross-compile matrix
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -323,6 +329,9 @@ jobs:
             mingw-w64 \
             2>/dev/null || true
 
+      - name: Add cross-compile target
+        run: rustup target add ${{ matrix.target }}
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -343,6 +352,9 @@ jobs:
     name: Docs + Spec validation
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
 
@@ -358,7 +370,6 @@ jobs:
 
       - name: Verify contracts exist (11 contracts)
         run: |
-          # Contracts are named descriptively, not C-01-*
           CONTRACT_COUNT=$(ls .techlead/contracts/*.md | wc -l)
           if [ "$CONTRACT_COUNT" -ne 11 ]; then
             echo "Expected 11 contracts, found $CONTRACT_COUNT"
@@ -369,7 +380,6 @@ jobs:
 
       - name: Verify no fabricated numbers in docs
         run: |
-          # Check for "measured" claims without hardware citation
           if grep -ri "measured" docs/ --include="*.md" | grep -v "Intel\|Apple\|CI\|GitHub Actions\|hardware\|runner" | grep -v "honest-gated\|DRAFT\|target\|staged"; then
             echo "ERROR: Found 'measured' claim without hardware citation"
             exit 1
@@ -405,9 +415,7 @@ jobs:
 
       - name: Verify no regressions vs baseline
         run: |
-          # Compare against docs/spec/benchmark-results.md baseline
           echo "Baseline comparison - manual review needed for now"
-          # TODO: Automate baseline comparison when we have stable CI history
 
   # ============================================================
   # RELEASE (manual trigger only, after GTW gate)
@@ -447,8 +455,6 @@ jobs:
 
       - name: Build release artifacts
         run: |
-          # Build for all 5 targets
-          # macos arm64/x86_64, ubuntu x86_64/aarch64, windows zip
           echo "Release artifacts would be built here"
 
       - name: Create GitHub Release

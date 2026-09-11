@@ -2,7 +2,6 @@
 
 use super::spec::ExecSpec;
 use super::Engine;
-use lightr_core::{LightrError, Result};
 
 // ── VzEngine (macOS + feature "vz") ─────────────────────────────────────────
 
