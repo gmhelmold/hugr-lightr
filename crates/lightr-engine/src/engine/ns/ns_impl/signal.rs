@@ -65,21 +65,19 @@ pub(super) fn signal_setup_failed(fd: Option<libc::c_int>, msg: &str) {
 /// Raw libc only (post-fork, pre-`_exit`): no allocation in the loop body.
 pub(super) fn reaper_loop(workload_child: libc::pid_t) -> ! {
     let mut workload_code: i32 = 0;
-    let mut have_code = false;
     loop {
         let mut status: libc::c_int = 0;
         let r = unsafe { libc::waitpid(-1, &mut status, 0) };
         if r == -1 {
             let e = std::io::Error::last_os_error();
             if e.raw_os_error() == Some(libc::ECHILD) {
-                unsafe { libc::_exit(if have_code { workload_code } else { 0 }) };
+                unsafe { libc::_exit(workload_code) };
             }
             // EINTR or other transient error: retry the wait.
             continue;
         }
         if r == workload_child {
             workload_code = wait_to_exit_code(status);
-            have_code = true;
             // Drain any remaining already-exited children (non-blocking), then
             // exit with the workload's code.
             loop {

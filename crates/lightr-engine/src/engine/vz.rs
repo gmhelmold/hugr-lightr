@@ -308,8 +308,8 @@ struct VzEngineStub;
 
 #[cfg(not(all(target_os = "macos", feature = "vz")))]
 impl Engine for VzEngineStub {
-    fn run(&self, _spec: &ExecSpec) -> Result<i32> {
-        Err(LightrError::InvalidRef(
+    fn run(&self, _spec: &ExecSpec) -> lightr_core::Result<i32> {
+        Err(lightr_core::LightrError::InvalidRef(
             "vz engine requires macOS + the 'vz' build feature + a linux pack".to_string(),
         ))
     }
