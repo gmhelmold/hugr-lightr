@@ -1,4 +1,5 @@
 //! lightr-store — frozen contract: build-spec v2 §4 (ADR-0009).
+//! C-SELF-03: store local = CAS completo (BLAKE3 mmap manifest); independent corelink-server; auth None default (C-SELF-02).
 //! Object plane + refs + AC + CoW ladder. Bodies are WP-2.
 
 use lightr_core::{Digest, RefRecord, Result};

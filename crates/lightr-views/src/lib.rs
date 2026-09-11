@@ -1,5 +1,5 @@
 //! lightr-views — O(1) materialization (ADR-0013), the other half of the
-//! perf headline. The PLAN + SOLIDIFIER logic is pure and host-tested.
+//! perf headline. C-SELF-11: `selfhosted` `base` (`engine` `native`/`ns`/`vz` `F-201`/`F-204` `VALIDATED`; `clw` `direct dep` `C-SELF-01` `ARCH-02` `aprovado` `->` `lightr-views` `merge` `F-103` `CoW` `VALIDATED` `lightr_index`).
 //!
 //! # Shipped materialization vs. planned O(1) backends
 //!

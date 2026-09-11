@@ -98,6 +98,16 @@ pricing posture, open decisions) · `docs/VISION.md` (the funnel) ·
 **other live sessions**. Read-only inspection is fine; **mutation across
 repos is not.** Only work on hugr-lightr here.
 
+## §9  Stage-2 Sync (`F-405`) — Wire Bridge Opt-In
+
+`C-SELF-05` frozen (`opt-in`): `Stage-2` (`F-405`) = `wire bridge` (`net_fd`: `socketpair(AF_UNIX, SOCK_DGRAM)`; `docs/ARCHITECTURE.md` §5 `net_fd` lines 126/149). Default `none` = `local` (`selfhosted` `base`; `free`; `local`). `Future` `cloud` `tier` (`fc` `F-209`) = `spike` (`defere`; `plan.md` line 13) — `honest Unsupported`; `selfhosted` `base` `funciona` `fc: None` (`zero regression`).
+
+`net_fd` (`ExecSpec.net_fd`) `validado` `independente` `mesh` (`C-SELF-07`): `mesh` (`F-404`) = `LAN` `cache`; `design` `docs/ARCHITECTURE.md`; `defere` (`plan.md` line 13). `wire bridge` (`F-405`) `nao` `exige` `mesh`. `net_fd` `independente` — `selfhosted` `base` (`store`/`run`/`cli`/`engine`) `funciona` `net_fd: None` (single-NAT-NIC path, `zero regression`).
+
+`pure client` (`§6`): `selfhosted` `base` = `local`; `free`; `auth` `None` default (`C-SELF-02`). `Stage-2` sync `CoreLink` = `future` (`lightr-wire` `planned` `async` `clw` path-dep; `ADR-0011`; `docs/ARCHITECTURE.md` §9 `revisado`). `Wave` (`WP-16` `Compose`) `local` (`supervisor` `F-308`) — `nao` `precisa` `Stage-2`.
+
+`C-SELF-07` (`mesh` `defere`) `revisado` `independente`: `mesh` `design` `docs/ARCHITECTURE.md` (`net_fd` `socketpair`) `revisado` (`independente` `C-SELF-05` `Stage-2`). `mesh` `futuro` (`F-404`) — `nenhum` `WP` `tenta` (`honest-gated`).
+
 ## Conventions
 
 - English for repo documents; lean, evidence-cited (house style).
