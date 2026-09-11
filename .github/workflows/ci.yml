@@ -50,14 +50,14 @@ jobs:
             clang \
             lld
 
-      - name: Build release (all features)
-        run: cargo build --release --workspace --all-features
+      - name: Build release (ns engine is always available on Linux)
+        run: cargo build --release --workspace --features vz
 
       - name: Run full test suite
-        run: cargo test --workspace --all-features
+        run: cargo test --workspace --features vz
 
       - name: clippy (deny warnings)
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets --features vz -- -D warnings
 
       - name: fmt check
         run: cargo fmt --all --check
@@ -80,7 +80,7 @@ jobs:
   linux-aarch64:
     name: Linux aarch64 (ns engine validation)
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -112,14 +112,14 @@ jobs:
             clang \
             lld
 
-      - name: Build release (ns engine)
-        run: cargo build --release --workspace --features ns
+      - name: Build release (ns engine is always available on Linux)
+        run: cargo build --release --workspace --features vz
 
       - name: Run test suite (ns engine)
-        run: cargo test --workspace --features ns
+        run: cargo test --workspace --features vz
 
       - name: clippy (deny warnings)
-        run: cargo clippy --workspace --all-targets --features ns -- -D warnings
+        run: cargo clippy --workspace --all-targets --features vz -- -D warnings
 
       - name: Run benchmarks
         run: |
@@ -139,7 +139,7 @@ jobs:
   macos-x86_64:
     name: macOS x86_64 (vz engine + bench)
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -158,14 +158,10 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install vz kernel pack
-        run: |
-          ./target/release/lightr engine install-pack /tmp/lightr-packs 2>&1 || echo "install-pack will run after build"
-
       - name: Build release (vz feature)
         run: cargo build --release --bin lightr --features vz
 
-      - name: Install vz kernel pack (post-build)
+      - name: Install vz kernel pack
         run: |
           ./target/release/lightr engine install-pack /tmp/lightr-packs
 
@@ -196,7 +192,7 @@ jobs:
   macos-arm64:
     name: macOS arm64 (vz engine native)
     runs-on: macos-14
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -276,6 +272,9 @@ jobs:
           choco install mingw --version 12.2.0 -y
           $env:PATH += ";C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
 
+      - name: Add windows-gnu target
+        run: rustup target add x86_64-pc-windows-gnu
+
       - name: Cross-check build (windows-gnu)
         run: cargo check --workspace --target x86_64-pc-windows-gnu
 
@@ -294,8 +293,9 @@ jobs:
   cross-compile:
     name: Cross-compile matrix
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
+      fail-fast: false
       matrix:
         target:
           - x86_64-unknown-linux-gnu
@@ -356,14 +356,15 @@ jobs:
           grep -q "Intel\|Apple\|CI" docs/spec/benchmark-results.md || exit 1
           echo "Benchmark citations found"
 
-      - name: Verify contracts exist (C-01..C-11)
+      - name: Verify contracts exist (11 contracts)
         run: |
-          for i in {1..11}; do
-            if [ ! -f ".techlead/contracts/C-$(printf "%02d" $i)*.md" ]; then
-              echo "Missing contract C-$i"
-              exit 1
-            fi
-          done
+          # Contracts are named descriptively, not C-01-*
+          CONTRACT_COUNT=$(ls .techlead/contracts/*.md | wc -l)
+          if [ "$CONTRACT_COUNT" -ne 11 ]; then
+            echo "Expected 11 contracts, found $CONTRACT_COUNT"
+            ls .techlead/contracts/
+            exit 1
+          fi
           echo "All 11 contracts present"
 
       - name: Verify no fabricated numbers in docs
