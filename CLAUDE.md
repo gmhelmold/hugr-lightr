@@ -76,8 +76,16 @@ pricing posture, open decisions) · `docs/VISION.md` (the funnel) ·
 - **Consumes CoreLink Cache** (CAS/AC, tenancy, PAT auth) — pure client,
   like clw; does not fork or modify it.
 - **clw (`corelink-workspaces`) is the distribution layer** — snapshot/
-  hydrate/memoize pipeline + local L1 cache. Seam form (direct crate dep vs
-  transcribed contract) is an open owner decision — `product.md` §9.
+  hydrate/memoize pipeline + local L1 cache. Seam `C-SELF-01` frozen
+  (`ARCH-02` approved, direct dependency): `clw` crates (`clw-types`,
+  `clw-cache`, `clw-snapshot`, `clw-hydrate`, `clw-run`, `clw-manifest`)
+  are direct path-deps of `lightr-index` / `lightr-run`; `WP-SELF-10` prepares
+  `clw` absorption into `lightr-views` (`F-103` `CoW` `hydrate` → `O(1)` view,
+  `ADR-0013` spike, not wired to run path). Interface: `Store` (`put_bytes`,
+  `get_bytes`, `materialize_file`, `ref_put`/`ref_get`), `Manifest` (binary
+  `LMF1` codec, `Digest` `BLAKE3`), `RefRecord` (`name` → `root` + `parent`).
+  `contrato` → `seam` `interface` `lightr_index`; `direct dep` supersedes wire
+  contract for `v0.1` (`build-spec-v2.md` §2: zero `clw` in `R0` core).
 - **`Engine` lineage from `corelink-runners`** (`corelink-runner/src/
   isolation.rs`): same spawn/probe/exec/teardown contract, same fail-closed
   lifecycle. In the cloud, Lightr is what a runner lease executes; Runners is

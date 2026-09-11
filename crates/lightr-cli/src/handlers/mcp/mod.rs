@@ -12,12 +12,25 @@ mod tools;
 // Public entry point
 // ─────────────────────────────────────────────────────────────────────────────
 
-pub fn run() -> i32 {
+pub fn run(list_tools: bool) -> i32 {
+    if list_tools {
+        return list_tools_json();
+    }
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     let stdin_lock = stdin.lock();
     let stdout_lock = stdout.lock();
     run_mcp_loop(stdin_lock, stdout_lock)
+}
+
+fn list_tools_json() -> i32 {
+    use crate::handlers::mcp::tools::Tool;
+    let tools = Tool::all();
+    let output = json!({
+        "tools": tools.iter().map(|t| t.to_json()).collect::<Vec<_>>()
+    });
+    println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    0
 }
 
 pub fn run_mcp_loop(mut reader: impl BufRead, mut writer: impl Write) -> i32 {

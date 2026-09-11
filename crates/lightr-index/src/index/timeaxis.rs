@@ -102,13 +102,47 @@ pub fn parse_lrr1(bytes: &[u8]) -> Option<(Digest, Digest)> {
 /// Re-point `name` to ref_log[1] (the previous version).
 /// Errors RefNotFound if log has fewer than 2 entries.
 pub fn undo(store: &Store, name: &str) -> Result<RefRecord> {
+    undo_to(store, name, None)
+}
+
+/// Re-point `name` to a specific version.
+/// If `to` is None, reverts to previous version (ref_log[1]).
+/// If `to` is a number string, treats as index in ref log.
+/// If `to` contains '@', parses as ref@version syntax.
+pub fn undo_to(store: &Store, name: &str, to: Option<&str>) -> Result<RefRecord> {
     let log = store.ref_log(name)?;
     if log.len() < 2 {
         return Err(LightrError::RefNotFound(name.to_string()));
     }
-    let prev = log[1].clone();
-    store.ref_put(&prev)?;
-    Ok(prev)
+
+    let target_idx = match to {
+        None => 1, // default: previous version
+        Some(s) if s.starts_with('@') => {
+            // ref@version syntax - parse version number after @
+            let version_part = &s[1..];
+            version_part.parse::<usize>().map_err(|_| {
+                LightrError::InvalidRef(format!("invalid version in {}: not a number", s))
+            })?
+        }
+        Some(s) => {
+            // Direct index
+            s.parse::<usize>().map_err(|_| {
+                LightrError::InvalidRef(format!("invalid index in {}: not a number", s))
+            })?
+        }
+    };
+
+    if target_idx >= log.len() {
+        return Err(LightrError::InvalidRef(format!(
+            "version index {} out of range (log has {} entries)",
+            target_idx,
+            log.len()
+        )));
+    }
+
+    let target = log[target_idx].clone();
+    store.ref_put(&target)?;
+    Ok(target)
 }
 
 // ---------------------------------------------------------------------------

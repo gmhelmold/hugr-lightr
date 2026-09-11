@@ -256,14 +256,16 @@ pub(crate) fn dispatch(json: bool, explain: bool, events: bool, verb: &str, cmd:
         } => handlers::gc::run(force, min_age, gc_json),
         Cmd::Undo {
             name,
+            to,
             json: undo_json,
-        } => handlers::undo::run(&name, undo_json),
+        } => handlers::undo::run(&name, to.as_deref(), undo_json),
         Cmd::Diff {
             name,
             at,
+            to,
             dir,
             json: diff_json,
-        } => handlers::diff::run(&name, at, dir.as_deref(), diff_json),
+        } => handlers::diff::run(&name, at, to.as_deref(), dir.as_deref(), diff_json),
         Cmd::Bisect {
             name,
             command,
@@ -271,7 +273,7 @@ pub(crate) fn dispatch(json: bool, explain: bool, events: bool, verb: &str, cmd:
         } => handlers::bisect::run(&name, &command, bisect_json),
         Cmd::Plan { subcmd } => handlers::plan::run(subcmd),
         Cmd::Schema { verb } => handlers::schema::run(verb.as_deref()),
-        Cmd::Mcp {} => handlers::mcp::run(),
+        Cmd::Mcp { list_tools } => handlers::mcp::run(list_tools),
         Cmd::Build {
             context,
             file,
@@ -279,16 +281,37 @@ pub(crate) fn dispatch(json: bool, explain: bool, events: bool, verb: &str, cmd:
             engine,
             build_arg,
             target,
-        } => handlers::build::run(
-            &context,
-            file.as_deref(),
-            &name,
-            &engine,
-            &build_arg,
-            json,
-            explain,
-            target.as_deref(),
-        ),
+            cache_from,
+            secret,
+            ssh,
+        } => {
+            // WP-01: wire new buildkit flags through stub (C-04-NEW frozen interface preserved).
+            if !cache_from.is_empty() || !secret.is_empty() || !ssh.is_empty() {
+                return handlers::build::run_buildkit_stubs(
+                    &context,
+                    file.as_deref(),
+                    &name,
+                    &engine,
+                    &build_arg,
+                    target.as_deref(),
+                    &cache_from,
+                    &secret,
+                    &ssh,
+                    json,
+                    explain,
+                );
+            }
+            handlers::build::run(
+                &context,
+                file.as_deref(),
+                &name,
+                &engine,
+                &build_arg,
+                json,
+                explain,
+                target.as_deref(),
+            )
+        }
         Cmd::Compose { subcmd } => match subcmd {
             ComposeCmd::Up {
                 file,

@@ -256,19 +256,28 @@ pub(crate) enum Cmd {
         #[arg(long)]
         json: bool,
     },
-    /// Revert a ref to its previous version
+    /// Revert a ref to its previous version (or a specific version)
     Undo {
         #[arg(long)]
         name: String,
+        /// Revert to a specific version (ref@version or index in ref log)
+        #[arg(long)]
+        to: Option<String>,
         #[arg(long)]
         json: bool,
     },
-    /// Diff a ref against a previous version
+    /// Diff a ref against a previous version (or another ref version)
     Diff {
+        /// Ref name (supports @name@version syntax for specific version)
         #[arg(long)]
         name: String,
+        /// Historical index to diff against (1 = previous version)
         #[arg(long, default_value_t = 1)]
         at: usize,
+        /// Optional: second ref@version to diff against (alternative to --at)
+        #[arg(long)]
+        to: Option<String>,
+        /// Diff against local directory instead of ref history
         #[arg(long)]
         dir: Option<String>,
         #[arg(long)]
@@ -295,7 +304,11 @@ pub(crate) enum Cmd {
         verb: Option<String>,
     },
     /// Serve MCP protocol on stdio
-    Mcp {},
+    Mcp {
+        /// List available MCP tools and exit
+        #[arg(long)]
+        list_tools: bool,
+    },
     /// Build an image from a Dockerfile (step-memoized)
     Build {
         /// Build context directory
@@ -319,6 +332,15 @@ pub(crate) enum Cmd {
         /// Omitted ⇒ the final stage.
         #[arg(long, value_name = "STAGE")]
         target: Option<String>,
+        /// Cache from external image (docker --cache-from, repeatable): image ref or `type=...,ref=...`
+        #[arg(long = "cache-from", value_name = "CACHE")]
+        cache_from: Vec<String>,
+        /// Inject a store-backed secret file into the build (docker --secret, repeatable): `id=...,src=...`
+        #[arg(long = "secret", value_name = "NAME=REF")]
+        secret: Vec<String>,
+        /// Forward SSH agent socket (docker --ssh, repeatable): `default=...` or `id=...,src=...`
+        #[arg(long = "ssh", value_name = "SSH")]
+        ssh: Vec<String>,
     },
     /// Manage a compose stack (lazy services)
     Compose {

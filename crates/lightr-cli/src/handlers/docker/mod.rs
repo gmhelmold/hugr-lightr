@@ -70,6 +70,9 @@ fn translate_build(args: &[String], json: bool, explain: bool) -> i32 {
     let mut context: Option<String> = None;
     let mut build_args: Vec<String> = Vec::new();
     let mut target: Option<String> = None;
+    let mut cache_from: Vec<String> = Vec::new();
+    let mut secret: Vec<String> = Vec::new();
+    let mut ssh: Vec<String> = Vec::new();
 
     let mut i = 0;
     while i < args.len() {
@@ -94,6 +97,18 @@ fn translate_build(args: &[String], json: bool, explain: bool) -> i32 {
             },
             "--target" => match build_take(args, &mut i, inline) {
                 Some(v) => target = Some(v),
+                None => return build_missing_value(flag),
+            },
+            "--cache-from" => match build_take(args, &mut i, inline) {
+                Some(v) => cache_from.push(v),
+                None => return build_missing_value(flag),
+            },
+            "--secret" => match build_take(args, &mut i, inline) {
+                Some(v) => secret.push(v),
+                None => return build_missing_value(flag),
+            },
+            "--ssh" => match build_take(args, &mut i, inline) {
+                Some(v) => ssh.push(v),
                 None => return build_missing_value(flag),
             },
             // CATCH-ALL TRAP FIX: an unrecognized FLAG is an honest error, never
@@ -122,18 +137,33 @@ fn translate_build(args: &[String], json: bool, explain: bool) -> i32 {
         &["-f", df_display, "-t", &name, "--engine", "native", &ctx],
     );
 
-    // FIX #74: forward `--build-arg` + `--target` to the native build, which has
-    // parsed both since the WP-C follow-up. No longer silent-dropped.
-    crate::handlers::build::run(
-        &ctx,
-        dockerfile.as_deref(),
-        &name,
-        "native",
-        &build_args,
-        json,
-        explain,
-        target.as_deref(),
-    )
+    // FIX #74: forward `--build-arg` + `--target` to native build. Wire buildkit flags (WP-01, C-04-NEW).
+    if !cache_from.is_empty() || !secret.is_empty() || !ssh.is_empty() {
+        crate::handlers::build::run_buildkit_stubs(
+            &ctx,
+            dockerfile.as_deref(),
+            &name,
+            "native",
+            &build_args,
+            target.as_deref(),
+            &cache_from,
+            &secret,
+            &ssh,
+            json,
+            explain,
+        )
+    } else {
+        crate::handlers::build::run(
+            &ctx,
+            dockerfile.as_deref(),
+            &name,
+            "native",
+            &build_args,
+            json,
+            explain,
+            target.as_deref(),
+        )
+    }
 }
 
 /// Read the value for a build flag (split or `=`-joined). `None` ⇒ no value

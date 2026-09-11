@@ -254,3 +254,85 @@ pub(super) fn handle_tools_call(id: Value, params: &Value) -> Value {
         _ => tool_result(id, format!("unknown tool: {tool_name}"), true),
     }
 }
+
+#[derive(serde::Serialize)]
+pub(crate) struct Tool {
+    pub name: &'static str,
+    pub description: &'static str,
+    #[serde(rename = "inputSchema")]
+    pub input_schema: serde_json::Value,
+}
+
+impl Tool {
+    pub fn all() -> Vec<Tool> {
+        vec![
+            Tool {
+                name: "lightr_snapshot",
+                description: "Snapshot a directory into the store under a ref",
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "dir": {"type": "string", "default": "."},
+                        "name": {"type": "string"}
+                    },
+                    "required": ["name"]
+                }),
+            },
+            Tool {
+                name: "lightr_hydrate",
+                description: "Materialize a ref into a directory (CoW)",
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "dest": {"type": "string"},
+                        "name": {"type": "string"},
+                        "verify": {"type": "boolean", "default": false}
+                    },
+                    "required": ["dest", "name"]
+                }),
+            },
+            Tool {
+                name: "lightr_status",
+                description: "Compare a directory against a ref",
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "dir": {"type": "string", "default": "."},
+                        "name": {"type": "string"}
+                    },
+                    "required": ["name"]
+                }),
+            },
+            Tool {
+                name: "lightr_run",
+                description: "Run a command, memoized",
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "dir": {"type": "string", "default": "."},
+                        "command": {"type": "array", "items": {"type": "string"}},
+                        "inputs": {"type": "array", "items": {"type": "string"}},
+                        "env": {"type": "array", "items": {"type": "string"}}
+                    },
+                    "required": ["command"]
+                }),
+            },
+            Tool {
+                name: "lightr_diff",
+                description: "Diff a ref against a previous version",
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "at": {"type": "integer", "default": 1}
+                    },
+                    "required": ["name"]
+                }),
+            },
+        ]
+    }
+
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::to_value(self).unwrap()
+    }
+}
