@@ -19,7 +19,7 @@ jobs:
   linux-x86_64:
     name: Linux x86_64 (ns engine + bench)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -51,11 +51,16 @@ jobs:
             clang \
             lld
 
-      - name: Build release (ns engine is always available on Linux)
-        run: cargo build --release --workspace --features vz
+      - name: Build release binary (for acceptance tests)
+        run: cargo build --release --bin lightr --features vz
 
-      - name: Run full test suite
-        run: cargo test --workspace --features vz
+      - name: Run unit tests (workspace)
+        run: cargo test --workspace --features vz --lib --bins
+
+      - name: Run acceptance tests (with binary)
+        run: |
+          export CARGO_BIN_EXE_lightr=$(pwd)/target/release/lightr
+          cargo test -p lightr-acceptance --features vz
 
       - name: clippy (deny warnings)
         run: cargo clippy --workspace --all-targets --features vz -- -D warnings
@@ -113,13 +118,18 @@ jobs:
             clang \
             lld
 
-      - name: Build release (ns engine is always available on Linux)
+      - name: Build release binary (for acceptance tests)
         run: |
           export CARGO_BUILD_JOBS=1
-          cargo build --release --workspace --features vz
+          cargo build --release --bin lightr --features vz
 
-      - name: Run test suite (ns engine)
-        run: cargo test --workspace --features vz
+      - name: Run unit tests (workspace)
+        run: cargo test --workspace --features vz --lib --bins
+
+      - name: Run acceptance tests (with binary)
+        run: |
+          export CARGO_BIN_EXE_lightr=$(pwd)/target/release/lightr
+          cargo test -p lightr-acceptance --features vz
 
       - name: clippy (deny warnings)
         run: cargo clippy --workspace --all-targets --features vz -- -D warnings
@@ -161,7 +171,7 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build release (vz feature)
+      - name: Build release binary (for acceptance tests)
         run: cargo build --release --bin lightr --features vz
 
       - name: Install vz kernel pack (optional - may fail if no network)
@@ -169,8 +179,13 @@ jobs:
           ./target/release/lightr engine install-pack /tmp/lightr-packs || echo "install-pack failed (expected in CI without network), continuing..."
           ls -la /tmp/lightr-packs/ 2>/dev/null || true
 
-      - name: Run full test suite (vz)
-        run: cargo test --workspace --features vz
+      - name: Run unit tests (workspace)
+        run: cargo test --workspace --features vz --lib --bins
+
+      - name: Run acceptance tests (with binary)
+        run: |
+          export CARGO_BIN_EXE_lightr=$(pwd)/target/release/lightr
+          cargo test -p lightr-acceptance --features vz
 
       - name: clippy (deny warnings)
         run: cargo clippy --workspace --all-targets --features vz -- -D warnings
@@ -215,7 +230,7 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build release (vz feature)
+      - name: Build release binary (for acceptance tests)
         run: |
           export CARGO_BUILD_JOBS=1
           cargo build --release --bin lightr --features vz
@@ -225,8 +240,13 @@ jobs:
           ./target/release/lightr engine install-pack /tmp/lightr-packs || echo "install-pack failed, continuing..."
           ls -la /tmp/lightr-packs/ 2>/dev/null || true
 
-      - name: Run test suite (vz)
-        run: cargo test --workspace --features vz
+      - name: Run unit tests (workspace)
+        run: cargo test --workspace --features vz --lib --bins
+
+      - name: Run acceptance tests (with binary)
+        run: |
+          export CARGO_BIN_EXE_lightr=$(pwd)/target/release/lightr
+          cargo test -p lightr-acceptance --features vz
 
       - name: clippy (deny warnings)
         run: cargo clippy --workspace --all-targets --features vz -- -D warnings
@@ -290,7 +310,9 @@ jobs:
         run: cargo build --release --workspace --target x86_64-pc-windows-msvc
 
       - name: clippy (deny warnings) - windows-msvc
-        run: cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings
+        run: |
+          rustup component add --toolchain 1.96.0-x86_64-pc-windows-msvc clippy
+          cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings
 
       - name: fmt check
         run: cargo fmt --all --check
