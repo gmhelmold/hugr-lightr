@@ -44,6 +44,16 @@ class ReporterTests(unittest.TestCase):
             self.assertTrue(all(row["p95_elapsed_ms"] == "not_computed" for row in payload["rows"]))
             self.assertIn("Statistics: `not_computed`.", markdown)
 
+    def test_validator_permits_null_unavailable_fields_for_typed_skip(self) -> None:
+        records = [json.loads(line) for line in FIXTURE.read_text(encoding="utf-8").splitlines()]
+        skip = next(record for record in records if record["tool"] == "skip")
+        for field in ("fixture_tree_sha256", "source_commit", "lightr_sha256"):
+            self.assertIsNone(skip[field])
+        with tempfile.TemporaryDirectory() as temporary:
+            raw_path = Path(temporary) / "raw.jsonl"
+            shutil.copyfile(FIXTURE, raw_path)
+            self.assert_green_fixture(raw_path)
+
     def test_validator_rejects_missing_supported_round_then_restores_green(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             raw_path = Path(temporary) / "raw.jsonl"
@@ -78,6 +88,12 @@ class ReporterTests(unittest.TestCase):
                 mutated = [dict(record) for record in records]
                 mutated[1]["outcome"] = outcome
                 cases[outcome] = "\n".join(json.dumps(record, sort_keys=True) for record in mutated) + "\n"
+            for field in ("fixture_tree_sha256", "source_commit", "lightr_sha256"):
+                mutated = [dict(record) for record in records]
+                mutated[1][field] = None
+                cases[f"supported_null_{field}"] = "\n".join(
+                    json.dumps(record, sort_keys=True) for record in mutated
+                ) + "\n"
 
             for name, content in cases.items():
                 with self.subTest(name=name):

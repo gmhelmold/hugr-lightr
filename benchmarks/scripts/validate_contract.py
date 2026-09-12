@@ -24,7 +24,6 @@ REQUIRED_FIELDS = frozenset(
 DIGEST_FIELDS = frozenset(
     {
         "command_sha256", "stdout_sha256", "stderr_sha256", "spec_sha256",
-        "fixture_tree_sha256", "lightr_sha256",
     }
 )
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -132,7 +131,14 @@ def record_errors(record: dict[str, Any], location: str) -> list[str]:
     for name in DIGEST_FIELDS:
         if not isinstance(record[name], str) or not SHA256_RE.fullmatch(record[name]):
             errors.append(f"{location}: {name} is not SHA-256 hex")
-    if not isinstance(record["source_commit"], str) or not GIT_COMMIT_RE.fullmatch(record["source_commit"]):
+    for name in ("fixture_tree_sha256", "lightr_sha256"):
+        if record[name] is None and record["tool"] == "skip":
+            continue
+        if not isinstance(record[name], str) or not SHA256_RE.fullmatch(record[name]):
+            errors.append(f"{location}: {name} is not SHA-256 hex")
+    if record["source_commit"] is None and record["tool"] == "skip":
+        pass
+    elif not isinstance(record["source_commit"], str) or not GIT_COMMIT_RE.fullmatch(record["source_commit"]):
         errors.append(f"{location}: source_commit is not a Git commit hash")
     for name in ("round", "started_at_unix_ms", "ended_at_unix_ms", "elapsed_ms", "timeout_secs"):
         if not isinstance(record[name], int) or isinstance(record[name], bool) or record[name] < 0:
