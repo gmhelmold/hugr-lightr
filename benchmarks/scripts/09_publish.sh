@@ -1,26 +1,20 @@
-#!/bin/bash
-# 09_publish.sh - Publicação dos resultados (interno)
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+ARCHIVE_DIR="${ARCHIVE_DIR:-$ROOT/results/archive}"
+ARCHIVE="$ARCHIVE_DIR/benchmark-evidence.tar.gz"
+CHECKSUM="$ARCHIVE.sha256"
 
-echo "=== PUBLICAÇÃO DE RESULTADOS ==="
+for path in "$ROOT/results/raw" "$ROOT/results/merged" "$ROOT/results/reports"; do
+    if [ ! -d "$path" ]; then
+        printf 'required evidence directory not found: %s\n' "$path" >&2
+        exit 1
+    fi
+done
 
-echo "Arquivando dados brutos..."
-# tar -czf benchmark-raw-data-\$(date +%Y%m%d).tar.gz results/raw/
-# sha256sum benchmark-raw-data-*.tar.gz > checksums.txt
-
-echo "Arquivando relatórios..."
-# tar -czf benchmark-reports-\$(date +%Y%m%d).tar.gz results/reports/
-
-echo "Gerando pacote de reproducibilidade..."
-# tar -czf benchmark-repro-\$(date +%Y%m%d).tar.gz \
-#   benchmarks/benchmark-spec.yaml \
-#   benchmarks/benchmark-spec-reconstructed.yaml \
-#   benchmarks/MANIFEST.md \
-#   benchmarks/WAVE-EXP-CONTRACT.md \
-#   results/raw/ results/reports/ \
-#   benchmarks/scripts/ \
-#   benchmarks/.github/workflows/benchmark.yml
-
-echo "=== PUBLICAÇÃO CONCLUÍDA (SIMULAÇÃO) ==="
-echo "Artefatos prontos para upload interno."
+mkdir -p "$ARCHIVE_DIR"
+tar -czf "$ARCHIVE" -C "$ROOT" \
+    benchmarks/benchmark-spec.yaml results/raw results/merged results/reports
+shasum -a 256 "$ARCHIVE" > "$CHECKSUM"
+printf 'archive: %s\nchecksum: %s\n' "$ARCHIVE" "$CHECKSUM"
