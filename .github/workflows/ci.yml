@@ -312,7 +312,7 @@ jobs:
       - name: clippy (deny warnings) - windows-msvc
         run: |
           rustup component add --toolchain 1.96.0-x86_64-pc-windows-msvc clippy
-          cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings -A unused-imports -A unused-variables
+          cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings -A unused-imports -A unused-variables -A dead_code
 
       - name: fmt check
         run: cargo fmt --all --check

@@ -17,7 +17,7 @@ target/
 .env.*
 
 # TechLead per-project state (never committed)
-.techlead/
+# .techlead/ is intentionally tracked for CI contract validation
 
 # build
 target/
