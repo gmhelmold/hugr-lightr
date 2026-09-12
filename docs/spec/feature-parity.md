@@ -78,8 +78,10 @@ it**. Parity: yes, you can run any Linux image. Weight: only while it runs,
   local and cloud are one store, one law.
 
 ## Non-goals that survive both directives
-- **Swarm/orchestration** — dead weight even inside Docker; cluster
-  scheduling belongs to Runners' fabric. Refused.
+- **Swarm/orchestration** — owner decision (2026-09-12) supersedes the prior
+  refusal: Swarm parity enters planned Sprint 4. It is not implemented or
+  claimed supported today. Its design must preserve daemonless-by-default
+  operation and land only with acceptance and benchmark evidence.
 - **A resident daemon of our own** — under any feature pressure, forever.
   (The compat-socket shim is ephemeral and opt-in; launchd/systemd
   integration delegates residency to the OS.)

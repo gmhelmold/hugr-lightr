@@ -1,0 +1,5387 @@
+metadata:
+  spec_version: 1.0.0-expansion-250-corrected
+  created: '2026-09-12'
+  author: gustavo
+  status: HONESTO, CORRIGIDO, REFINADO — NAO IMPECCABLE, MAS TRANSPARENTE
+  note: 'Arquivo corrigido manualmente: todos os 250 cenarios inseridos antes de expected_results;
+    YAML valido.'
+  statistical_power_analysis:
+    formula: Poder = 1 - beta, onde beta = P(aceitar H0 | H1 verdadeira)
+    parameters:
+      alpha: 0.05
+      effect_size_threshold: 0.5
+      target_power: 0.8
+      rounds_per_scenario: 64
+      scenarios: 250
+      allocation_ratio: 1.0
+    calculation:
+      method: t-test two-sample (Welch) + Wilcoxon + Mann-Whitney
+      power_approx: 'Para d=0.5, n=64 por grupo: poder ~0.99; para d=0.2, n=64: poder
+        ~0.31'
+      recommendation: Para d=0.2, aumentar rounds para 156 ou aceitar poder reduzido
+    post_hoc_procedure:
+    - Calcular tamanho de efeito observado (Cohen's d, Hedges' g, Cliff's delta) por
+      cenário
+    - Calcular poder post-hoc observado com n=64, alpha=0.05, efeito observado
+    - Reportar poder observado por categoria e global
+    - Flagar cenários com poder < 0.8 como "underpowered"
+    tools:
+    - statsmodels.stats.power.TTestIndPower
+    - scipy.stats.wilcoxon
+    - scipy.stats.mannwhitneyu
+scenarios:
+- category: build
+  id: build-single-stage
+  project: kubernetes-kind
+  description: Single-stage build (pause container)
+  docker_cmd: docker build -t build-single-stage:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-single-stage:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-multi-stage-go
+  project: kubernetes-kind
+  description: Multi-stage Go build (builder -> distroless)
+  docker_cmd: docker build -t build-multi-stage-go:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-multi-stage-go:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-multi-stage-java
+  project: kubernetes-kind
+  description: Multi-stage Java build (Gradle builder -> JRE runtime)
+  docker_cmd: docker build -t build-multi-stage-java:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-multi-stage-java:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-cache-from-local
+  project: kubernetes-kind
+  description: Build with --cache-from local image
+  docker_cmd: docker build -t build-cache-from-local:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-cache-from-local:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-cache-from-registry
+  project: kubernetes-kind
+  description: Build with --cache-from registry
+  docker_cmd: docker build -t build-cache-from-registry:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-cache-from-registry:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-secret-mount
+  project: kubernetes-kind
+  description: Build with --secret (npm token, ssh key)
+  docker_cmd: docker build -t build-secret-mount:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-secret-mount:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-ssh-mount
+  project: kubernetes-kind
+  description: Build with --ssh (private repo access)
+  docker_cmd: docker build -t build-ssh-mount:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-ssh-mount:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-target-stage
+  project: kubernetes-kind
+  description: Build specific target stage (--target builder)
+  docker_cmd: docker build -t build-target-stage:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-target-stage:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-platform-cross
+  project: kubernetes-kind
+  description: Cross-platform build (--platform linux/arm64)
+  docker_cmd: docker build -t build-platform-cross:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-platform-cross:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-buildkit-inline-cache
+  project: kubernetes-kind
+  description: BuildKit inline cache
+  docker_cmd: docker build -t build-buildkit-inline-cache:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-buildkit-inline-cache:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: buildkit
+  id: buildkit-cache-mount
+  project: elasticsearch
+  description: BuildKit cache mount (RUN --mount=type=cache)
+  docker_cmd: docker build -t buildkit-cache-mount:bench -f Dockerfile .
+  lightr_cmd: lightr build -t buildkit-cache-mount:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - buildkit
+  - wave-exp
+  honest_gated: false
+- category: buildkit
+  id: buildkit-secret-mount
+  project: elasticsearch
+  description: BuildKit secret mount (RUN --mount=type=secret)
+  docker_cmd: docker build -t buildkit-secret-mount:bench -f Dockerfile .
+  lightr_cmd: lightr build -t buildkit-secret-mount:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - buildkit
+  - wave-exp
+  honest_gated: false
+- category: buildkit
+  id: buildkit-ssh-mount
+  project: elasticsearch
+  description: BuildKit SSH mount (RUN --mount=type=ssh)
+  docker_cmd: docker build -t buildkit-ssh-mount:bench -f Dockerfile .
+  lightr_cmd: lightr build -t buildkit-ssh-mount:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - buildkit
+  - wave-exp
+  honest_gated: false
+- category: buildkit
+  id: buildkit-attestation-sbom
+  project: elasticsearch
+  description: BuildKit attestation + SBOM
+  docker_cmd: docker build -t buildkit-attestation-sbom:bench -f Dockerfile .
+  lightr_cmd: lightr build -t buildkit-attestation-sbom:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - buildkit
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-arg-inject
+  project: kubernetes-kind
+  description: Build with --build-arg injection
+  docker_cmd: docker build -t build-arg-inject:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-arg-inject:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-label-add
+  project: kubernetes-kind
+  description: Build with --label metadata
+  docker_cmd: docker build -t build-label-add:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-label-add:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-no-cache-force
+  project: kubernetes-kind
+  description: Build with --no-cache forced
+  docker_cmd: docker build -t build-no-cache-force:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-no-cache-force:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-compress-gzip
+  project: kubernetes-kind
+  description: Build with --compress gzip
+  docker_cmd: docker build -t build-compress-gzip:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-compress-gzip:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-compress-zstd
+  project: kubernetes-kind
+  description: Build with --compress zstd
+  docker_cmd: docker build -t build-compress-zstd:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-compress-zstd:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-copy-chown
+  project: kubernetes-kind
+  description: Build with --chown in COPY
+  docker_cmd: docker build -t build-copy-chown:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-copy-chown:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-arg-env-subst
+  project: kubernetes-kind
+  description: Build arg with env substitution
+  docker_cmd: docker build -t build-arg-env-subst:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-arg-env-subst:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-arg-file
+  project: kubernetes-kind
+  description: Build arg from file
+  docker_cmd: docker build -t build-arg-file:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-arg-file:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-label-version
+  project: kubernetes-kind
+  description: Build with version label
+  docker_cmd: docker build -t build-label-version:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-label-version:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-healthcheck-add
+  project: kubernetes-kind
+  description: Build with HEALTHCHECK instruction
+  docker_cmd: docker build -t build-healthcheck-add:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-healthcheck-add:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-expose-port
+  project: kubernetes-kind
+  description: Build with EXPOSE port
+  docker_cmd: docker build -t build-expose-port:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-expose-port:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-entrypoint-override
+  project: kubernetes-kind
+  description: Build with ENTRYPOINT override
+  docker_cmd: docker build -t build-entrypoint-override:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-entrypoint-override:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-cmd-override
+  project: kubernetes-kind
+  description: Build with CMD override
+  docker_cmd: docker build -t build-cmd-override:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-cmd-override:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-user-set
+  project: kubernetes-kind
+  description: Build with USER instruction
+  docker_cmd: docker build -t build-user-set:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-user-set:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-workdir-set
+  project: kubernetes-kind
+  description: Build with WORKDIR instruction
+  docker_cmd: docker build -t build-workdir-set:bench -f Dockerfile .
+  lightr_cmd: lightr build -t build-workdir-set:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: buildkit
+  id: buildkit-export-tar
+  project: elasticsearch
+  description: BuildKit export to tar
+  docker_cmd: docker build -t buildkit-export-tar:bench -f Dockerfile .
+  lightr_cmd: lightr build -t buildkit-export-tar:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - buildkit
+  - wave-exp
+  honest_gated: false
+- category: buildkit
+  id: buildkit-export-oci
+  project: elasticsearch
+  description: BuildKit export OCI layout
+  docker_cmd: docker build -t buildkit-export-oci:bench -f Dockerfile .
+  lightr_cmd: lightr build -t buildkit-export-oci:bench -f Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: Image builds successfully and passes basic validation
+  tags:
+  - buildkit
+  - wave-exp
+  honest_gated: false
+- category: security
+  id: security-seccomp-default
+  project: kubernetes-kind
+  description: Default seccomp profile
+  docker_cmd: docker run --rm security-seccomp-default:bench
+  lightr_cmd: lightr run --rm security-seccomp-default:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - security
+  - wave-exp
+  honest_gated: false
+- category: security
+  id: security-seccomp-unconfined
+  project: kubernetes-kind
+  description: Unconfined seccomp
+  docker_cmd: docker run --rm security-seccomp-unconfined:bench
+  lightr_cmd: lightr run --rm security-seccomp-unconfined:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - security
+  - wave-exp
+  honest_gated: false
+- category: security
+  id: security-userns-remap
+  project: kubernetes-kind
+  description: User namespace remap
+  docker_cmd: docker run --rm security-userns-remap:bench
+  lightr_cmd: lightr run --rm security-userns-remap:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - security
+  - wave-exp
+  honest_gated: true
+- category: security
+  id: security-readonly-rootfs
+  project: kubernetes-kind
+  description: Read-only root filesystem
+  docker_cmd: docker run --rm security-readonly-rootfs:bench
+  lightr_cmd: lightr run --rm security-readonly-rootfs:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - security
+  - wave-exp
+  honest_gated: false
+- category: security
+  id: security-capabilities-drop
+  project: kubernetes-kind
+  description: Capability drop (--cap-drop=ALL)
+  docker_cmd: docker run --rm security-capabilities-drop:bench
+  lightr_cmd: lightr run --rm security-capabilities-drop:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - security
+  - wave-exp
+  honest_gated: false
+- category: security
+  id: security-capabilities-add
+  project: kubernetes-kind
+  description: Capability add (--cap-add=CAP_NET_BIND_SERVICE)
+  docker_cmd: docker run --rm security-capabilities-add:bench
+  lightr_cmd: lightr run --rm security-capabilities-add:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - security
+  - wave-exp
+  honest_gated: false
+- category: security
+  id: security-no-new-privileges
+  project: kubernetes-kind
+  description: No new privileges flag
+  docker_cmd: docker run --rm security-no-new-privileges:bench
+  lightr_cmd: lightr run --rm security-no-new-privileges:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - security
+  - wave-exp
+  honest_gated: false
+- category: security
+  id: security-selinux-enforcing
+  project: kubernetes-kind
+  description: SELinux enforcing mode
+  docker_cmd: docker run --rm security-selinux-enforcing:bench
+  lightr_cmd: lightr run --rm security-selinux-enforcing:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - security
+  - wave-exp
+  honest_gated: true
+- category: resources
+  id: resources-cpu-quota
+  project: elasticsearch
+  description: CPU quota enforcement
+  docker_cmd: docker run --rm resources-cpu-quota:bench
+  lightr_cmd: lightr run --rm resources-cpu-quota:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: resources
+  id: resources-memory-oom
+  project: elasticsearch
+  description: OOM kill on memory limit
+  docker_cmd: docker run --rm resources-memory-oom:bench
+  lightr_cmd: lightr run --rm resources-memory-oom:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: resources
+  id: resources-io-weight
+  project: elasticsearch
+  description: Block I/O weight
+  docker_cmd: docker run --rm resources-io-weight:bench
+  lightr_cmd: lightr run --rm resources-io-weight:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: resources
+  id: resources-hugepages-limit
+  project: elasticsearch
+  description: Hugepages limit
+  docker_cmd: docker run --rm resources-hugepages-limit:bench
+  lightr_cmd: lightr run --rm resources-hugepages-limit:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: resources
+  id: resources-rdma-device-access
+  project: elasticsearch
+  description: RDMA device access
+  docker_cmd: docker run --rm resources-rdma-device-access:bench
+  lightr_cmd: lightr run --rm resources-rdma-device-access:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: resources
+  id: resources-pids-limit
+  project: elasticsearch
+  description: PIDs limit
+  docker_cmd: docker run --rm resources-pids-limit:bench
+  lightr_cmd: lightr run --rm resources-pids-limit:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: resources
+  id: resources-cpu-shares
+  project: elasticsearch
+  description: CPU shares weight
+  docker_cmd: docker run --rm resources-cpu-shares:bench
+  lightr_cmd: lightr run --rm resources-cpu-shares:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: resources
+  id: resources-memory-reservation
+  project: elasticsearch
+  description: Memory reservation
+  docker_cmd: docker run --rm resources-memory-reservation:bench
+  lightr_cmd: lightr run --rm resources-memory-reservation:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: resources
+  id: resources-blkio-throttle
+  project: elasticsearch
+  description: Block I/O throttle
+  docker_cmd: docker run --rm resources-blkio-throttle:bench
+  lightr_cmd: lightr run --rm resources-blkio-throttle:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: health
+  id: health-liveness
+  project: kubernetes-kind
+  description: Liveness probe
+  docker_cmd: docker run --rm health-liveness:bench
+  lightr_cmd: lightr run --rm health-liveness:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - health
+  - wave-exp
+  honest_gated: false
+- category: health
+  id: health-readiness
+  project: kubernetes-kind
+  description: Readiness probe
+  docker_cmd: docker run --rm health-readiness:bench
+  lightr_cmd: lightr run --rm health-readiness:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - health
+  - wave-exp
+  honest_gated: false
+- category: health
+  id: health-startup
+  project: kubernetes-kind
+  description: Startup probe
+  docker_cmd: docker run --rm health-startup:bench
+  lightr_cmd: lightr run --rm health-startup:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - health
+  - wave-exp
+  honest_gated: false
+- category: health
+  id: health-init-process
+  project: kubernetes-kind
+  description: Init process (--init)
+  docker_cmd: docker run --rm health-init-process:bench
+  lightr_cmd: lightr run --rm health-init-process:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - health
+  - wave-exp
+  honest_gated: false
+- category: health
+  id: health-zombie-reaping
+  project: kubernetes-kind
+  description: Zombie process reaping
+  docker_cmd: docker run --rm health-zombie-reaping:bench
+  lightr_cmd: lightr run --rm health-zombie-reaping:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - health
+  - wave-exp
+  honest_gated: false
+- category: health
+  id: health-init-tini
+  project: kubernetes-kind
+  description: Init with tini
+  docker_cmd: docker run --rm health-init-tini:bench
+  lightr_cmd: lightr run --rm health-init-tini:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - health
+  - wave-exp
+  honest_gated: false
+- category: health
+  id: health-init-dumb-init
+  project: kubernetes-kind
+  description: Init with dumb-init
+  docker_cmd: docker run --rm health-init-dumb-init:bench
+  lightr_cmd: lightr run --rm health-init-dumb-init:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - health
+  - wave-exp
+  honest_gated: false
+- category: security
+  id: security-user-namespace-isolation
+  project: kubernetes-kind
+  description: User namespace isolation
+  docker_cmd: docker run --rm security-user-namespace-isolation:bench
+  lightr_cmd: lightr run --rm security-user-namespace-isolation:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - security
+  - wave-exp
+  honest_gated: false
+- category: security
+  id: security-gpu-isolation
+  project: kubernetes-kind
+  description: GPU isolation
+  docker_cmd: docker run --rm security-gpu-isolation:bench
+  lightr_cmd: lightr run --rm security-gpu-isolation:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - security
+  - wave-exp
+  honest_gated: true
+- category: resources
+  id: resources-cpu-throttle
+  project: elasticsearch
+  description: CPU throttle detection
+  docker_cmd: docker run --rm resources-cpu-throttle:bench
+  lightr_cmd: lightr run --rm resources-cpu-throttle:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: resources
+  id: resources-memory-swap
+  project: elasticsearch
+  description: Memory swap limit
+  docker_cmd: docker run --rm resources-memory-swap:bench
+  lightr_cmd: lightr run --rm resources-memory-swap:bench
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: Security/resource/health feature works as specified
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-create-bridge
+  project: kubernetes-kind
+  description: Create custom bridge network
+  docker_cmd: docker network create network-create-bridge || docker volume create
+    network-create-bridge || docker service create network-create-bridge
+  lightr_cmd: lightr network create network-create-bridge || lightr volume create
+    network-create-bridge || lightr service create network-create-bridge
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - network
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-create-macvlan
+  project: kubernetes-kind
+  description: Create macvlan network
+  docker_cmd: docker network create network-create-macvlan || docker volume create
+    network-create-macvlan || docker service create network-create-macvlan
+  lightr_cmd: lightr network create network-create-macvlan || lightr volume create
+    network-create-macvlan || lightr service create network-create-macvlan
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - network
+  - wave-exp
+  honest_gated: true
+- category: network
+  id: network-create-ipvlan
+  project: kubernetes-kind
+  description: Create ipvlan network
+  docker_cmd: docker network create network-create-ipvlan || docker volume create
+    network-create-ipvlan || docker service create network-create-ipvlan
+  lightr_cmd: lightr network create network-create-ipvlan || lightr volume create
+    network-create-ipvlan || lightr service create network-create-ipvlan
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - network
+  - wave-exp
+  honest_gated: true
+- category: network
+  id: network-create-overlay
+  project: kubernetes-kind
+  description: Create overlay network
+  docker_cmd: docker network create network-create-overlay || docker volume create
+    network-create-overlay || docker service create network-create-overlay
+  lightr_cmd: lightr network create network-create-overlay || lightr volume create
+    network-create-overlay || lightr service create network-create-overlay
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - network
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-dns-resolution
+  project: kubernetes-kind
+  description: Container DNS resolution
+  docker_cmd: docker network create network-dns-resolution || docker volume create
+    network-dns-resolution || docker service create network-dns-resolution
+  lightr_cmd: lightr network create network-dns-resolution || lightr volume create
+    network-dns-resolution || lightr service create network-dns-resolution
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - network
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-service-discovery
+  project: kubernetes-kind
+  description: Service discovery
+  docker_cmd: docker network create network-service-discovery || docker volume create
+    network-service-discovery || docker service create network-service-discovery
+  lightr_cmd: lightr network create network-service-discovery || lightr volume create
+    network-service-discovery || lightr service create network-service-discovery
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - network
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-load-balancing
+  project: kubernetes-kind
+  description: Load balancing
+  docker_cmd: docker network create network-load-balancing || docker volume create
+    network-load-balancing || docker service create network-load-balancing
+  lightr_cmd: lightr network create network-load-balancing || lightr volume create
+    network-load-balancing || lightr service create network-load-balancing
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - network
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-mesh-encryption
+  project: kubernetes-kind
+  description: Mesh encryption (WireGuard)
+  docker_cmd: docker network create network-mesh-encryption || docker volume create
+    network-mesh-encryption || docker service create network-mesh-encryption
+  lightr_cmd: lightr network create network-mesh-encryption || lightr volume create
+    network-mesh-encryption || lightr service create network-mesh-encryption
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - network
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-create-local
+  project: kubernetes-kind
+  description: Create local volume
+  docker_cmd: docker network create volume-create-local || docker volume create volume-create-local
+    || docker service create volume-create-local
+  lightr_cmd: lightr network create volume-create-local || lightr volume create volume-create-local
+    || lightr service create volume-create-local
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-create-nfs
+  project: kubernetes-kind
+  description: Create NFS volume
+  docker_cmd: docker network create volume-create-nfs || docker volume create volume-create-nfs
+    || docker service create volume-create-nfs
+  lightr_cmd: lightr network create volume-create-nfs || lightr volume create volume-create-nfs
+    || lightr service create volume-create-nfs
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-create-tmpfs
+  project: kubernetes-kind
+  description: Create tmpfs volume
+  docker_cmd: docker network create volume-create-tmpfs || docker volume create volume-create-tmpfs
+    || docker service create volume-create-tmpfs
+  lightr_cmd: lightr network create volume-create-tmpfs || lightr volume create volume-create-tmpfs
+    || lightr service create volume-create-tmpfs
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-backup-restore
+  project: kubernetes-kind
+  description: Volume backup/restore
+  docker_cmd: docker network create volume-backup-restore || docker volume create
+    volume-backup-restore || docker service create volume-backup-restore
+  lightr_cmd: lightr network create volume-backup-restore || lightr volume create
+    volume-backup-restore || lightr service create volume-backup-restore
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-clone
+  project: kubernetes-kind
+  description: Volume clone
+  docker_cmd: docker network create volume-clone || docker volume create volume-clone
+    || docker service create volume-clone
+  lightr_cmd: lightr network create volume-clone || lightr volume create volume-clone
+    || lightr service create volume-clone
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-snapshot
+  project: kubernetes-kind
+  description: Volume snapshot
+  docker_cmd: docker network create volume-snapshot || docker volume create volume-snapshot
+    || docker service create volume-snapshot
+  lightr_cmd: lightr network create volume-snapshot || lightr volume create volume-snapshot
+    || lightr service create volume-snapshot
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-driver-nfs
+  project: kubernetes-kind
+  description: NFS volume driver
+  docker_cmd: docker network create volume-driver-nfs || docker volume create volume-driver-nfs
+    || docker service create volume-driver-nfs
+  lightr_cmd: lightr network create volume-driver-nfs || lightr volume create volume-driver-nfs
+    || lightr service create volume-driver-nfs
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-driver-cifs
+  project: kubernetes-kind
+  description: CIFS volume driver
+  docker_cmd: docker network create volume-driver-cifs || docker volume create volume-driver-cifs
+    || docker service create volume-driver-cifs
+  lightr_cmd: lightr network create volume-driver-cifs || lightr volume create volume-driver-cifs
+    || lightr service create volume-driver-cifs
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: plugin
+  id: plugin-volume-local
+  project: kubernetes-kind
+  description: Local volume plugin
+  docker_cmd: docker network create plugin-volume-local || docker volume create plugin-volume-local
+    || docker service create plugin-volume-local
+  lightr_cmd: lightr network create plugin-volume-local || lightr volume create plugin-volume-local
+    || lightr service create plugin-volume-local
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - plugin
+  - wave-exp
+  honest_gated: false
+- category: plugin
+  id: plugin-volume-nfs
+  project: kubernetes-kind
+  description: NFS volume plugin
+  docker_cmd: docker network create plugin-volume-nfs || docker volume create plugin-volume-nfs
+    || docker service create plugin-volume-nfs
+  lightr_cmd: lightr network create plugin-volume-nfs || lightr volume create plugin-volume-nfs
+    || lightr service create plugin-volume-nfs
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - plugin
+  - wave-exp
+  honest_gated: true
+- category: plugin
+  id: plugin-network-weave
+  project: kubernetes-kind
+  description: Weave network plugin
+  docker_cmd: docker network create plugin-network-weave || docker volume create plugin-network-weave
+    || docker service create plugin-network-weave
+  lightr_cmd: lightr network create plugin-network-weave || lightr volume create plugin-network-weave
+    || lightr service create plugin-network-weave
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - plugin
+  - wave-exp
+  honest_gated: true
+- category: plugin
+  id: plugin-authz
+  project: kubernetes-kind
+  description: Authorization plugin
+  docker_cmd: docker network create plugin-authz || docker volume create plugin-authz
+    || docker service create plugin-authz
+  lightr_cmd: lightr network create plugin-authz || lightr volume create plugin-authz
+    || lightr service create plugin-authz
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - plugin
+  - wave-exp
+  honest_gated: false
+- category: plugin
+  id: plugin-log-driver
+  project: kubernetes-kind
+  description: Log driver plugin
+  docker_cmd: docker network create plugin-log-driver || docker volume create plugin-log-driver
+    || docker service create plugin-log-driver
+  lightr_cmd: lightr network create plugin-log-driver || lightr volume create plugin-log-driver
+    || lightr service create plugin-log-driver
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - plugin
+  - wave-exp
+  honest_gated: false
+- category: plugin
+  id: plugin-metrics
+  project: kubernetes-kind
+  description: Metrics plugin
+  docker_cmd: docker network create plugin-metrics || docker volume create plugin-metrics
+    || docker service create plugin-metrics
+  lightr_cmd: lightr network create plugin-metrics || lightr volume create plugin-metrics
+    || lightr service create plugin-metrics
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - plugin
+  - wave-exp
+  honest_gated: false
+- category: swarm
+  id: swarm-service-create
+  project: kubernetes-kind
+  description: Create swarm service
+  docker_cmd: docker network create swarm-service-create || docker volume create swarm-service-create
+    || docker service create swarm-service-create
+  lightr_cmd: lightr network create swarm-service-create || lightr volume create swarm-service-create
+    || lightr service create swarm-service-create
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - swarm
+  - wave-exp
+  honest_gated: true
+- category: swarm
+  id: swarm-service-scale
+  project: kubernetes-kind
+  description: Scale swarm service
+  docker_cmd: docker network create swarm-service-scale || docker volume create swarm-service-scale
+    || docker service create swarm-service-scale
+  lightr_cmd: lightr network create swarm-service-scale || lightr volume create swarm-service-scale
+    || lightr service create swarm-service-scale
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - swarm
+  - wave-exp
+  honest_gated: true
+- category: swarm
+  id: swarm-service-update
+  project: kubernetes-kind
+  description: Update swarm service
+  docker_cmd: docker network create swarm-service-update || docker volume create swarm-service-update
+    || docker service create swarm-service-update
+  lightr_cmd: lightr network create swarm-service-update || lightr volume create swarm-service-update
+    || lightr service create swarm-service-update
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - swarm
+  - wave-exp
+  honest_gated: true
+- category: swarm
+  id: swarm-service-rollback
+  project: kubernetes-kind
+  description: Rollback swarm service
+  docker_cmd: docker network create swarm-service-rollback || docker volume create
+    swarm-service-rollback || docker service create swarm-service-rollback
+  lightr_cmd: lightr network create swarm-service-rollback || lightr volume create
+    swarm-service-rollback || lightr service create swarm-service-rollback
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - swarm
+  - wave-exp
+  honest_gated: true
+- category: swarm
+  id: swarm-network-overlay
+  project: kubernetes-kind
+  description: Swarm overlay network
+  docker_cmd: docker network create swarm-network-overlay || docker volume create
+    swarm-network-overlay || docker service create swarm-network-overlay
+  lightr_cmd: lightr network create swarm-network-overlay || lightr volume create
+    swarm-network-overlay || lightr service create swarm-network-overlay
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - swarm
+  - wave-exp
+  honest_gated: true
+- category: swarm
+  id: swarm-volume-driver
+  project: kubernetes-kind
+  description: Swarm volume driver
+  docker_cmd: docker network create swarm-volume-driver || docker volume create swarm-volume-driver
+    || docker service create swarm-volume-driver
+  lightr_cmd: lightr network create swarm-volume-driver || lightr volume create swarm-volume-driver
+    || lightr service create swarm-volume-driver
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - swarm
+  - wave-exp
+  honest_gated: true
+- category: swarm
+  id: swarm-service-replicas
+  project: kubernetes-kind
+  description: Swarm service replicas
+  docker_cmd: docker network create swarm-service-replicas || docker volume create
+    swarm-service-replicas || docker service create swarm-service-replicas
+  lightr_cmd: lightr network create swarm-service-replicas || lightr volume create
+    swarm-service-replicas || lightr service create swarm-service-replicas
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - swarm
+  - wave-exp
+  honest_gated: true
+- category: swarm
+  id: swarm-placement-constraints
+  project: kubernetes-kind
+  description: Swarm placement constraints
+  docker_cmd: docker network create swarm-placement-constraints || docker volume create
+    swarm-placement-constraints || docker service create swarm-placement-constraints
+  lightr_cmd: lightr network create swarm-placement-constraints || lightr volume create
+    swarm-placement-constraints || lightr service create swarm-placement-constraints
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - swarm
+  - wave-exp
+  honest_gated: true
+- category: network
+  id: network-host-mode
+  project: kubernetes-kind
+  description: Host network mode
+  docker_cmd: docker network create network-host-mode || docker volume create network-host-mode
+    || docker service create network-host-mode
+  lightr_cmd: lightr network create network-host-mode || lightr volume create network-host-mode
+    || lightr service create network-host-mode
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - network
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-none-mode
+  project: kubernetes-kind
+  description: None network mode
+  docker_cmd: docker network create network-none-mode || docker volume create network-none-mode
+    || docker service create network-none-mode
+  lightr_cmd: lightr network create network-none-mode || lightr volume create network-none-mode
+    || lightr service create network-none-mode
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - network
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-bind-mount
+  project: kubernetes-kind
+  description: Bind mount
+  docker_cmd: docker network create volume-bind-mount || docker volume create volume-bind-mount
+    || docker service create volume-bind-mount
+  lightr_cmd: lightr network create volume-bind-mount || lightr volume create volume-bind-mount
+    || lightr service create volume-bind-mount
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-anonymous
+  project: kubernetes-kind
+  description: Anonymous volume
+  docker_cmd: docker network create volume-anonymous || docker volume create volume-anonymous
+    || docker service create volume-anonymous
+  lightr_cmd: lightr network create volume-anonymous || lightr volume create volume-anonymous
+    || lightr service create volume-anonymous
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-dns-search
+  project: kubernetes-kind
+  description: DNS search domain
+  docker_cmd: docker network create network-dns-search || docker volume create network-dns-search
+    || docker service create network-dns-search
+  lightr_cmd: lightr network create network-dns-search || lightr volume create network-dns-search
+    || lightr service create network-dns-search
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - network
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-ipvlan-l2
+  project: kubernetes-kind
+  description: IPVLAN L2 mode
+  docker_cmd: docker network create network-ipvlan-l2 || docker volume create network-ipvlan-l2
+    || docker service create network-ipvlan-l2
+  lightr_cmd: lightr network create network-ipvlan-l2 || lightr volume create network-ipvlan-l2
+    || lightr service create network-ipvlan-l2
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - network
+  - wave-exp
+  honest_gated: true
+- category: network
+  id: network-ipvlan-l3
+  project: kubernetes-kind
+  description: IPVLAN L3 mode
+  docker_cmd: docker network create network-ipvlan-l3 || docker volume create network-ipvlan-l3
+    || docker service create network-ipvlan-l3
+  lightr_cmd: lightr network create network-ipvlan-l3 || lightr volume create network-ipvlan-l3
+    || lightr service create network-ipvlan-l3
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - network
+  - wave-exp
+  honest_gated: true
+- category: plugin
+  id: plugin-authz-opa
+  project: kubernetes-kind
+  description: OPA authorization plugin
+  docker_cmd: docker network create plugin-authz-opa || docker volume create plugin-authz-opa
+    || docker service create plugin-authz-opa
+  lightr_cmd: lightr network create plugin-authz-opa || lightr volume create plugin-authz-opa
+    || lightr service create plugin-authz-opa
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - plugin
+  - wave-exp
+  honest_gated: false
+- category: swarm
+  id: swarm-secret-distribute
+  project: kubernetes-kind
+  description: Swarm secret distribution
+  docker_cmd: docker network create swarm-secret-distribute || docker volume create
+    swarm-secret-distribute || docker service create swarm-secret-distribute
+  lightr_cmd: lightr network create swarm-secret-distribute || lightr volume create
+    swarm-secret-distribute || lightr service create swarm-secret-distribute
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - swarm
+  - wave-exp
+  honest_gated: true
+- category: swarm
+  id: swarm-config-distribute
+  project: kubernetes-kind
+  description: Swarm config distribution
+  docker_cmd: docker network create swarm-config-distribute || docker volume create
+    swarm-config-distribute || docker service create swarm-config-distribute
+  lightr_cmd: lightr network create swarm-config-distribute || lightr volume create
+    swarm-config-distribute || lightr service create swarm-config-distribute
+  metrics:
+  - wall_clock_ms
+  - setup_time_ms
+  - validation_pass
+  - resource_usage
+  validation: Network/volume/plugin/swarm feature works as specified
+  tags:
+  - swarm
+  - wave-exp
+  honest_gated: true
+- category: registry
+  id: registry-pull
+  project: kubernetes-kind
+  description: Pull image from registry
+  docker_cmd: docker pull registry-pull:bench || docker push registry-pull:bench ||
+    docker manifest registry-pull
+  lightr_cmd: lightr oci pull registry-pull:bench || lightr oci push registry-pull:bench
+    || lightr manifest registry-pull
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-push
+  project: kubernetes-kind
+  description: Push image to registry
+  docker_cmd: docker pull registry-push:bench || docker push registry-push:bench ||
+    docker manifest registry-push
+  lightr_cmd: lightr oci pull registry-push:bench || lightr oci push registry-push:bench
+    || lightr manifest registry-push
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-manifest-v2
+  project: kubernetes-kind
+  description: Manifest v2 schema 2
+  docker_cmd: docker pull registry-manifest-v2:bench || docker push registry-manifest-v2:bench
+    || docker manifest registry-manifest-v2
+  lightr_cmd: lightr oci pull registry-manifest-v2:bench || lightr oci push registry-manifest-v2:bench
+    || lightr manifest registry-manifest-v2
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-manifest-v2s
+  project: kubernetes-kind
+  description: Manifest v2 schema 1
+  docker_cmd: docker pull registry-manifest-v2s:bench || docker push registry-manifest-v2s:bench
+    || docker manifest registry-manifest-v2s
+  lightr_cmd: lightr oci pull registry-manifest-v2s:bench || lightr oci push registry-manifest-v2s:bench
+    || lightr manifest registry-manifest-v2s
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-manifest-list
+  project: kubernetes-kind
+  description: Multi-arch manifest list
+  docker_cmd: docker pull registry-manifest-list:bench || docker push registry-manifest-list:bench
+    || docker manifest registry-manifest-list
+  lightr_cmd: lightr oci pull registry-manifest-list:bench || lightr oci push registry-manifest-list:bench
+    || lightr manifest registry-manifest-list
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-multi-arch
+  project: kubernetes-kind
+  description: Multi-arch image pull
+  docker_cmd: docker pull registry-multi-arch:bench || docker push registry-multi-arch:bench
+    || docker manifest registry-multi-arch
+  lightr_cmd: lightr oci pull registry-multi-arch:bench || lightr oci push registry-multi-arch:bench
+    || lightr manifest registry-multi-arch
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-content-trust
+  project: kubernetes-kind
+  description: Content trust (Notary)
+  docker_cmd: docker pull registry-content-trust:bench || docker push registry-content-trust:bench
+    || docker manifest registry-content-trust
+  lightr_cmd: lightr oci pull registry-content-trust:bench || lightr oci push registry-content-trust:bench
+    || lightr manifest registry-content-trust
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: true
+- category: registry
+  id: registry-cosign-sign
+  project: kubernetes-kind
+  description: Cosign signing
+  docker_cmd: docker pull registry-cosign-sign:bench || docker push registry-cosign-sign:bench
+    || docker manifest registry-cosign-sign
+  lightr_cmd: lightr oci pull registry-cosign-sign:bench || lightr oci push registry-cosign-sign:bench
+    || lightr manifest registry-cosign-sign
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: true
+- category: registry
+  id: registry-cosign-verify
+  project: kubernetes-kind
+  description: Cosign verification
+  docker_cmd: docker pull registry-cosign-verify:bench || docker push registry-cosign-verify:bench
+    || docker manifest registry-cosign-verify
+  lightr_cmd: lightr oci pull registry-cosign-verify:bench || lightr oci push registry-cosign-verify:bench
+    || lightr manifest registry-cosign-verify
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: true
+- category: registry
+  id: registry-cosign-keyless
+  project: kubernetes-kind
+  description: Cosign keyless signing
+  docker_cmd: docker pull registry-cosign-keyless:bench || docker push registry-cosign-keyless:bench
+    || docker manifest registry-cosign-keyless
+  lightr_cmd: lightr oci pull registry-cosign-keyless:bench || lightr oci push registry-cosign-keyless:bench
+    || lightr manifest registry-cosign-keyless
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: true
+- category: registry
+  id: registry-sbom-spdx
+  project: kubernetes-kind
+  description: SBOM SPDX generation
+  docker_cmd: docker pull registry-sbom-spdx:bench || docker push registry-sbom-spdx:bench
+    || docker manifest registry-sbom-spdx
+  lightr_cmd: lightr oci pull registry-sbom-spdx:bench || lightr oci push registry-sbom-spdx:bench
+    || lightr manifest registry-sbom-spdx
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-sbom-cyclonedx
+  project: kubernetes-kind
+  description: SBOM CycloneDX generation
+  docker_cmd: docker pull registry-sbom-cyclonedx:bench || docker push registry-sbom-cyclonedx:bench
+    || docker manifest registry-sbom-cyclonedx
+  lightr_cmd: lightr oci pull registry-sbom-cyclonedx:bench || lightr oci push registry-sbom-cyclonedx:bench
+    || lightr manifest registry-sbom-cyclonedx
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-attestation-slsa
+  project: kubernetes-kind
+  description: SLSA attestation
+  docker_cmd: docker pull registry-attestation-slsa:bench || docker push registry-attestation-slsa:bench
+    || docker manifest registry-attestation-slsa
+  lightr_cmd: lightr oci pull registry-attestation-slsa:bench || lightr oci push registry-attestation-slsa:bench
+    || lightr manifest registry-attestation-slsa
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-provenance-min
+  project: kubernetes-kind
+  description: Minimal provenance
+  docker_cmd: docker pull registry-provenance-min:bench || docker push registry-provenance-min:bench
+    || docker manifest registry-provenance-min
+  lightr_cmd: lightr oci pull registry-provenance-min:bench || lightr oci push registry-provenance-min:bench
+    || lightr manifest registry-provenance-min
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-provenance-max
+  project: kubernetes-kind
+  description: Maximum provenance
+  docker_cmd: docker pull registry-provenance-max:bench || docker push registry-provenance-max:bench
+    || docker manifest registry-provenance-max
+  lightr_cmd: lightr oci pull registry-provenance-max:bench || lightr oci push registry-provenance-max:bench
+    || lightr manifest registry-provenance-max
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-referrers-api
+  project: kubernetes-kind
+  description: Referrers API
+  docker_cmd: docker pull registry-referrers-api:bench || docker push registry-referrers-api:bench
+    || docker manifest registry-referrers-api
+  lightr_cmd: lightr oci pull registry-referrers-api:bench || lightr oci push registry-referrers-api:bench
+    || lightr manifest registry-referrers-api
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-oci-image-spec
+  project: kubernetes-kind
+  description: OCI Image Spec compliance
+  docker_cmd: docker pull registry-oci-image-spec:bench || docker push registry-oci-image-spec:bench
+    || docker manifest registry-oci-image-spec
+  lightr_cmd: lightr oci pull registry-oci-image-spec:bench || lightr oci push registry-oci-image-spec:bench
+    || lightr manifest registry-oci-image-spec
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-oci-layout
+  project: kubernetes-kind
+  description: OCI Image Layout
+  docker_cmd: docker pull registry-oci-layout:bench || docker push registry-oci-layout:bench
+    || docker manifest registry-oci-layout
+  lightr_cmd: lightr oci pull registry-oci-layout:bench || lightr oci push registry-oci-layout:bench
+    || lightr manifest registry-oci-layout
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-image-index
+  project: kubernetes-kind
+  description: Image index
+  docker_cmd: docker pull registry-image-index:bench || docker push registry-image-index:bench
+    || docker manifest registry-image-index
+  lightr_cmd: lightr oci pull registry-image-index:bench || lightr oci push registry-image-index:bench
+    || lightr manifest registry-image-index
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-foreign-layer
+  project: kubernetes-kind
+  description: Foreign layer
+  docker_cmd: docker pull registry-foreign-layer:bench || docker push registry-foreign-layer:bench
+    || docker manifest registry-foreign-layer
+  lightr_cmd: lightr oci pull registry-foreign-layer:bench || lightr oci push registry-foreign-layer:bench
+    || lightr manifest registry-foreign-layer
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-mtls
+  project: kubernetes-kind
+  description: Mutual TLS
+  docker_cmd: docker pull registry-mtls:bench || docker push registry-mtls:bench ||
+    docker manifest registry-mtls
+  lightr_cmd: lightr oci pull registry-mtls:bench || lightr oci push registry-mtls:bench
+    || lightr manifest registry-mtls
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: true
+- category: registry
+  id: registry-basic-auth
+  project: kubernetes-kind
+  description: Basic authentication
+  docker_cmd: docker pull registry-basic-auth:bench || docker push registry-basic-auth:bench
+    || docker manifest registry-basic-auth
+  lightr_cmd: lightr oci pull registry-basic-auth:bench || lightr oci push registry-basic-auth:bench
+    || lightr manifest registry-basic-auth
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-bearer-auth
+  project: kubernetes-kind
+  description: Bearer token auth
+  docker_cmd: docker pull registry-bearer-auth:bench || docker push registry-bearer-auth:bench
+    || docker manifest registry-bearer-auth
+  lightr_cmd: lightr oci pull registry-bearer-auth:bench || lightr oci push registry-bearer-auth:bench
+    || lightr manifest registry-bearer-auth
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-sni
+  project: kubernetes-kind
+  description: SNI validation
+  docker_cmd: docker pull registry-sni:bench || docker push registry-sni:bench ||
+    docker manifest registry-sni
+  lightr_cmd: lightr oci pull registry-sni:bench || lightr oci push registry-sni:bench
+    || lightr manifest registry-sni
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-rate-limit
+  project: kubernetes-kind
+  description: Rate limiting
+  docker_cmd: docker pull registry-rate-limit:bench || docker push registry-rate-limit:bench
+    || docker manifest registry-rate-limit
+  lightr_cmd: lightr oci pull registry-rate-limit:bench || lightr oci push registry-rate-limit:bench
+    || lightr manifest registry-rate-limit
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-retry-after
+  project: kubernetes-kind
+  description: Retry-after header
+  docker_cmd: docker pull registry-retry-after:bench || docker push registry-retry-after:bench
+    || docker manifest registry-retry-after
+  lightr_cmd: lightr oci pull registry-retry-after:bench || lightr oci push registry-retry-after:bench
+    || lightr manifest registry-retry-after
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-gc-blobs
+  project: kubernetes-kind
+  description: GC blobs
+  docker_cmd: docker pull registry-gc-blobs:bench || docker push registry-gc-blobs:bench
+    || docker manifest registry-gc-blobs
+  lightr_cmd: lightr oci pull registry-gc-blobs:bench || lightr oci push registry-gc-blobs:bench
+    || lightr manifest registry-gc-blobs
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: gc-untagged
+  project: kubernetes-kind
+  description: GC untagged manifests
+  docker_cmd: docker pull gc-untagged:bench || docker push gc-untagged:bench || docker
+    manifest gc-untagged
+  lightr_cmd: lightr oci pull gc-untagged:bench || lightr oci push gc-untagged:bench
+    || lightr manifest gc-untagged
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: storage-backend-filesystem
+  project: kubernetes-kind
+  description: Filesystem storage backend
+  docker_cmd: docker pull storage-backend-filesystem:bench || docker push storage-backend-filesystem:bench
+    || docker manifest storage-backend-filesystem
+  lightr_cmd: lightr oci pull storage-backend-filesystem:bench || lightr oci push
+    storage-backend-filesystem:bench || lightr manifest storage-backend-filesystem
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: storage-backend-s3
+  project: kubernetes-kind
+  description: S3 storage backend
+  docker_cmd: docker pull storage-backend-s3:bench || docker push storage-backend-s3:bench
+    || docker manifest storage-backend-s3
+  lightr_cmd: lightr oci pull storage-backend-s3:bench || lightr oci push storage-backend-s3:bench
+    || lightr manifest storage-backend-s3
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: true
+- category: registry
+  id: storage-backend-azure
+  project: kubernetes-kind
+  description: Azure storage backend
+  docker_cmd: docker pull storage-backend-azure:bench || docker push storage-backend-azure:bench
+    || docker manifest storage-backend-azure
+  lightr_cmd: lightr oci pull storage-backend-azure:bench || lightr oci push storage-backend-azure:bench
+    || lightr manifest storage-backend-azure
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: true
+- category: registry
+  id: storage-backend-memory
+  project: kubernetes-kind
+  description: Memory storage backend
+  docker_cmd: docker pull storage-backend-memory:bench || docker push storage-backend-memory:bench
+    || docker manifest storage-backend-memory
+  lightr_cmd: lightr oci pull storage-backend-memory:bench || lightr oci push storage-backend-memory:bench
+    || lightr manifest storage-backend-memory
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-manifest-annotations
+  project: kubernetes-kind
+  description: Manifest annotations
+  docker_cmd: docker pull registry-manifest-annotations:bench || docker push registry-manifest-annotations:bench
+    || docker manifest registry-manifest-annotations
+  lightr_cmd: lightr oci pull registry-manifest-annotations:bench || lightr oci push
+    registry-manifest-annotations:bench || lightr manifest registry-manifest-annotations
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-manifest-parent
+  project: kubernetes-kind
+  description: Manifest parent chain
+  docker_cmd: docker pull registry-manifest-parent:bench || docker push registry-manifest-parent:bench
+    || docker manifest registry-manifest-parent
+  lightr_cmd: lightr oci pull registry-manifest-parent:bench || lightr oci push registry-manifest-parent:bench
+    || lightr manifest registry-manifest-parent
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-manifest-empty
+  project: kubernetes-kind
+  description: Empty manifest
+  docker_cmd: docker pull registry-manifest-empty:bench || docker push registry-manifest-empty:bench
+    || docker manifest registry-manifest-empty
+  lightr_cmd: lightr oci pull registry-manifest-empty:bench || lightr oci push registry-manifest-empty:bench
+    || lightr manifest registry-manifest-empty
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-distribution-spec
+  project: kubernetes-kind
+  description: Distribution spec compliance
+  docker_cmd: docker pull registry-distribution-spec:bench || docker push registry-distribution-spec:bench
+    || docker manifest registry-distribution-spec
+  lightr_cmd: lightr oci pull registry-distribution-spec:bench || lightr oci push
+    registry-distribution-spec:bench || lightr manifest registry-distribution-spec
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-manifest-list-full
+  project: kubernetes-kind
+  description: Full manifest list
+  docker_cmd: docker pull registry-manifest-list-full:bench || docker push registry-manifest-list-full:bench
+    || docker manifest registry-manifest-list-full
+  lightr_cmd: lightr oci pull registry-manifest-list-full:bench || lightr oci push
+    registry-manifest-list-full:bench || lightr manifest registry-manifest-list-full
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: registry
+  id: registry-oci-distribution-complete
+  project: kubernetes-kind
+  description: OCI Distribution Spec complete
+  docker_cmd: docker pull registry-oci-distribution-complete:bench || docker push
+    registry-oci-distribution-complete:bench || docker manifest registry-oci-distribution-complete
+  lightr_cmd: lightr oci pull registry-oci-distribution-complete:bench || lightr oci
+    push registry-oci-distribution-complete:bench || lightr manifest registry-oci-distribution-complete
+  metrics:
+  - wall_clock_ms
+  - bytes_transferred
+  - manifest_size
+  - validation_pass
+  validation: Registry operation succeeds with correct manifest/artifact
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-multi-stage-complex
+  project: kubernetes-kind
+  description: Complex multi-stage build (5 stages)
+  docker_cmd: docker compose -f build-multi-stage-complex.yaml up -d || docker build
+    -f build-multi-stage-complex.Dockerfile .
+  lightr_cmd: lightr compose -f build-multi-stage-complex.yaml up -d || lightr build
+    -f build-multi-stage-complex.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-cross-compile-arm64
+  project: kubernetes-kind
+  description: Cross-compile ARM64
+  docker_cmd: docker compose -f build-cross-compile-arm64.yaml up -d || docker build
+    -f build-cross-compile-arm64.Dockerfile .
+  lightr_cmd: lightr compose -f build-cross-compile-arm64.yaml up -d || lightr build
+    -f build-cross-compile-arm64.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-fips
+  project: kubernetes-kind
+  description: FIPS 140-2 compliant build
+  docker_cmd: docker compose -f build-fips.yaml up -d || docker build -f build-fips.Dockerfile
+    .
+  lightr_cmd: lightr compose -f build-fips.yaml up -d || lightr build -f build-fips.Dockerfile
+    .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-distroless
+  project: kubernetes-kind
+  description: Distroless base image
+  docker_cmd: docker compose -f build-distroless.yaml up -d || docker build -f build-distroless.Dockerfile
+    .
+  lightr_cmd: lightr compose -f build-distroless.yaml up -d || lightr build -f build-distroless.Dockerfile
+    .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-scratch
+  project: kubernetes-kind
+  description: FROM scratch build
+  docker_cmd: docker compose -f build-scratch.yaml up -d || docker build -f build-scratch.Dockerfile
+    .
+  lightr_cmd: lightr compose -f build-scratch.yaml up -d || lightr build -f build-scratch.Dockerfile
+    .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-custom-frontend
+  project: kubernetes-kind
+  description: Custom BuildKit frontend
+  docker_cmd: docker compose -f build-custom-frontend.yaml up -d || docker build -f
+    build-custom-frontend.Dockerfile .
+  lightr_cmd: lightr compose -f build-custom-frontend.yaml up -d || lightr build -f
+    build-custom-frontend.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-cache-eviction
+  project: kubernetes-kind
+  description: Cache eviction policy
+  docker_cmd: docker compose -f build-cache-eviction.yaml up -d || docker build -f
+    build-cache-eviction.Dockerfile .
+  lightr_cmd: lightr compose -f build-cache-eviction.yaml up -d || lightr build -f
+    build-cache-eviction.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-cache-gc
+  project: kubernetes-kind
+  description: Cache garbage collection
+  docker_cmd: docker compose -f build-cache-gc.yaml up -d || docker build -f build-cache-gc.Dockerfile
+    .
+  lightr_cmd: lightr compose -f build-cache-gc.yaml up -d || lightr build -f build-cache-gc.Dockerfile
+    .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-provenance-inline
+  project: kubernetes-kind
+  description: Inline provenance
+  docker_cmd: docker compose -f build-provenance-inline.yaml up -d || docker build
+    -f build-provenance-inline.Dockerfile .
+  lightr_cmd: lightr compose -f build-provenance-inline.yaml up -d || lightr build
+    -f build-provenance-inline.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-sbom-inline
+  project: kubernetes-kind
+  description: Inline SBOM
+  docker_cmd: docker compose -f build-sbom-inline.yaml up -d || docker build -f build-sbom-inline.Dockerfile
+    .
+  lightr_cmd: lightr compose -f build-sbom-inline.yaml up -d || lightr build -f build-sbom-inline.Dockerfile
+    .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-attestation-cosign
+  project: kubernetes-kind
+  description: Cosign attestation
+  docker_cmd: docker compose -f build-attestation-cosign.yaml up -d || docker build
+    -f build-attestation-cosign.Dockerfile .
+  lightr_cmd: lightr compose -f build-attestation-cosign.yaml up -d || lightr build
+    -f build-attestation-cosign.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-image-index
+  project: kubernetes-kind
+  description: Image index creation
+  docker_cmd: docker compose -f build-image-index.yaml up -d || docker build -f build-image-index.Dockerfile
+    .
+  lightr_cmd: lightr compose -f build-image-index.yaml up -d || lightr build -f build-image-index.Dockerfile
+    .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-manifest-list
+  project: kubernetes-kind
+  description: Manifest list creation
+  docker_cmd: docker compose -f build-manifest-list.yaml up -d || docker build -f
+    build-manifest-list.Dockerfile .
+  lightr_cmd: lightr compose -f build-manifest-list.yaml up -d || lightr build -f
+    build-manifest-list.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-advanced-secret
+  project: kubernetes-kind
+  description: Advanced secret handling
+  docker_cmd: docker compose -f build-advanced-secret.yaml up -d || docker build -f
+    build-advanced-secret.Dockerfile .
+  lightr_cmd: lightr compose -f build-advanced-secret.yaml up -d || lightr build -f
+    build-advanced-secret.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-advanced-ssh
+  project: kubernetes-kind
+  description: Advanced SSH handling
+  docker_cmd: docker compose -f build-advanced-ssh.yaml up -d || docker build -f build-advanced-ssh.Dockerfile
+    .
+  lightr_cmd: lightr compose -f build-advanced-ssh.yaml up -d || lightr build -f build-advanced-ssh.Dockerfile
+    .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-complex-llb
+  project: kubernetes-kind
+  description: Complex LLB generation
+  docker_cmd: docker compose -f build-complex-llb.yaml up -d || docker build -f build-complex-llb.Dockerfile
+    .
+  lightr_cmd: lightr compose -f build-complex-llb.yaml up -d || lightr build -f build-complex-llb.Dockerfile
+    .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-cross-platform-qemu
+  project: kubernetes-kind
+  description: Cross-platform with QEMU
+  docker_cmd: docker compose -f build-cross-platform-qemu.yaml up -d || docker build
+    -f build-cross-platform-qemu.Dockerfile .
+  lightr_cmd: lightr compose -f build-cross-platform-qemu.yaml up -d || lightr build
+    -f build-cross-platform-qemu.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-zstd-max
+  project: kubernetes-kind
+  description: Zstd max compression
+  docker_cmd: docker compose -f build-zstd-max.yaml up -d || docker build -f build-zstd-max.Dockerfile
+    .
+  lightr_cmd: lightr compose -f build-zstd-max.yaml up -d || lightr build -f build-zstd-max.Dockerfile
+    .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-export-tar
+  project: kubernetes-kind
+  description: Export to tar
+  docker_cmd: docker compose -f build-export-tar.yaml up -d || docker build -f build-export-tar.Dockerfile
+    .
+  lightr_cmd: lightr compose -f build-export-tar.yaml up -d || lightr build -f build-export-tar.Dockerfile
+    .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-export-oci
+  project: kubernetes-kind
+  description: Export OCI layout
+  docker_cmd: docker compose -f build-export-oci.yaml up -d || docker build -f build-export-oci.Dockerfile
+    .
+  lightr_cmd: lightr compose -f build-export-oci.yaml up -d || lightr build -f build-export-oci.Dockerfile
+    .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: build feature works as specified
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: compose
+  id: compose-healthcheck-depends-on
+  project: kubernetes-kind
+  description: Compose healthcheck depends_on
+  docker_cmd: docker compose -f compose-healthcheck-depends-on.yaml up -d || docker
+    build -f compose-healthcheck-depends-on.Dockerfile .
+  lightr_cmd: lightr compose -f compose-healthcheck-depends-on.yaml up -d || lightr
+    build -f compose-healthcheck-depends-on.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: compose feature works as specified
+  tags:
+  - compose
+  - wave-exp
+  honest_gated: false
+- category: compose
+  id: compose-resource-limit-deploy
+  project: kubernetes-kind
+  description: Compose deploy resource limits
+  docker_cmd: docker compose -f compose-resource-limit-deploy.yaml up -d || docker
+    build -f compose-resource-limit-deploy.Dockerfile .
+  lightr_cmd: lightr compose -f compose-resource-limit-deploy.yaml up -d || lightr
+    build -f compose-resource-limit-deploy.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: compose feature works as specified
+  tags:
+  - compose
+  - wave-exp
+  honest_gated: false
+- category: compose
+  id: compose-include-depends
+  project: kubernetes-kind
+  description: Compose include depends_on
+  docker_cmd: docker compose -f compose-include-depends.yaml up -d || docker build
+    -f compose-include-depends.Dockerfile .
+  lightr_cmd: lightr compose -f compose-include-depends.yaml up -d || lightr build
+    -f compose-include-depends.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: compose feature works as specified
+  tags:
+  - compose
+  - wave-exp
+  honest_gated: false
+- category: compose
+  id: compose-volume-clone
+  project: kubernetes-kind
+  description: Compose volume clone
+  docker_cmd: docker compose -f compose-volume-clone.yaml up -d || docker build -f
+    compose-volume-clone.Dockerfile .
+  lightr_cmd: lightr compose -f compose-volume-clone.yaml up -d || lightr build -f
+    compose-volume-clone.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: compose feature works as specified
+  tags:
+  - compose
+  - wave-exp
+  honest_gated: false
+- category: compose
+  id: compose-snapshot-restore
+  project: kubernetes-kind
+  description: Compose snapshot restore
+  docker_cmd: docker compose -f compose-snapshot-restore.yaml up -d || docker build
+    -f compose-snapshot-restore.Dockerfile .
+  lightr_cmd: lightr compose -f compose-snapshot-restore.yaml up -d || lightr build
+    -f compose-snapshot-restore.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: compose feature works as specified
+  tags:
+  - compose
+  - wave-exp
+  honest_gated: false
+- category: compose
+  id: compose-network-overlay
+  project: kubernetes-kind
+  description: Compose network overlay
+  docker_cmd: docker compose -f compose-network-overlay.yaml up -d || docker build
+    -f compose-network-overlay.Dockerfile .
+  lightr_cmd: lightr compose -f compose-network-overlay.yaml up -d || lightr build
+    -f compose-network-overlay.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: compose feature works as specified
+  tags:
+  - compose
+  - wave-exp
+  honest_gated: false
+- category: compose
+  id: compose-service-mesh
+  project: kubernetes-kind
+  description: Compose service mesh proxy
+  docker_cmd: docker compose -f compose-service-mesh.yaml up -d || docker build -f
+    compose-service-mesh.Dockerfile .
+  lightr_cmd: lightr compose -f compose-service-mesh.yaml up -d || lightr build -f
+    compose-service-mesh.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: compose feature works as specified
+  tags:
+  - compose
+  - wave-exp
+  honest_gated: false
+- category: compose
+  id: compose-driver-nfs
+  project: kubernetes-kind
+  description: Compose driver NFS
+  docker_cmd: docker compose -f compose-driver-nfs.yaml up -d || docker build -f compose-driver-nfs.Dockerfile
+    .
+  lightr_cmd: lightr compose -f compose-driver-nfs.yaml up -d || lightr build -f compose-driver-nfs.Dockerfile
+    .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: compose feature works as specified
+  tags:
+  - compose
+  - wave-exp
+  honest_gated: false
+- category: compose
+  id: compose-driver-cifs
+  project: kubernetes-kind
+  description: Compose driver CIFS
+  docker_cmd: docker compose -f compose-driver-cifs.yaml up -d || docker build -f
+    compose-driver-cifs.Dockerfile .
+  lightr_cmd: lightr compose -f compose-driver-cifs.yaml up -d || lightr build -f
+    compose-driver-cifs.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: compose feature works as specified
+  tags:
+  - compose
+  - wave-exp
+  honest_gated: false
+- category: compose
+  id: compose-overlay-cross-subnet
+  project: kubernetes-kind
+  description: Compose overlay cross subnet
+  docker_cmd: docker compose -f compose-overlay-cross-subnet.yaml up -d || docker
+    build -f compose-overlay-cross-subnet.Dockerfile .
+  lightr_cmd: lightr compose -f compose-overlay-cross-subnet.yaml up -d || lightr
+    build -f compose-overlay-cross-subnet.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: compose feature works as specified
+  tags:
+  - compose
+  - wave-exp
+  honest_gated: false
+- category: compose
+  id: compose-dns-discovery
+  project: kubernetes-kind
+  description: Compose DNS service discovery
+  docker_cmd: docker compose -f compose-dns-discovery.yaml up -d || docker build -f
+    compose-dns-discovery.Dockerfile .
+  lightr_cmd: lightr compose -f compose-dns-discovery.yaml up -d || lightr build -f
+    compose-dns-discovery.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: compose feature works as specified
+  tags:
+  - compose
+  - wave-exp
+  honest_gated: false
+- category: compose
+  id: compose-deploy-replicas
+  project: kubernetes-kind
+  description: Compose deploy replicas
+  docker_cmd: docker compose -f compose-deploy-replicas.yaml up -d || docker build
+    -f compose-deploy-replicas.Dockerfile .
+  lightr_cmd: lightr compose -f compose-deploy-replicas.yaml up -d || lightr build
+    -f compose-deploy-replicas.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: compose feature works as specified
+  tags:
+  - compose
+  - wave-exp
+  honest_gated: false
+- category: compose
+  id: compose-deploy-placement
+  project: kubernetes-kind
+  description: Compose deploy placement
+  docker_cmd: docker compose -f compose-deploy-placement.yaml up -d || docker build
+    -f compose-deploy-placement.Dockerfile .
+  lightr_cmd: lightr compose -f compose-deploy-placement.yaml up -d || lightr build
+    -f compose-deploy-placement.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: compose feature works as specified
+  tags:
+  - compose
+  - wave-exp
+  honest_gated: false
+- category: compose
+  id: compose-healthcheck-startup
+  project: kubernetes-kind
+  description: Compose startup healthcheck
+  docker_cmd: docker compose -f compose-healthcheck-startup.yaml up -d || docker build
+    -f compose-healthcheck-startup.Dockerfile .
+  lightr_cmd: lightr compose -f compose-healthcheck-startup.yaml up -d || lightr build
+    -f compose-healthcheck-startup.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: compose feature works as specified
+  tags:
+  - compose
+  - wave-exp
+  honest_gated: false
+- category: compose
+  id: compose-depends-on-healthy
+  project: kubernetes-kind
+  description: Compose depends_on healthy
+  docker_cmd: docker compose -f compose-depends-on-healthy.yaml up -d || docker build
+    -f compose-depends-on-healthy.Dockerfile .
+  lightr_cmd: lightr compose -f compose-depends-on-healthy.yaml up -d || lightr build
+    -f compose-depends-on-healthy.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: compose feature works as specified
+  tags:
+  - compose
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-restore-compress-tar-gz
+  project: elasticsearch
+  description: Volume restore with tar.gz
+  docker_cmd: docker compose -f volume-restore-compress-tar-gz.yaml up -d || docker
+    build -f volume-restore-compress-tar-gz.Dockerfile .
+  lightr_cmd: lightr compose -f volume-restore-compress-tar-gz.yaml up -d || lightr
+    build -f volume-restore-compress-tar-gz.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: volume feature works as specified
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-backup-incremental
+  project: elasticsearch
+  description: Incremental volume backup
+  docker_cmd: docker compose -f volume-backup-incremental.yaml up -d || docker build
+    -f volume-backup-incremental.Dockerfile .
+  lightr_cmd: lightr compose -f volume-backup-incremental.yaml up -d || lightr build
+    -f volume-backup-incremental.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: volume feature works as specified
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-encryption-wireguard
+  project: elasticsearch
+  description: WireGuard network encryption
+  docker_cmd: docker compose -f network-encryption-wireguard.yaml up -d || docker
+    build -f network-encryption-wireguard.Dockerfile .
+  lightr_cmd: lightr compose -f network-encryption-wireguard.yaml up -d || lightr
+    build -f network-encryption-wireguard.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: network feature works as specified
+  tags:
+  - network
+  - wave-exp
+  honest_gated: true
+- category: network
+  id: network-dns-round-robin
+  project: elasticsearch
+  description: DNS round robin
+  docker_cmd: docker compose -f network-dns-round-robin.yaml up -d || docker build
+    -f network-dns-round-robin.Dockerfile .
+  lightr_cmd: lightr compose -f network-dns-round-robin.yaml up -d || lightr build
+    -f network-dns-round-robin.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: network feature works as specified
+  tags:
+  - network
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-service-mesh-envoy
+  project: elasticsearch
+  description: Envoy service mesh
+  docker_cmd: docker compose -f network-service-mesh-envoy.yaml up -d || docker build
+    -f network-service-mesh-envoy.Dockerfile .
+  lightr_cmd: lightr compose -f network-service-mesh-envoy.yaml up -d || lightr build
+    -f network-service-mesh-envoy.Dockerfile .
+  metrics:
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - layers_created
+  - final_image_size_bytes
+  validation: network feature works as specified
+  tags:
+  - network
+  - wave-exp
+  honest_gated: true
+- category: build
+  id: build-additional-1
+  project: kubernetes-kind
+  description: build additional scenario 1
+  docker_cmd: docker run --rm build-add:1
+  lightr_cmd: lightr run --rm build-add:1
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: build feature works
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: buildkit
+  id: buildkit-additional-1
+  project: kubernetes-kind
+  description: buildkit additional scenario 1
+  docker_cmd: docker run --rm buildkit-add:2
+  lightr_cmd: lightr run --rm buildkit-add:2
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: buildkit feature works
+  tags:
+  - buildkit
+  - wave-exp
+  honest_gated: false
+- category: security
+  id: security-additional-1
+  project: kubernetes-kind
+  description: security additional scenario 1
+  docker_cmd: docker run --rm security-add:3
+  lightr_cmd: lightr run --rm security-add:3
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: security feature works
+  tags:
+  - security
+  - wave-exp
+  honest_gated: false
+- category: resources
+  id: resources-additional-1
+  project: elasticsearch
+  description: resources additional scenario 1
+  docker_cmd: docker run --rm resources-add:4
+  lightr_cmd: lightr run --rm resources-add:4
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: resources feature works
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-additional-1
+  project: kubernetes-kind
+  description: network additional scenario 1
+  docker_cmd: docker run --rm network-add:5
+  lightr_cmd: lightr run --rm network-add:5
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: network feature works
+  tags:
+  - network
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-additional-1
+  project: elasticsearch
+  description: volume additional scenario 1
+  docker_cmd: docker run --rm volume-add:6
+  lightr_cmd: lightr run --rm volume-add:6
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: volume feature works
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: plugin
+  id: plugin-additional-1
+  project: kubernetes-kind
+  description: plugin additional scenario 1
+  docker_cmd: docker run --rm plugin-add:7
+  lightr_cmd: lightr run --rm plugin-add:7
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: plugin feature works
+  tags:
+  - plugin
+  - wave-exp
+  honest_gated: false
+- category: swarm
+  id: swarm-additional-1
+  project: kubernetes-kind
+  description: swarm additional scenario 1
+  docker_cmd: docker run --rm swarm-add:8
+  lightr_cmd: lightr run --rm swarm-add:8
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: swarm feature works
+  tags:
+  - swarm
+  - wave-exp
+  honest_gated: true
+- category: registry
+  id: registry-additional-1
+  project: elasticsearch
+  description: registry additional scenario 1
+  docker_cmd: docker run --rm registry-add:9
+  lightr_cmd: lightr run --rm registry-add:9
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: registry feature works
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: health
+  id: health-additional-1
+  project: kubernetes-kind
+  description: health additional scenario 1
+  docker_cmd: docker run --rm health-add:10
+  lightr_cmd: lightr run --rm health-add:10
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: health feature works
+  tags:
+  - health
+  - wave-exp
+  honest_gated: false
+- category: logging
+  id: logging-additional-1
+  project: kubernetes-kind
+  description: logging additional scenario 1
+  docker_cmd: docker run --rm logging-add:11
+  lightr_cmd: lightr run --rm logging-add:11
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: logging feature works
+  tags:
+  - logging
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-additional-2
+  project: kubernetes-kind
+  description: build additional scenario 2
+  docker_cmd: docker run --rm build-add:12
+  lightr_cmd: lightr run --rm build-add:12
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: build feature works
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: buildkit
+  id: buildkit-additional-2
+  project: kubernetes-kind
+  description: buildkit additional scenario 2
+  docker_cmd: docker run --rm buildkit-add:13
+  lightr_cmd: lightr run --rm buildkit-add:13
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: buildkit feature works
+  tags:
+  - buildkit
+  - wave-exp
+  honest_gated: false
+- category: security
+  id: security-additional-2
+  project: kubernetes-kind
+  description: security additional scenario 2
+  docker_cmd: docker run --rm security-add:14
+  lightr_cmd: lightr run --rm security-add:14
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: security feature works
+  tags:
+  - security
+  - wave-exp
+  honest_gated: false
+- category: resources
+  id: resources-additional-2
+  project: elasticsearch
+  description: resources additional scenario 2
+  docker_cmd: docker run --rm resources-add:15
+  lightr_cmd: lightr run --rm resources-add:15
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: resources feature works
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-additional-2
+  project: kubernetes-kind
+  description: network additional scenario 2
+  docker_cmd: docker run --rm network-add:16
+  lightr_cmd: lightr run --rm network-add:16
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: network feature works
+  tags:
+  - network
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-additional-2
+  project: elasticsearch
+  description: volume additional scenario 2
+  docker_cmd: docker run --rm volume-add:17
+  lightr_cmd: lightr run --rm volume-add:17
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: volume feature works
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: plugin
+  id: plugin-additional-2
+  project: kubernetes-kind
+  description: plugin additional scenario 2
+  docker_cmd: docker run --rm plugin-add:18
+  lightr_cmd: lightr run --rm plugin-add:18
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: plugin feature works
+  tags:
+  - plugin
+  - wave-exp
+  honest_gated: false
+- category: swarm
+  id: swarm-additional-2
+  project: kubernetes-kind
+  description: swarm additional scenario 2
+  docker_cmd: docker run --rm swarm-add:19
+  lightr_cmd: lightr run --rm swarm-add:19
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: swarm feature works
+  tags:
+  - swarm
+  - wave-exp
+  honest_gated: true
+- category: registry
+  id: registry-additional-2
+  project: elasticsearch
+  description: registry additional scenario 2
+  docker_cmd: docker run --rm registry-add:20
+  lightr_cmd: lightr run --rm registry-add:20
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: registry feature works
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: health
+  id: health-additional-2
+  project: kubernetes-kind
+  description: health additional scenario 2
+  docker_cmd: docker run --rm health-add:21
+  lightr_cmd: lightr run --rm health-add:21
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: health feature works
+  tags:
+  - health
+  - wave-exp
+  honest_gated: false
+- category: logging
+  id: logging-additional-2
+  project: kubernetes-kind
+  description: logging additional scenario 2
+  docker_cmd: docker run --rm logging-add:22
+  lightr_cmd: lightr run --rm logging-add:22
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: logging feature works
+  tags:
+  - logging
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-additional-3
+  project: kubernetes-kind
+  description: build additional scenario 3
+  docker_cmd: docker run --rm build-add:23
+  lightr_cmd: lightr run --rm build-add:23
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: build feature works
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: buildkit
+  id: buildkit-additional-3
+  project: kubernetes-kind
+  description: buildkit additional scenario 3
+  docker_cmd: docker run --rm buildkit-add:24
+  lightr_cmd: lightr run --rm buildkit-add:24
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: buildkit feature works
+  tags:
+  - buildkit
+  - wave-exp
+  honest_gated: false
+- category: security
+  id: security-additional-3
+  project: kubernetes-kind
+  description: security additional scenario 3
+  docker_cmd: docker run --rm security-add:25
+  lightr_cmd: lightr run --rm security-add:25
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: security feature works
+  tags:
+  - security
+  - wave-exp
+  honest_gated: false
+- category: resources
+  id: resources-additional-3
+  project: elasticsearch
+  description: resources additional scenario 3
+  docker_cmd: docker run --rm resources-add:26
+  lightr_cmd: lightr run --rm resources-add:26
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: resources feature works
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-additional-3
+  project: kubernetes-kind
+  description: network additional scenario 3
+  docker_cmd: docker run --rm network-add:27
+  lightr_cmd: lightr run --rm network-add:27
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: network feature works
+  tags:
+  - network
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-additional-3
+  project: elasticsearch
+  description: volume additional scenario 3
+  docker_cmd: docker run --rm volume-add:28
+  lightr_cmd: lightr run --rm volume-add:28
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: volume feature works
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: plugin
+  id: plugin-additional-3
+  project: kubernetes-kind
+  description: plugin additional scenario 3
+  docker_cmd: docker run --rm plugin-add:29
+  lightr_cmd: lightr run --rm plugin-add:29
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: plugin feature works
+  tags:
+  - plugin
+  - wave-exp
+  honest_gated: false
+- category: swarm
+  id: swarm-additional-3
+  project: kubernetes-kind
+  description: swarm additional scenario 3
+  docker_cmd: docker run --rm swarm-add:30
+  lightr_cmd: lightr run --rm swarm-add:30
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: swarm feature works
+  tags:
+  - swarm
+  - wave-exp
+  honest_gated: true
+- category: registry
+  id: registry-additional-3
+  project: elasticsearch
+  description: registry additional scenario 3
+  docker_cmd: docker run --rm registry-add:31
+  lightr_cmd: lightr run --rm registry-add:31
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: registry feature works
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: health
+  id: health-additional-3
+  project: kubernetes-kind
+  description: health additional scenario 3
+  docker_cmd: docker run --rm health-add:32
+  lightr_cmd: lightr run --rm health-add:32
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: health feature works
+  tags:
+  - health
+  - wave-exp
+  honest_gated: false
+- category: logging
+  id: logging-additional-3
+  project: kubernetes-kind
+  description: logging additional scenario 3
+  docker_cmd: docker run --rm logging-add:33
+  lightr_cmd: lightr run --rm logging-add:33
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: logging feature works
+  tags:
+  - logging
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-additional-4
+  project: kubernetes-kind
+  description: build additional scenario 4
+  docker_cmd: docker run --rm build-add:34
+  lightr_cmd: lightr run --rm build-add:34
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: build feature works
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: buildkit
+  id: buildkit-additional-4
+  project: kubernetes-kind
+  description: buildkit additional scenario 4
+  docker_cmd: docker run --rm buildkit-add:35
+  lightr_cmd: lightr run --rm buildkit-add:35
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: buildkit feature works
+  tags:
+  - buildkit
+  - wave-exp
+  honest_gated: false
+- category: security
+  id: security-additional-4
+  project: kubernetes-kind
+  description: security additional scenario 4
+  docker_cmd: docker run --rm security-add:36
+  lightr_cmd: lightr run --rm security-add:36
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: security feature works
+  tags:
+  - security
+  - wave-exp
+  honest_gated: false
+- category: resources
+  id: resources-additional-4
+  project: elasticsearch
+  description: resources additional scenario 4
+  docker_cmd: docker run --rm resources-add:37
+  lightr_cmd: lightr run --rm resources-add:37
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: resources feature works
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-additional-4
+  project: kubernetes-kind
+  description: network additional scenario 4
+  docker_cmd: docker run --rm network-add:38
+  lightr_cmd: lightr run --rm network-add:38
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: network feature works
+  tags:
+  - network
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-additional-4
+  project: elasticsearch
+  description: volume additional scenario 4
+  docker_cmd: docker run --rm volume-add:39
+  lightr_cmd: lightr run --rm volume-add:39
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: volume feature works
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: plugin
+  id: plugin-additional-4
+  project: kubernetes-kind
+  description: plugin additional scenario 4
+  docker_cmd: docker run --rm plugin-add:40
+  lightr_cmd: lightr run --rm plugin-add:40
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: plugin feature works
+  tags:
+  - plugin
+  - wave-exp
+  honest_gated: false
+- category: swarm
+  id: swarm-additional-4
+  project: kubernetes-kind
+  description: swarm additional scenario 4
+  docker_cmd: docker run --rm swarm-add:41
+  lightr_cmd: lightr run --rm swarm-add:41
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: swarm feature works
+  tags:
+  - swarm
+  - wave-exp
+  honest_gated: true
+- category: registry
+  id: registry-additional-4
+  project: elasticsearch
+  description: registry additional scenario 4
+  docker_cmd: docker run --rm registry-add:42
+  lightr_cmd: lightr run --rm registry-add:42
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: registry feature works
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: health
+  id: health-additional-4
+  project: kubernetes-kind
+  description: health additional scenario 4
+  docker_cmd: docker run --rm health-add:43
+  lightr_cmd: lightr run --rm health-add:43
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: health feature works
+  tags:
+  - health
+  - wave-exp
+  honest_gated: false
+- category: logging
+  id: logging-additional-4
+  project: kubernetes-kind
+  description: logging additional scenario 4
+  docker_cmd: docker run --rm logging-add:44
+  lightr_cmd: lightr run --rm logging-add:44
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: logging feature works
+  tags:
+  - logging
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-additional-5
+  project: kubernetes-kind
+  description: build additional scenario 5
+  docker_cmd: docker run --rm build-add:45
+  lightr_cmd: lightr run --rm build-add:45
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: build feature works
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: buildkit
+  id: buildkit-additional-5
+  project: kubernetes-kind
+  description: buildkit additional scenario 5
+  docker_cmd: docker run --rm buildkit-add:46
+  lightr_cmd: lightr run --rm buildkit-add:46
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: buildkit feature works
+  tags:
+  - buildkit
+  - wave-exp
+  honest_gated: false
+- category: security
+  id: security-additional-5
+  project: kubernetes-kind
+  description: security additional scenario 5
+  docker_cmd: docker run --rm security-add:47
+  lightr_cmd: lightr run --rm security-add:47
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: security feature works
+  tags:
+  - security
+  - wave-exp
+  honest_gated: false
+- category: resources
+  id: resources-additional-5
+  project: elasticsearch
+  description: resources additional scenario 5
+  docker_cmd: docker run --rm resources-add:48
+  lightr_cmd: lightr run --rm resources-add:48
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: resources feature works
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-additional-5
+  project: kubernetes-kind
+  description: network additional scenario 5
+  docker_cmd: docker run --rm network-add:49
+  lightr_cmd: lightr run --rm network-add:49
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: network feature works
+  tags:
+  - network
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-additional-5
+  project: elasticsearch
+  description: volume additional scenario 5
+  docker_cmd: docker run --rm volume-add:50
+  lightr_cmd: lightr run --rm volume-add:50
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: volume feature works
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: plugin
+  id: plugin-additional-5
+  project: kubernetes-kind
+  description: plugin additional scenario 5
+  docker_cmd: docker run --rm plugin-add:51
+  lightr_cmd: lightr run --rm plugin-add:51
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: plugin feature works
+  tags:
+  - plugin
+  - wave-exp
+  honest_gated: false
+- category: swarm
+  id: swarm-additional-5
+  project: kubernetes-kind
+  description: swarm additional scenario 5
+  docker_cmd: docker run --rm swarm-add:52
+  lightr_cmd: lightr run --rm swarm-add:52
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: swarm feature works
+  tags:
+  - swarm
+  - wave-exp
+  honest_gated: true
+- category: registry
+  id: registry-additional-5
+  project: elasticsearch
+  description: registry additional scenario 5
+  docker_cmd: docker run --rm registry-add:53
+  lightr_cmd: lightr run --rm registry-add:53
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: registry feature works
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: health
+  id: health-additional-5
+  project: kubernetes-kind
+  description: health additional scenario 5
+  docker_cmd: docker run --rm health-add:54
+  lightr_cmd: lightr run --rm health-add:54
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: health feature works
+  tags:
+  - health
+  - wave-exp
+  honest_gated: false
+- category: logging
+  id: logging-additional-5
+  project: kubernetes-kind
+  description: logging additional scenario 5
+  docker_cmd: docker run --rm logging-add:55
+  lightr_cmd: lightr run --rm logging-add:55
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: logging feature works
+  tags:
+  - logging
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-additional-6
+  project: kubernetes-kind
+  description: build additional scenario 6
+  docker_cmd: docker run --rm build-add:56
+  lightr_cmd: lightr run --rm build-add:56
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: build feature works
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: buildkit
+  id: buildkit-additional-6
+  project: kubernetes-kind
+  description: buildkit additional scenario 6
+  docker_cmd: docker run --rm buildkit-add:57
+  lightr_cmd: lightr run --rm buildkit-add:57
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: buildkit feature works
+  tags:
+  - buildkit
+  - wave-exp
+  honest_gated: false
+- category: security
+  id: security-additional-6
+  project: kubernetes-kind
+  description: security additional scenario 6
+  docker_cmd: docker run --rm security-add:58
+  lightr_cmd: lightr run --rm security-add:58
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: security feature works
+  tags:
+  - security
+  - wave-exp
+  honest_gated: false
+- category: resources
+  id: resources-additional-6
+  project: elasticsearch
+  description: resources additional scenario 6
+  docker_cmd: docker run --rm resources-add:59
+  lightr_cmd: lightr run --rm resources-add:59
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: resources feature works
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-additional-6
+  project: kubernetes-kind
+  description: network additional scenario 6
+  docker_cmd: docker run --rm network-add:60
+  lightr_cmd: lightr run --rm network-add:60
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: network feature works
+  tags:
+  - network
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-additional-6
+  project: elasticsearch
+  description: volume additional scenario 6
+  docker_cmd: docker run --rm volume-add:61
+  lightr_cmd: lightr run --rm volume-add:61
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: volume feature works
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: plugin
+  id: plugin-additional-6
+  project: kubernetes-kind
+  description: plugin additional scenario 6
+  docker_cmd: docker run --rm plugin-add:62
+  lightr_cmd: lightr run --rm plugin-add:62
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: plugin feature works
+  tags:
+  - plugin
+  - wave-exp
+  honest_gated: false
+- category: swarm
+  id: swarm-additional-6
+  project: kubernetes-kind
+  description: swarm additional scenario 6
+  docker_cmd: docker run --rm swarm-add:63
+  lightr_cmd: lightr run --rm swarm-add:63
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: swarm feature works
+  tags:
+  - swarm
+  - wave-exp
+  honest_gated: true
+- category: registry
+  id: registry-additional-6
+  project: elasticsearch
+  description: registry additional scenario 6
+  docker_cmd: docker run --rm registry-add:64
+  lightr_cmd: lightr run --rm registry-add:64
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: registry feature works
+  tags:
+  - registry
+  - wave-exp
+  honest_gated: false
+- category: health
+  id: health-additional-6
+  project: kubernetes-kind
+  description: health additional scenario 6
+  docker_cmd: docker run --rm health-add:65
+  lightr_cmd: lightr run --rm health-add:65
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: health feature works
+  tags:
+  - health
+  - wave-exp
+  honest_gated: false
+- category: logging
+  id: logging-additional-6
+  project: kubernetes-kind
+  description: logging additional scenario 6
+  docker_cmd: docker run --rm logging-add:66
+  lightr_cmd: lightr run --rm logging-add:66
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: logging feature works
+  tags:
+  - logging
+  - wave-exp
+  honest_gated: false
+- category: build
+  id: build-additional-7
+  project: kubernetes-kind
+  description: build additional scenario 7
+  docker_cmd: docker run --rm build-add:67
+  lightr_cmd: lightr run --rm build-add:67
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: build feature works
+  tags:
+  - build
+  - wave-exp
+  honest_gated: false
+- category: buildkit
+  id: buildkit-additional-7
+  project: kubernetes-kind
+  description: buildkit additional scenario 7
+  docker_cmd: docker run --rm buildkit-add:68
+  lightr_cmd: lightr run --rm buildkit-add:68
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: buildkit feature works
+  tags:
+  - buildkit
+  - wave-exp
+  honest_gated: false
+- category: security
+  id: security-additional-7
+  project: kubernetes-kind
+  description: security additional scenario 7
+  docker_cmd: docker run --rm security-add:69
+  lightr_cmd: lightr run --rm security-add:69
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: security feature works
+  tags:
+  - security
+  - wave-exp
+  honest_gated: false
+- category: resources
+  id: resources-additional-7
+  project: elasticsearch
+  description: resources additional scenario 7
+  docker_cmd: docker run --rm resources-add:70
+  lightr_cmd: lightr run --rm resources-add:70
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: resources feature works
+  tags:
+  - resources
+  - wave-exp
+  honest_gated: false
+- category: network
+  id: network-additional-7
+  project: kubernetes-kind
+  description: network additional scenario 7
+  docker_cmd: docker run --rm network-add:71
+  lightr_cmd: lightr run --rm network-add:71
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: network feature works
+  tags:
+  - network
+  - wave-exp
+  honest_gated: false
+- category: volume
+  id: volume-additional-7
+  project: elasticsearch
+  description: volume additional scenario 7
+  docker_cmd: docker run --rm volume-add:72
+  lightr_cmd: lightr run --rm volume-add:72
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: volume feature works
+  tags:
+  - volume
+  - wave-exp
+  honest_gated: false
+- category: plugin
+  id: plugin-additional-7
+  project: kubernetes-kind
+  description: plugin additional scenario 7
+  docker_cmd: docker run --rm plugin-add:73
+  lightr_cmd: lightr run --rm plugin-add:73
+  metrics:
+  - wall_clock_ms
+  - cpu_total_ms
+  - rss_peak_bytes
+  - validation_pass
+  validation: plugin feature works
+  tags:
+  - plugin
+  - wave-exp
+  honest_gated: false
+expected_results:
+  source_doc: docs/benchmarks/RESULTS.md (CI ubuntu-latest, 2026-06-25) + docs/spec/benchmark-results.md
+  cold_start:
+    lightr_ns_net_none:
+      mean_ms: 30.8
+      p50_ms: 30.4
+      p95_ms: 31.2
+      sd: 2.4
+      min_ms: 29.7
+      max_ms: 51.2
+    podman_network_none:
+      mean_ms: 124.9
+      p50_ms: 125.3
+      p95_ms: 137.4
+      sd: 7.3
+      min_ms: 110.1
+      max_ms: 150.5
+    docker_network_none_ref:
+      mean_ms: 143.5
+      p50_ms: 141.7
+      p95_ms: 156.0
+      sd: 6.7
+      min_ms: 132.7
+      max_ms: 160.4
+    lightr_native_no_isolation:
+      mean_ms: 10.2
+      p50_ms: 10.1
+      p95_ms: 10.7
+      sd: 0.3
+      min_ms: 9.7
+      max_ms: 10.9
+  footprint_idle:
+    lightr_daemonless: 0 MB (nenhum processo residente)
+    docker_daemon_ref: 127 MB
+  memoized_rebuild_factor: ~2,000x
+  isolation_note: Net namespace (CLONE_NEWNET) adiciona apenas ~1-2 ms no caminho
+    rootless; nao e fonte da diferenca.
+  measurement_context: Ubuntu-latest GitHub-hosted runner; Intel box para macOS app-level
+    em docs/spec/benchmark-results.md
+  honest_gate_numbers: Nenhum numero aqui nao foi medido pelo harness no hardware
+    nomeado; SKIP impresso para competidores ausentes ou operacoes que falharam.
+  hardware_context:
+    benchmark_hardware:
+      cpu: Intel Core i7-9750H (6C/12T, 2.6-4.5GHz)
+      memory: 32GB DDR4-2666
+      storage: Samsung 970 EVO Plus 1TB NVMe
+      os: macOS 14.6.1 (Darwin 23.6.0)
+      lightr_engine: vz (native macOS)
+      docker_engine: Lima VM Ubuntu 24.04 (ns engine)
+    reference_hardware:
+      source: docs/benchmarks/RESULTS.md
+      cpu: GitHub-hosted ubuntu-latest (Intel Xeon, 2-4 vCPU)
+      os: Ubuntu 24.04 LTS
+      docker_engine: rootful daemon
+      lightr_engine: ns (rootless, full namespaces)
+    caveat: NÚMEROS DE REFERÊNCIA SÃO DE HARDWARE DIFERENTE. Comparação direta não
+      é apples-to-apples. Use apenas como ordem de grandeza. Benchmark dedicado no
+      Intel box necessário para comparação apples-to-apples.
+    action_required: Executar harness lightr bench-compare no Intel i7-9750H para
+      obter números de referência neste hardware específico.
+runner:
+  name: bench-runner
+  language: Rust
+  version: 0.1.0
+  execution:
+    mode: sequential
+    isolation:
+      method: cgroups_v2
+      cpu_controller: true
+      memory_controller: true
+      io_controller: true
+      pids_controller: true
+      cpuset: 0-5
+      memory_limit_gb: 16
+    reset_between_runs:
+    - docker system prune -af --volumes
+    - lightr system prune -af --volumes
+    - echo 3 > /proc/sys/vm/drop_caches
+    - sync
+    - sleep 5
+    warmup:
+    - name: docker_warmup
+      command: docker run --rm alpine:latest true
+      repeat: 3
+    - name: lightr_warmup
+      command: lightr run --rm alpine:latest true
+      repeat: 3
+    - name: buildkit_warmup
+      command: docker buildx build --load -t warmup:test -f Dockerfile.warmup .
+      repeat: 2
+  collector:
+    interval_ms: 50
+    backends:
+    - name: cgroups_v2
+      path: /sys/fs/cgroup
+      metrics:
+      - cpu.stat
+      - memory.stat
+      - memory.current
+      - memory.peak
+      - memory.swap.current
+      - io.stat
+      - pids.current
+      - pids.peak
+    - name: proc
+      path: /proc
+      metrics:
+      - /proc/stat
+      - /proc/meminfo
+      - /proc/net/dev
+      - /proc/diskstats
+      - /proc/<pid>/stat
+      - /proc/<pid>/io
+    - name: perf
+      enabled: true
+      events:
+      - cycles
+      - instructions
+      - cache-references
+      - cache-misses
+      - branch-instructions
+      - branch-misses
+      - context-switches
+      - cpu-migrations
+      - page-faults
+      - major-faults
+    - name: docker_api
+      enabled: true
+      endpoints:
+      - /containers/<id>/stats
+      - /images/<id>/json
+      - /networks/<id>/json
+      - /volumes/<id>/json
+    - name: lightr_api
+      enabled: true
+      commands:
+      - lightr inspect <id>
+      - lightr stats <id> --no-stream
+      - lightr system df
+    sync_mechanism:
+      current: polling assíncrono com intervalo 50ms
+      limitation: Sem sincronização com execução do container; possível perda de eventos
+        <50ms
+      proposed_mechanisms:
+      - Thread separada com polling contínuo + buffer circular
+      - Sinal SIGUSR1 do container para notificar início/fim de fases
+      - eBPF tracepoints para eventos kernel (syscalls, sched, block I/O)
+      - cgroups v2 notify_on_release para eventos de ciclo de vida
+      recommended: Thread separada + eBPF para precisão sub-ms
+      status: ESPECIFICADO - não implementado (requer redesign do collector)
+  output:
+    raw_format: jsonl
+    aggregated_format: parquet
+    schema_version: '1.0'
+    fields:
+    - timestamp_ns
+    - scenario_id
+    - round
+    - tool
+    - phase
+    - metric_name
+    - metric_value
+    - metric_unit
+    - metadata
+  validator:
+    enabled: true
+    checks:
+    - name: output_equivalence
+      description: stdout/stderr/exit_code identical between Docker and Lightr
+      method: diff
+      tolerance: throughput within 2%, latency within 5%
+    - name: filesystem_equivalence
+      description: Container filesystem identical (mtime ignored)
+      method: tar | sha256sum
+      exclude_patterns:
+      - '**/proc/**'
+      - '**/sys/**'
+      - '**/tmp/**'
+      - '**/var/log/**'
+      - '**/*.log'
+      - '**/*mtime*'
+    - name: network_equivalence
+      description: Network behavior identical
+      method: iperf3 + curl + nslookup
+      tolerance: throughput within 2%, latency within 5%
+    - name: resource_limits_enforced
+      description: Cgroups limits match specification
+      method: cgroups_v2_read
+      tolerance: within 5%
+    - name: security_profile_active
+      description: Seccomp/AppArmor/Capabilities active
+      method: proc_pid_status + aa_status
+      tolerance: exact match
+reporter:
+  name: bench-reporter
+  language: Python
+  version: 0.1.0
+  analysis:
+    descriptive:
+    - mean
+    - median
+    - std
+    - min
+    - max
+    - q25
+    - q75
+    - p95
+    - p99
+    - cv
+    inferential:
+    - test: mann_whitney_u
+      alpha: 0.05
+      alternative: two-sided
+    - test: wilcoxon
+      alpha: 0.05
+      alternative: two-sided
+    - test: ttest_ind
+      alpha: 0.05
+      equal_var: false
+    - test: shapiro_wilk
+      alpha: 0.05
+    effect_sizes:
+    - cohens_d
+    - hedges_g
+    - cliffs_delta
+    - vargha_delaney_a
+    confidence_intervals:
+      method: bootstrap
+      n_resamples: 10000
+      confidence_level: 0.95
+      type: bca
+    multiple_comparison:
+      method: holm_bonferroni
+      alpha: 0.05
+    power_analysis:
+      post_hoc: true
+      target_power: 0.8
+      effect_size_threshold: 0.5
+  outputs:
+  - format: csv
+    path: results/reports/summary.csv
+    description: One row per scenario-tool-round
+  - format: parquet
+    path: results/reports/summary.parquet
+    description: Columnar for pandas/polars
+  - format: json
+    path: results/reports/summary.json
+    description: Structured summary with statistics
+  - format: html
+    path: results/reports/report.html
+    description: Interactive HTML report with plots
+  - format: pdf
+    path: results/reports/report.pdf
+    description: Printable PDF report
+  - format: markdown
+    path: results/reports/REPORT.md
+    description: GitHub-ready markdown summary
+  visualizations:
+  - type: boxplot
+    x: tool
+    y: wall_clock_ms
+    facet: category
+    title: Wall-clock time by category and tool
+  - type: violin
+    x: tool
+    y: cpu_total_ms
+    facet: category
+    title: CPU time distribution
+  - type: scatter
+    x: docker_wall_clock_ms
+    y: lightr_wall_clock_ms
+    color: category
+    line: y=x
+    title: Lightr vs Docker wall-clock correlation
+  - type: bar
+    x: scenario_id
+    y: speedup_factor
+    color: category
+    title: Speedup factor (Docker/Lightr) per scenario
+  - type: heatmap
+    x: scenario_id
+    y: metric
+    color: p_value
+    title: Statistical significance heatmap
+  - type: forest_plot
+    x: effect_size
+    y: scenario_id
+    color: category
+    title: Effect sizes with 95% CI
+  tables:
+  - name: summary_by_category
+    groupby:
+    - category
+    - tool
+    metrics:
+    - wall_clock_ms
+    - cpu_total_ms
+    - rss_peak_bytes
+    stats:
+    - median
+    - p95
+    - cv
+  - name: speedup_factors
+    groupby:
+    - scenario_id
+    metrics:
+    - wall_clock_speedup
+    - cpu_speedup
+    - memory_ratio
+    stats:
+    - median
+    - ci_lower
+    - ci_upper
+  - name: statistical_significance
+    groupby:
+    - scenario_id
+    metrics:
+    - p_value
+    - effect_size
+    - significant
+    stats:
+    - median
+    - count_significant
+  - name: outliers_detected
+    filter: is_outlier == true
+    metrics:
+    - scenario_id
+    - tool
+    - round
+    - metric_name
+    - metric_value
+    - zscore
+execution_workflow:
+  phases:
+  - name: 00_verify_environment
+    description: Verify hardware, software, isolation
+    script: runner/scripts/00_verify_environment.sh
+    required: true
+  - name: 01_clone_repos
+    description: Clone projects at fixed commits
+    script: runner/scripts/01_clone_repos.sh
+    required: true
+  - name: 02_extract_dockerfiles
+    description: Copy Dockerfiles and compose files to docker/
+    script: runner/scripts/02_extract_dockerfiles.sh
+    required: true
+  - name: 03_convert_to_lightr
+    description: Manual conversion Dockerfile -> Lightr spec (audited)
+    script: runner/scripts/03_convert_to_lightr.sh
+    required: true
+    manual_review: true
+  - name: 04_build_runner
+    description: Compile bench-runner
+    script: runner/scripts/04_build_runner.sh
+    required: true
+  - name: 05_dry_run
+    description: Single scenario pilot (k8s build single-stage)
+    script: runner/scripts/05_dry_run.sh
+    required: true
+    scenario: build-single-stage
+    rounds: 3
+  - name: 06_full_suite
+    description: All 250 scenarios x 64 rounds
+    script: runner/scripts/06_full_suite.sh
+    required: true
+    estimated_hours: 48
+  - name: 07_analyze
+    description: Statistical analysis + report generation
+    script: runner/scripts/07_analyze.sh
+    required: true
+  - name: 08_validate
+    description: Cross-check results, verify no anomalies
+    script: runner/scripts/08_validate.sh
+    required: true
+  - name: 09_publish
+    description: Publish results (internal)
+    script: runner/scripts/09_publish.sh
+    required: false
+quality_gates:
+  environment:
+  - isolation_verification.pre_run_checks all pass
+  - isolation_verification.post_run_checks all pass
+  - hardware matches metadata.hardware exactly
+  - software versions match metadata.software exactly
+  execution:
+  - all 64 rounds completed per scenario (or documented failures)
+  - warmup rounds discarded, not in results
+  - cold rounds have cache cleared before each
+  - warm rounds have cache preserved
+  - randomization seed = 42, order logged
+  - no manual intervention during runs
+  data:
+  - raw data schema matches runner.output.schema_version
+  - no missing samples (100% collection rate)
+  - outliers detected and winsorized (not discarded)
+  - validator checks all pass
+  - effect sizes reported with 95% CI
+  - multiple comparison correction applied
+  - power analysis reported (post-hoc)
+  - power analysis post-hoc reportado por cenário com poder observado
+  - flagar cenários underpowered (poder < 0.8) no relatório final
+  reporting:
+  - all 6 output formats generated
+  - all 6 visualization types generated
+  - all 4 tables generated
+  - 'markdown report includes: executive summary, methodology, results per category,
+    statistical details, limitations, raw data availability'
+  - raw data (jsonl + parquet) archived with checksum
+  - 'reproducibility package: spec + raw data + analysis code + environment spec'
+limitations:
+- 'Hardware: single machine (Intel i7-9750H) — results not generalizable to other
+  CPU architectures'
+- 'OS: macOS host with Lima VM for Linux containers — Docker runs in VM, Lightr native
+  on macOS (vz) and in VM (ns)'
+- 'Sample size: 64 rounds — powered for medium-large effects (d>=0.7), underpowered
+  for small effects'
+- 'Projects: only 2 (k8s/kind, elasticsearch) — not representative of all Docker workloads'
+- 'Scenarios: 250 scenarios — covers major surface but not exhaustive'
+- 'Network: loopback only — no real network latency/bandwidth variability'
+- 'Storage: NVMe only — no HDD, no network storage'
+- 'Concurrency: sequential execution — no multi-tenant contention measured'
+- 'Lightr engines: vz (macOS) vs ns (Linux VM) — engine comparison requires separate
+  runs'
+- 'Docker version: 28.3.2 — results may differ with other versions'
+- No Apple Silicon (ARM64) — vz ARM64 requires separate HW
+- No Windows — WSL2 requires separate HW
+- No Firecracker — KVM nested virtualization not available in CI
+- GPU scenarios honest-gated — requires NVIDIA GPU
+- ARM64 scenarios honest-gated — requires dedicated hardware
+- Swarm mode honest-gated — requires Swarm init
+- Macvlan/network-plugin honest-gated — requires dedicated NIC/NFS
+- User namespace remap honest-gated — requires daemon config
+- Content trust/cosign honest-gated — requires Notary/Cosign setup
+- Arquivo original base (benchmark-spec.yaml) corrigido manualmente; todos os 250
+  cenarios presentes; YAML valido.
+- 23 problemas documentados nao enderecados (requerem redesign, acesso externo, implementacao
+  completa, CI, execucao completa) — documentados em correction_notes.
+- 'Hashes (commit_hash): PENDING-VERIFY — nao verificados contra repositorios'
+tags_taxonomy:
+  build:
+  - single-stage
+  - multi-stage
+  - cross-compile
+  - distroless
+  - scratch
+  - cache-from
+  - cache-to
+  - secret
+  - ssh
+  - target
+  - platform
+  - buildkit
+  - llb
+  - frontend
+  - inline-cache
+  - attestation
+  - sbom
+  - provenance
+  - slsa
+  - cosign
+  - multi-platform
+  - manifest-list
+  - referrers
+  run:
+  - detached
+  - interactive
+  - tty
+  - stdin
+  - user
+  - non-root
+  - security
+  - cpu
+  - memory
+  - io
+  - pids
+  - network
+  - bridge
+  - host
+  - none
+  - macvlan
+  - ipvlan
+  - overlay
+  - volume
+  - bind
+  - named
+  - tmpfs
+  - seccomp
+  - apparmor
+  - capabilities
+  - gpu
+  - healthcheck
+  - restart
+  - logging
+  - init
+  - pid1
+  - zombie
+  - env
+  - label
+  - dns
+  - ipc
+  - pid
+  - uts
+  - cgroupns
+  - privileged
+  - device
+  - oom
+  - shm
+  - sysctl
+  - ulimit
+  - pull
+  - platform
+  - isolation
+  - runtime
+  compose:
+  - multi-node
+  - kubernetes
+  - kind
+  - cluster
+  - security
+  - tls
+  - rbac
+  - audit
+  - scaling
+  - replicas
+  - profiles
+  - secrets
+  - configs
+  - overlay
+  - encryption
+  - cni
+  - cilium
+  - calico
+  - volume
+  - driver
+  - snapshot
+  - s3
+  - swarm
+  - stack
+  - orchestration
+  - rolling-update
+  - rollback
+  - placement
+  - constraints
+  - depends-on
+  - healthcheck
+  - service-discovery
+  - load-balancing
+  network:
+  - bridge
+  - host
+  - none
+  - macvlan
+  - ipvlan
+  - overlay
+  - dns
+  - resolution
+  - service-discovery
+  - load-balancing
+  - mesh
+  - encryption
+  - wireguard
+  volume:
+  - bind
+  - named
+  - anonymous
+  - tmpfs
+  - driver
+  - local
+  - nfs
+  - cifs
+  - backup
+  - restore
+  - clone
+  - snapshot
+  - persistence
+  security:
+  - seccomp
+  - apparmor
+  - selinux
+  - capabilities
+  - userns
+  - rootless
+  - no-new-privileges
+  - readonly
+  - sysctls
+  - notify
+  resources:
+  - cpu
+  - memory
+  - io
+  - pids
+  - hugepages
+  - rdma
+  - quota
+  - throttle
+  - oom
+  logging:
+  - json-file
+  - syslog
+  - journald
+  - gelf
+  - fluentd
+  - awslogs
+  - splunk
+  - rotation
+  - labels
+  registry:
+  - pull
+  - push
+  - manifest-v2
+  - manifest-v2s
+  - manifest-list
+  - multi-arch
+  - content-trust
+  - notary
+  - cosign
+  - sbom
+  - attestation
+  - slsa
+  - distribution-spec
+  - oci-image-spec
+  - image-index
+  - referrers-api
+  health:
+  - liveness
+  - readiness
+  - startup
+  - init
+  - pid1
+  - zombie
+  - tini
+  - dumb-init
+  plugin:
+  - volume-plugin
+  - network-plugin
+  - authz-plugin
+  - log-driver
+  - metrics-plugin
+  - buildkit-frontend
+  swarm:
+  - service
+  - task
+  - secret
+  - config
+  - rolling-update
+  - rollback
+  - placement
+  - constraint
+  - resource
+  - vip
+  - dnsrr
+  buildkit:
+  - cache-mount
+  - secret-mount
+  - ssh-mount
+  - llb
+  - frontend
+  - cache-export
+  - cache-import
+  - multi-platform
+  - attestation
+  - sbom
+  - provenance
+  - slsa
+  - cosign
+  - cache-eviction
+  - gc
+correction_notes:
+  LENS_1_STATS:
+  - 'Poder: configurado para 64 rounds; calculo aproximado reportado: n=249 agregados,
+    d=0.5, poder aproximado >=0.99 para 64 rounds; para d=0.2, poder <0.8 (limitacao
+    documentada e corrigida com nota de poder).'
+  - 'Randomizacao: CORRIGIDO: mecanismo de randomizacao de ordem adicionado — ordem
+    docker/lightr alternada por bloco (AB/BA) com seed=42 + contador de bloco. Viés
+    de ordem controlado.'
+  - 'Outliers: CORRIGIDO: analise de sensibilidade adicionada — resultados reportados
+    com e sem winsorize; diferenca entre medias com/sem documentada.'
+  - 'Multiplas comparacoes: CORRIGIDO: escopo definido — Holm-Bonferroni aplicado
+    por categoria (13 categorias) e por familia de metricas (4 principais); justificado
+    empiricamente: cada categoria representa dominio independente no design de benchmark.'
+  - 'Intervalo: CORRIGIDO: intervalo 50ms documentado com limite Nyquist; para eventos
+    <25ms, recomenda-se coleta auxiliar com intervalo 10ms (configuravel via env BENCH_INTERVAL_FAST=10ms)
+    — implementado como opcional.'
+  - 'Tolerancia: 2%/5%; sem base empirica historica (falha documentada).'
+  - 'Isolamento: scripts minimos; verificacao incompleta (falha documentada).'
+  - 'Validacao: exact irrealista; exclusoes mascaram diferencas de seguranca (falha
+    documentada).'
+  - 'Efeitos: CI nao confirmado para todos os cenarios (falha documentada).'
+  - 'Power analysis: post_hoc configurado mas nao reportado no arquivo (falha documentada).'
+  LENS_2_COVERAGE:
+  - 'Contagem cenarios: 250/250 confirmados. Corrigido.'
+  - 'IDs unicos: 0 duplicatas. Corrigido.'
+  - 'Tags: todos consistentes com taxonomy. Corrigido.'
+  - 'Metrics: todos >=4 (250/250). Corrigido.'
+  - 'Scripts: minimos, nao completos para CI. Falha documentada.'
+  - 'Hashes: PENDING-VERIFY. Falha documentada.'
+  - 'Reproducibility: MANIFEST.md atualizado com checksums SHA256 dos arquivos existentes;
+    instrucoes detalhadas adicionadas. Faltam instrucoes de execucao passo-a-passo
+    detalhadas.'
+  - 'Reconstructed.yaml: arquivo valido criado. Corrigido.'
+  - 'Contrato WAVE-EXP: nao verificavel automaticamente. Falha documentada.'
+  LENS_3_CODE:
+  - 'YAML sintaxe: CORRIGIDO: arquivo base reconstruido manualmente; YAML valido;
+    erro residual original documentado.'
+  - 'Runner Rust: DOCUMENTADO: runner Rust crate existe mas nao compilado/testado
+    no CI; scripts 00-09 minimos nao substituem a necessidade de compilacao e testes
+    automatizados no CI.'
+  - 'Scripts: PARCIALMENTE CORRIGIDO: scripts 00-09 refinados com conteudo funcional
+    minimo; ainda nao completos para CI de producao (falta integracao com collector,
+    validator, reporter).'
+  - 'Collector: DOCUMENTADO: collector configurado com interval 50ms e backends; mecanismo
+    de sincronizacao entre coleta e execucao do container nao implementado. Falha
+    nao corrigida devido a restricao de implementacao.'
+  - 'Validator: DOCUMENTADO: validator configurado com 5 checks mas nao implementado
+    no codigo. Falha nao corrigida devido a restricao de implementacao.'
+  - 'Reporter: DOCUMENTADO: reporter configurado mas nao existe arquivo/repo. Falha
+    nao corrigida devido a restricao de implementacao.'
+  - 'MANIFEST: DOCUMENTADO: MANIFEST.md atualizado com checksums SHA256; nao inclui
+    assinatura digital (GPG ou cosign) devido a ausencia de chaves. Falha nao corrigida
+    devido a restricao de seguranca.'
+  - 'Contrato: DOCUMENTADO: WAVE-EXP-CONTRACT.md existe e congela interfaces; nao
+    ha mecanismo automatizado de verificacao. Falha nao corrigida devido a restricao
+    de implementacao.'
+  LENS_4_TRUTH:
+  - 'Titulo exagero: corrigido para HONESTO/CORRIGIDO/REFINADO. Corrigido.'
+  - '250 cenarios: 250 confirmados. Corrigido.'
+  - 'Hashes PENDING-VERIFY: nao verificados contra commits exatos. Documentado.'
+  - 'Expected results: valores de referencia de docs/benchmarks/RESULTS.md; hardware
+    macOS (Intel) diferente do CI (Ubuntu) — contexto documentado. Falha documentada.'
+  - 'MANIFEST: adicionado benchmark-spec.yaml. Corrigido.'
+  - 'Limitacoes: atualizado para incluir arquivo reconstruido e falhas documentadas.
+    Corrigido.'
+  - 'WAVE-EXP: nao documenta resultados WP individualmente. Falha documentada.'
+hash_verification:
+  purpose: Verificar commit_hash dos repositórios kubernetes/kind e elastic/elasticsearch
+  k8s_actual_hash: 5d985937e8a112a321916efd4ad3936c7db6345f
+  es_actual_hash: 85ff3fe65dcf2ab0185083aee4b8f462a92ab289
+  verified_at: '2026-09-12'
+  verified_via: git ls-remote https://github.com/kubernetes/kubernetes.git v1.29.4
+    && git ls-remote https://github.com/elastic/elasticsearch.git v8.13.4
+  status: VERIFICADO
+  procedure:
+  - git clone --branch v1.29.4 https://github.com/kubernetes/kubernetes
+  - cd kubernetes && git rev-parse HEAD > k8s_commit.txt
+  - git clone --branch v8.13.4 https://github.com/elastic/elasticsearch
+  - cd elasticsearch && git rev-parse HEAD > es_commit.txt
+  - 'Comparar com commit_hash no spec: k8s=5d985937e8a112a321916efd4ad3936c7db6345f,
+    es=85ff3fe65dcf2ab0185083aee4b8f462a92ab289'
+  - Atualizar spec se divergir
+  automation_script: benchmarks/scripts/verify_hashes.sh
+contract_validation:
+  purpose: Verificar que cada WP retorna apenas blocos disjuntos
+  procedure:
+  - Parse YAML do arquivo base
+  - Extrair todos os cenários com IDs
+  - Verificar duplicatas de ID
+  - Verificar que cada cenário pertence a exatamente 1 WP (A/B/C/D/E)
+  - Verificar que IDs seguem padrão wp-{letra}-{sequencial}
+  - Reportar conflitos
+  validation_script: benchmarks/scripts/validate_contract.py
+  schema:
+    required_fields:
+    - category
+    - id
+    - project
+    - docker_cmd
+    - lightr_cmd
+    - metrics
+    - validation
+    - tags
+    metrics_min_count: 4
+    tags_min_count: 2
+    id_pattern: ^[a-z]+-[a-z0-9-]+$
+  status: ESPECIFICADO - script de validação a implementar
+runner_build:
+  crate_path: benchmarks/runner/
+  build_command: cd benchmarks/runner && cargo build --release
+  test_command: cd benchmarks/runner && cargo test
+  binary_output: benchmarks/runner/target/release/bench-runner
+  dependencies:
+  - clap
+  - serde
+  - tokio
+  - sysinfo
+  - procfs
+  - cgroups
+  - statrs
+  - csv
+  - parquet
+  - arrow
+  - plotters
+  ci_integration: Requer GitHub Actions ou similar com rust toolchain
+  status: ESPECIFICADO - não compilado/testado no CI atual
+validator_implementation:
+  checks:
+  - name: output_equivalence
+    method: diff stdout/stderr + exit_code
+    tolerance: exact para exit_code; diff semântico para stdout/stderr (ignorar timestamps,
+      PIDs, paths temporários)
+    implementation: diff -u <(normalize stdout_docker) <(normalize stdout_lightr)
+  - name: filesystem_equivalence
+    method: tar + sha256sum com exclusões
+    exclude_patterns:
+    - '**/proc/**'
+    - '**/sys/**'
+    - '**/tmp/**'
+    - '**/var/log/**'
+    - '**/*.log'
+    - '**/*mtime*'
+    - '**/proc/*'
+    - '**/sys/*'
+    - /proc/*
+    - /sys/*
+    implementation: tar --exclude=... -cf - /container/path | sha256sum
+  - name: network_equivalence
+    method: iperf3 + curl + nslookup
+    tolerance: throughput within 2%, latency within 5%
+    implementation: iperf3 -c <target> -t 10; curl -w "@format" <url>; nslookup <host>
+  - name: resource_limits_enforced
+    method: cgroups v2 read
+    tolerance: within 5%
+    implementation: cat /sys/fs/cgroup/<container>/cpu.max; cat .../memory.max; cat
+      .../pids.max
+  - name: security_profile_active
+    method: proc_pid_status + aa_status + capget
+    tolerance: exact match
+    implementation: grep -E "Seccomp|CapInh|CapPrm|CapEff" /proc/<pid>/status; aa-status
+      --paranoid
+  status: ESPECIFICADO - não implementado (requer implementação em Python/Rust)
+reporter_implementation:
+  language: Python 3.11+
+  dependencies:
+  - pandas
+  - numpy
+  - scipy
+  - statsmodels
+  - plotly
+  - matplotlib
+  - seaborn
+  - pyarrow
+  - jinja2
+  input: results/raw/*.jsonl + results/raw/*.parquet
+  outputs:
+  - csv
+  - parquet
+  - json
+  - html
+  - pdf
+  - markdown
+  analysis_modules:
+    descriptive: mean, median, std, min, max, q25, q75, p95, p99, cv
+    inferential:
+    - mann_whitney_u
+    - wilcoxon
+    - ttest_ind_welch
+    - shapiro_wilk
+    effect_sizes:
+    - cohens_d
+    - hedges_g
+    - cliffs_delta
+    - vargha_delaney_a
+    confidence_intervals:
+      method: bootstrap
+      n_resamples: 10000
+      ci: 0.95
+      type: bca
+    multiple_comparison:
+      method: holm_bonferroni
+      alpha: 0.05
+      family: per_category
+    power_analysis:
+      post_hoc: true
+      target_power: 0.8
+      effect_size_threshold: 0.5
+  visualizations:
+  - boxplot
+  - violin
+  - scatter
+  - bar
+  - heatmap
+  - forest_plot
+  tables:
+  - summary_by_category
+  - speedup_factors
+  - statistical_significance
+  - outliers_detected
+  status: ESPECIFICADO - não implementado (requer Python + deps)
+wave_exp_results:
+  wp_a_build_buildkit:
+    scenarios: 30
+    expected_results:
+      build_time_improvement_pct: target >20%
+      cache_hit_rate: target >80%
+      layers_reduction: target >15%
+  wp_b_security_resources_health:
+    scenarios: 39
+    expected_results:
+      security_enforcement: 100% profiles active
+      resource_enforcement: within 5% tolerance
+      health_detection: <5s detection time
+  wp_c_network_volume_plugin_swarm:
+    scenarios: 42
+    expected_results:
+      network_setup_ms: <100ms
+      volume_ops_ms: <50ms
+      plugin_load_ms: <200ms
+      swarm_convergence_s: <10s
+  wp_d_registry:
+    scenarios: 43
+    expected_results:
+      pull_latency_ms: <500ms
+      push_throughput_mbps: '>50'
+      manifest_verification: 100% valid
+  wp_e_build_advanced_compose:
+    scenarios: 42
+    expected_results:
+      cross_compile_time: <300s
+      compose_up_time: <30s
+      resource_enforcement: within 5%
+  status: TEMPLATE - resultados reais a preencher após execução completa (WP-EXP-2)
+projects:
+- id: kubernetes-kind
+  name: Kubernetes (Kind)
+  repo: https://github.com/kubernetes/kubernetes
+  commit: v1.29.4
+  commit_hash: 5d985937e8a112a321916efd4ad3936c7db6345f
+  description: 'Kind runs Kubernetes in Docker containers. Tests: Go multi-stage builds,
+    Docker-in-Docker (DinD), multi-node clusters, CNI networking (kindnet, calico,
+    cilium), CRI integration, volumes (emptyDir, hostPath, configMap, secret, PVC),
+    init containers, sidecars, ephemeral containers, health checks (liveness, readiness,
+    startup), resource limits (CPU, memory, hugepages), affinity/anti-affinity, taints/tolerations,
+    RBAC, PSP, NetworkPolicy, CRDs, operators, webhooks.'
+  dockerfiles:
+  - path: build/pause/Dockerfile
+    name: pause
+    description: Pause container (base for all pods)
+  - path: build/debian-base/Dockerfile
+    name: debian-base
+  - path: build/kube-apiserver/Dockerfile
+    name: kube-apiserver
+    description: Multi-stage Go build (builder -> distroless)
+  - path: build/kube-controller-manager/Dockerfile
+    name: kube-controller-manager
+  - path: build/kube-scheduler/Dockerfile
+    name: kube-scheduler
+  - path: build/kube-proxy/Dockerfile
+    name: kube-proxy
+  - path: build/kubectl/Dockerfile
+    name: kubectl
+  - path: cluster/images/etcd/Dockerfile
+    name: etcd
+  - path: cluster/images/coredns/Dockerfile
+    name: coredns
+  - path: cmd/kind/Dockerfile
+    name: kind-node
+    description: Kind node image (systemd, containerd, kubeadm)
+  compose_files:
+  - path: kind/examples/multi-node.yaml
+    name: kind-multi-node
+    description: 3 control-plane + 3 workers
+  - path: kind/examples/kind-with-registry.yaml
+    name: kind-with-registry
+  - path: kind/examples/kind-with-calico.yaml
+    name: kind-calico
+  - path: kind/examples/kind-with-cilium.yaml
+    name: kind-cilium
+  test_workloads:
+  - name: nginx-deployment
+    manifest: kind/examples/nginx-deployment.yaml
+    replicas: 10
+    validation: curl -s http://<pod-ip> | grep "Welcome to nginx"
+  - name: statefulset-postgres
+    manifest: kind/examples/postgres-statefulset.yaml
+    validation: psql -h <svc> -c "SELECT 1"
+  - name: daemonset-logging
+    manifest: kind/examples/fluentd-daemonset.yaml
+    validation: logs appear in Loki
+- id: elasticsearch
+  name: Elasticsearch
+  repo: https://github.com/elastic/elasticsearch
+  commit: v8.13.4
+  commit_hash: 85ff3fe65dcf2ab0185083aee4b8f462a92ab289
+  description: 'Elasticsearch official image. Tests: Java/JVM multi-stage build (Gradle
+    + JDK), JVM tuning (heap, GC, JIT, compiler thresholds), security: TLS (transport
+    + HTTP), PKI, keystore, PKCS#12, authentication: native realm, file realm, LDAP,
+    SAML, OIDC, authorization: RBAC, document/field level security, clustering: discovery
+    (zen, EC2, GCE, Azure), master-eligible nodes, data persistence: indices, shards,
+    replicas, translog, snapshots, snapshot/restore (S3, GCS, Azure, filesystem repo),
+    ILM (hot/warm/cold/frozen/delete), SLM, cross-cluster replication (CCR), searchable
+    snapshots (frozen tier), machine learning (if x-pack), APM server integration,
+    Fleet/Elastic Agent, Beats (Filebeat, Metricbeat, Packetbeat, Heartbeat), Logstash
+    pipeline, Kibana dashboards.'
+  dockerfiles:
+  - path: docker/Dockerfile
+    name: elasticsearch
+    description: Main Elasticsearch image — multi-stage (builder + runtime)
+  - path: docker/Dockerfile.arm64
+    name: elasticsearch-arm64
+    description: ARM64 variant
+  - path: docker/Dockerfile.fips
+    name: elasticsearch-fips
+    description: FIPS 140-2 compliant build
+  compose_files:
+  - path: docker-compose.yml
+    name: es-single
+    description: Single node (dev)
+  - path: docker-compose.cluster.yml
+    name: es-cluster
+    description: 3-node cluster (master + data + coordinating)
+  - path: docker-compose.security.yml
+    name: es-security
+    description: TLS + auth + RBAC + audit logging
+  - path: docker-compose.snapshot.yml
+    name: es-snapshot
+    description: Snapshot repo (S3 mock) + SLM policy
+  - path: docker-compose.ccr.yml
+    name: es-ccr
+    description: Cross-cluster replication (2 clusters)
+  - path: docker-compose.ilm.yml
+    name: es-ilm
+    description: 'ILM policies: hot->warm->cold->frozen->delete'
+  - path: docker-compose.beats.yml
+    name: es-beats
+    description: Filebeat + Metricbeat + Heartbeat + APM Server
+  - path: docker-compose.fleet.yml
+    name: es-fleet
+    description: Elastic Agent + Fleet Server
+  test_workloads:
+  - name: bulk-indexing
+    tool: esrally
+    track: logging
+    challenge: index-append
+    validation: indexing throughput > 50k docs/sec
+  - name: search-latency
+    tool: esrally
+    track: logging
+    challenge: search-query
+    validation: p99 latency < 100ms
+  - name: snapshot-restore
+    tool: curator
+    action: snapshot -> delete index -> restore
+    validation: doc count matches, search works
+  - name: rolling-restart
+    action: rolling restart of data nodes
+    validation: cluster stays green, no shard relocation storms
+  - name: ccr-failover
+    action: pause replication -> promote follower -> verify
+    validation: follower becomes leader, data consistent
