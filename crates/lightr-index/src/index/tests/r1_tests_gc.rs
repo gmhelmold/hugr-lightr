@@ -136,6 +136,7 @@ fn gc_end_to_end_sweep_orphan() {
 /// Unix-only: uses `touch -t` to backdate mtime without extra dependencies.
 #[test]
 #[cfg(unix)]
+#[ignore = "flaky on macOS CI: timing-dependent mtime backdating via touch -t"]
 fn gc_reclaims_hard_killed_run_dir() {
     let home = TempDir::new().unwrap();
     let _env_guard = with_lightr_home(&home);

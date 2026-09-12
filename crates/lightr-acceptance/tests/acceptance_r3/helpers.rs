@@ -1,5 +1,6 @@
 //! Non-`#[test]` helpers shared by all acceptance_r3 sub-modules.
 
+#[cfg(unix)]
 use std::fs;
 use std::path::Path;
 use std::time::{Duration, Instant};

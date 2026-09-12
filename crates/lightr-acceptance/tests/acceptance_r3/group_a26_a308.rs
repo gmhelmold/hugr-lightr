@@ -2,7 +2,6 @@
 
 use super::helpers::*;
 use crate::common::lightr_cmd;
-use std::fs;
 use tempfile::TempDir;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -71,7 +70,7 @@ fn a26_build_determinism_flag() {
 #[test]
 fn a308_supervise_install_list_uninstall_no_daemon() {
     let home = TempDir::new().unwrap();
-    let units = home.path().join("units");
+    let _units = home.path().join("units");
 
     // install --name web --restart on-failure:3 --dir . -- /bin/echo hi
     lightr_cmd(home.path())
