@@ -1,0 +1,41 @@
+{
+  "root": "/Users/gustavoschneiter/Documents/HuGR/hugr-lightr",
+  "mode": "reader-merged",
+  "generatedAt": "2026-06-11",
+  "areas": [
+    "vision & business — whitepaper (canonical), VISION funnel, product design",
+    "architecture — engines, execution model, CoreLink seams",
+    "mvp — v0.1 scope, DoD, open decisions",
+    "agent context — CLAUDE.md operating rules",
+    "techlead state — .techlead/ (gitignored)"
+  ],
+  "whereThingsLive": [
+    { "what": "canonical vision (source of truth)", "path": "docs/whitepaper/hugr-lightr-v1.md" },
+    { "what": "product design: ICPs, pricing posture, owner open decisions", "path": "docs/product/product.md" },
+    { "what": "funnel stages, triggers, metrics, honesties", "path": "docs/VISION.md" },
+    { "what": "engines table, execution flow, lazy rootfs, repo seams", "path": "docs/ARCHITECTURE.md" },
+    { "what": "v0.1 scope + definition of done", "path": "docs/MVP-v0.1.md" },
+    { "what": "agent operating context (principles, tense law, conventions)", "path": "CLAUDE.md" },
+    { "what": "identity + quickstart + status", "path": "README.md" }
+  ],
+  "invariants": [
+    "Design phase: no code exists; no number may be claimed as measured — comparison tables are targets from cited precedents",
+    "Tense law: CoreLink dedup is intra-tenant at GA, cross-tenant is staged (CAP-DEDUP-CROSS-TENANT) — never claim it live",
+    "Whitepaper §9 principles are decided (no daemon / no images / free local no-account / isolation à la carte with native≠sandbox / memoize-first / pure CoreLink client / fail-closed / ship after Runners M1 / never bill memoized runs) — don't relitigate without the owner",
+    "Pure client of CoreLink: zero server changes, ever",
+    "Never mutate sibling HuGR repos; read-only inspection only",
+    ".techlead/ contents are never committed (only its .gitignore)",
+    "Crate name hugr-lightr, binary lightr (crates.io 'lightr' is taken)"
+  ],
+  "entryPoints": [
+    "README.md",
+    "CLAUDE.md",
+    "docs/whitepaper/hugr-lightr-v1.md"
+  ],
+  "deps": [
+    "corelink-server — CAS/AC HTTP API (/v1/cas, /v1/ac), tenancy + PAT auth (consumer)",
+    "corelink-workspaces (clw) — distribution pipeline; seam form is an open owner decision",
+    "corelink-runners — Engine trait lineage (spawn/probe/exec/teardown, fail-closed)",
+    "Runners M1 — sequencing gate for the public free-tier launch"
+  ]
+}

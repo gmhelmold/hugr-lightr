@@ -27,6 +27,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-unknown-linux-gnu
+          components: clippy, rustfmt
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -94,6 +95,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-unknown-linux-gnu
+          components: clippy, rustfmt
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -134,6 +136,9 @@ jobs:
       - name: clippy (deny warnings)
         run: cargo clippy --workspace --all-targets --features vz -- -D warnings
 
+      - name: fmt check
+        run: cargo fmt --all --check
+
       - name: Run benchmarks
         run: |
           mkdir -p bench-results
@@ -160,6 +165,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-apple-darwin
+          components: clippy, rustfmt
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -219,6 +225,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin
+          components: clippy, rustfmt
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -283,7 +290,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
-          components: clippy
+          components: clippy, rustfmt
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -310,9 +317,7 @@ jobs:
         run: cargo build --release --workspace --target x86_64-pc-windows-msvc
 
       - name: clippy (deny warnings) - windows-msvc
-        run: |
-          rustup component add --toolchain 1.96.0-x86_64-pc-windows-msvc clippy
-          cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings -A unused-imports -A unused-variables -A dead_code
+        run: cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings -A unused-imports -A unused-variables -A dead_code
 
       - name: fmt check
         run: cargo fmt --all --check

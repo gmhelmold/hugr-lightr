@@ -1,0 +1,6 @@
+# Ignore session state, but track contracts for CI
+state/
+memory/
+profile/
+*.log
+!contracts/
