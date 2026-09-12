@@ -1,29 +1,21 @@
-#!/bin/bash
-# 03_convert_to_lightr.sh - Conversão manual Dockerfile -> Lightr spec
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+: "${CARGO_BIN:?set CARGO_BIN to an absolute cargo binary path}"
 
-echo "=== CONVERSÃO DOCKERFILE -> LIGHTR SPEC ==="
+case "$CARGO_BIN" in
+    /*) ;;
+    *) printf 'CARGO_BIN must be an absolute path: %s\n' "$CARGO_BIN" >&2; exit 1 ;;
+esac
+if [[ ! -x "$CARGO_BIN" ]]; then
+    printf 'CARGO_BIN is not executable: %s\n' "$CARGO_BIN" >&2
+    exit 1
+fi
 
-echo "NOTA: Esta etapa requer revisão manual."
-echo "Os Dockerfiles foram extraídos para dockerfiles/"
-echo "Os compose files foram extraídos para composefiles/"
-echo ""
-echo "Para cada Dockerfile, crie o Lightr spec equivalente:"
-echo "  - FROM -> base.image"
-echo "  - RUN -> exec.commands"
-echo "  - COPY/ADD -> files.copy"
-echo "  - ENV -> env.vars"
-echo "  - EXPOSE -> network.expose"
-echo "  - VOLUME -> volumes.mounts"
-echo "  - USER -> security.user"
-echo "  - WORKDIR -> working_dir"
-echo "  - ENTRYPOINT/CMD -> entrypoint / command"
-echo ""
-echo "Salve os specs em lightr-specs/"
-echo ""
-echo "Revisão manual necessária antes de prosseguir."
-echo "Pressione Enter para continuar após revisão..."
-read -p ""
-
-echo "=== CONVERSÃO CONCLUÍDA (REVISÃO MANUAL) ==="
+cd "$ROOT"
+"$CARGO_BIN" build -p lightr-cli --release
+if [[ ! -x "$ROOT/target/release/lightr" ]]; then
+    printf 'lightr-cli build produced no executable: %s\n' "$ROOT/target/release/lightr" >&2
+    exit 1
+fi

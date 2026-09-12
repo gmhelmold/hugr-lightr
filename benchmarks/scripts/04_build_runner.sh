@@ -1,26 +1,26 @@
-#!/bin/bash
-# 04_build_runner.sh - Compila bench-runner
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+RUNNER_DIR="$ROOT/benchmarks/runner"
+: "${CARGO_BIN:?set CARGO_BIN to an absolute cargo binary path}"
 
-echo "=== COMPILANDO BENCH-RUNNER ==="
-
-cd benchmarks/runner
-
-if [ ! -f "Cargo.toml" ]; then
-  echo "Cargo.toml não encontrado em benchmarks/runner/"
-  exit 1
+case "$CARGO_BIN" in
+    /*) ;;
+    *) printf 'CARGO_BIN must be an absolute path: %s\n' "$CARGO_BIN" >&2; exit 1 ;;
+esac
+if [[ ! -x "$CARGO_BIN" ]]; then
+    printf 'CARGO_BIN is not executable: %s\n' "$CARGO_BIN" >&2
+    exit 1
+fi
+if [[ ! -f "$RUNNER_DIR/Cargo.toml" ]]; then
+    printf 'bench-runner manifest not found: %s/Cargo.toml\n' "$RUNNER_DIR" >&2
+    exit 1
 fi
 
-echo "Compilando bench-runner (release)..."
-cargo build --release
-
-if [ -f "target/release/bench-runner" ]; then
-  echo "✓ bench-runner compilado com sucesso"
-  ./target/release/bench-runner --help
-else
-  echo "✗ Falha na compilação"
-  exit 1
+cd "$RUNNER_DIR"
+"$CARGO_BIN" build --release
+if [[ ! -x "$RUNNER_DIR/target/release/bench-runner" ]]; then
+    printf 'bench-runner build produced no executable: %s/target/release/bench-runner\n' "$RUNNER_DIR" >&2
+    exit 1
 fi
-
-echo "=== BENCH-RUNNER COMPILADO ==="
