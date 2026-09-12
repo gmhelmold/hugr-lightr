@@ -81,6 +81,7 @@ struct Scenario {
 struct Fixture {
     project: String,
     path: Option<String>,
+    context: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -200,7 +201,7 @@ fn validate_spec(spec: &Spec) -> Result<(), String> {
             continue;
         }
         let fixture = scenario.fixture.as_ref().ok_or_else(|| format!("missing fixture for {}", scenario.id))?;
-        if !projects.contains(fixture.project.as_str()) || fixture.path.as_deref().unwrap_or("").is_empty() { return Err(format!("missing supported fixture for {}", scenario.id)); }
+        if !projects.contains(fixture.project.as_str()) || fixture.path.as_deref().unwrap_or("").is_empty() || fixture.context.as_deref().unwrap_or("").is_empty() { return Err(format!("missing supported fixture path/context for {}", scenario.id)); }
         if scenario.docker.as_ref().and_then(|v| v.command.as_deref()).unwrap_or("").is_empty() || scenario.lightr.as_ref().and_then(|v| v.command.as_deref()).unwrap_or("").is_empty() { return Err(format!("missing supported commands for {}", scenario.id)); }
         if scenario.assertions.is_empty() || scenario.lightr_evidence.is_none() { return Err(format!("missing supported assertions/source evidence for {}", scenario.id)); }
         for assertion in &scenario.assertions {
@@ -228,7 +229,7 @@ fn run(spec_path: &Path, chunk: usize, chunks: usize, rounds: usize, out: &Path,
         let project = scenario.fixture.as_ref().and_then(|f| spec.source_evidence.projects.iter().find(|p| p.id == f.project));
         let fixture = materialize_fixture(spec_path, scenario, project, out);
         let versions = probe_versions(docker, lightr);
-        for round in 1..=rounds {
+        for round in round_indices(rounds) {
             let scenario_out = out.join("scenarios").join(&scenario.id).join(round.to_string());
             if let Err(error) = fs::create_dir_all(&scenario_out) {
                 failed = true;
@@ -385,6 +386,7 @@ fn http_status(url: &str) -> Result<u16, String> {
 }
 
 fn applies(scope: &str, tool: &str) -> bool { scope == tool || scope == "docker_and_lightr" }
+fn round_indices(rounds: usize) -> std::ops::Range<usize> { 0..rounds }
 fn select_scenarios<'a>(scenarios: &'a [Scenario], chunk: usize, chunks: usize) -> Vec<&'a Scenario> { scenarios.iter().enumerate().filter(|(index, _)| index % chunks == chunk).map(|(_, scenario)| scenario).collect() }
 
 fn skip_record(s: &Scenario, spec_hash: &str) -> RawRecord {
@@ -426,10 +428,12 @@ fn merge_rows(rows: Vec<RawRecord>, out: &Path) -> Result<(), String> { let mut 
 mod tests {
     use super::*;
     fn temp(name: &str) -> PathBuf { let path = std::env::temp_dir().join(format!("bench-runner-{name}-{}", unix_ms())); fs::create_dir_all(&path).unwrap(); path }
-    fn scenario(id: &str, availability: Availability) -> Scenario { Scenario { id: id.into(), category: "build".into(), availability, reason: (availability != Availability::Supported).then(|| "reason".into()), fixture: Some(Fixture { project: "local".into(), path: Some("fixtures/x".into()) }), docker: Some(ToolCommand { command: (availability == Availability::Supported).then(|| "$DOCKER x".into()) }), lightr: Some(ToolCommand { command: (availability == Availability::Supported).then(|| "$LIGHTR x".into()) }), metrics: vec!["a".into(), "b".into(), "c".into(), "d".into()], tags: vec!["build".into(), "evidence".into()], assertions: if availability == Availability::Supported { vec![Assertion { kind: "exit_code".into(), expected: json!(0), scope: "docker_and_lightr".into(), command: None, path: None, url: None }] } else { vec![] }, lightr_evidence: (availability == Availability::Supported).then(|| json!({"source": "x"})) } }
+    fn scenario(id: &str, availability: Availability) -> Scenario { Scenario { id: id.into(), category: "build".into(), availability, reason: (availability != Availability::Supported).then(|| "reason".into()), fixture: Some(Fixture { project: "local".into(), path: Some("fixtures/x".into()), context: Some("fixtures/x".into()) }), docker: Some(ToolCommand { command: (availability == Availability::Supported).then(|| "$DOCKER x".into()) }), lightr: Some(ToolCommand { command: (availability == Availability::Supported).then(|| "$LIGHTR x".into()) }), metrics: vec!["a".into(), "b".into(), "c".into(), "d".into()], tags: vec!["build".into(), "evidence".into()], assertions: if availability == Availability::Supported { vec![Assertion { kind: "exit_code".into(), expected: json!(0), scope: "docker_and_lightr".into(), command: None, path: None, url: None }] } else { vec![] }, lightr_evidence: (availability == Availability::Supported).then(|| json!({"source": "x"})) } }
     fn corpus() -> Spec { Spec { taxonomy: Taxonomy { category: vec!["build".into()], evidence: vec!["evidence".into()] }, source_evidence: SourceEvidence { projects: vec![Project { id: "local".into(), repo: "local".into(), commit: Some("deadbeef".into()) }] }, scenarios: (0..250).map(|n| scenario(&format!("s-{n}"), Availability::Unsupported)).collect() } }
     #[test] fn duplicate_id_rejected() { let mut spec = corpus(); spec.scenarios[1].id = spec.scenarios[0].id.clone(); assert!(validate_spec(&spec).unwrap_err().contains("duplicate scenario id")); }
     #[test] fn source_order_chunks_partition_once() { let scenarios: Vec<_> = (0..9).map(|n| scenario(&format!("s-{n}"), Availability::Unsupported)).collect(); let left = select_scenarios(&scenarios, 0, 2); let right = select_scenarios(&scenarios, 1, 2); assert_eq!(left.iter().chain(right.iter()).map(|s| &s.id).collect::<BTreeSet<_>>().len(), scenarios.len()); assert_eq!(left.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), vec!["s-0", "s-2", "s-4", "s-6", "s-8"]); }
+    #[test] fn supported_rounds_are_zero_based() { assert_eq!(round_indices(3).collect::<Vec<_>>(), vec![0, 1, 2]); }
+    #[test] fn supported_fixture_requires_context() { let mut spec = corpus(); let mut supported = scenario("supported", Availability::Supported); supported.fixture.as_mut().unwrap().context = None; spec.scenarios[0] = supported; assert!(validate_spec(&spec).unwrap_err().contains("missing supported fixture path/context")); }
     #[test] fn invalid_chunk_args_rejected() { assert!(run(Path::new("missing"), 0, 0, 1, Path::new("/tmp/x"), Path::new("x"), Path::new("x")).is_err()); assert!(run(Path::new("missing"), 1, 1, 1, Path::new("/tmp/x"), Path::new("x"), Path::new("x")).is_err()); assert!(run(Path::new("missing"), 0, 1, 0, Path::new("/tmp/x"), Path::new("x"), Path::new("x")).is_err()); }
     #[test] fn missing_local_fixture_commit_fails() { let root = temp("missing-commit"); let spec = root.join("benchmarks/spec.yaml"); fs::create_dir_all(spec.parent().unwrap()).unwrap(); fs::write(&spec, "x").unwrap(); let scenario = scenario("x", Availability::Supported); let project = Project { id: "local".into(), repo: "local".into(), commit: Some("0000000000000000000000000000000000000000".into()) }; assert!(materialize_fixture(&spec, &scenario, Some(&project), &root.join("out")).unwrap_err().contains("missing local fixture commit")); }
     #[test] fn failed_command_is_failed() { let result = run_shell("exit 7", Duration::from_secs(1)); assert_eq!(result.status.unwrap().code(), Some(7)); }
