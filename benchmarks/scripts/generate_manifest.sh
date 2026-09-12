@@ -6,6 +6,9 @@ output="$root/benchmarks/MANIFEST.sha256"
 
 allowlist=(
   "benchmarks/benchmark-spec.yaml"
+  "benchmarks/fixtures/scratch-copy/Dockerfile"
+  "benchmarks/fixtures/scratch-copy/data.txt"
+  "benchmarks/fixtures/scratch-copy/README.md"
   "benchmarks/parity/fixture-audit.md"
   "benchmarks/parity/status-matrix.md"
   "benchmarks/parity/freeze_corpus.rb"

@@ -59,7 +59,18 @@ unless projects.is_a?(Array) && projects.length.positive?
   errors << "source evidence projects missing"
 else
   projects.each do |project|
-    %w[id repo tag raw_tag_object peeled_commit].each { |field| errors << "source evidence missing #{field}" unless project[field].is_a?(String) && !project[field].empty? }
+    %w[id repo].each { |field| errors << "source evidence missing #{field}" unless project[field].is_a?(String) && !project[field].empty? }
+    if project["repo"] == "local"
+      unless project["commit"].is_a?(String) && !project["commit"].empty?
+        errors << "#{project["id"]}: local source evidence missing commit"
+        next
+      end
+      _output, status = Open3.capture2e("git", "-C", root, "cat-file", "-e", "#{project["commit"]}^{commit}")
+      errors << "#{project["id"]}: local source commit missing" unless status.success?
+      project_index[project["id"]] = project if status.success?
+      next
+    end
+    %w[tag raw_tag_object peeled_commit].each { |field| errors << "source evidence missing #{field}" unless project[field].is_a?(String) && !project[field].empty? }
     next unless project["repo"] && project["tag"]
     output, status = Open3.capture2e("git", "ls-remote", project["repo"], "refs/tags/#{project["tag"]}", "refs/tags/#{project["tag"]}^{}")
     if !status.success?
@@ -91,10 +102,15 @@ scenarios.select { |scenario| scenario["availability"] == "supported" }.each do 
   next unless fixture["path"].is_a?(String)
   project = project_index[fixture["project"]]
   errors << "#{id}: fixture project lacks source evidence" and next unless project
-  repo_path = project.fetch("repo").sub(%r{https://github.com/}, "").sub(/\.git\z/, "")
-  url = "https://api.github.com/repos/#{repo_path}/contents/#{fixture.fetch("path")}?ref=#{project.fetch("peeled_commit")}"
-  _output, status = Open3.capture2e("curl", "--fail", "--silent", "--show-error", url)
-  errors << "#{id}: fixture path absent at peeled source commit" unless status.success?
+    if project["repo"] == "local"
+      _output, status = Open3.capture2e("git", "-C", root, "cat-file", "-e", "#{project.fetch("commit")}:#{fixture.fetch("path")}")
+      errors << "#{id}: fixture path absent at local source commit" unless status.success?
+    else
+      repo_path = project.fetch("repo").sub(%r{https://github.com/}, "").sub(/\.git\z/, "")
+      url = "https://api.github.com/repos/#{repo_path}/contents/#{fixture.fetch("path")}?ref=#{project.fetch("peeled_commit")}"
+      _output, status = Open3.capture2e("curl", "--fail", "--silent", "--show-error", url)
+      errors << "#{id}: fixture path absent at peeled source commit" unless status.success?
+    end
   evidence = scenario["lightr_evidence"]
   unless evidence.is_a?(Hash) && evidence["source_file"].is_a?(String) && evidence["help_surface"].is_a?(String)
     errors << "#{id}: supported requires lightr source/help evidence"

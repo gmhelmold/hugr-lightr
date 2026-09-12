@@ -2,9 +2,10 @@
 
 ## Baseline
 
-Files under `benchmarks/` are untracked. Do not commit, push, or merge without
-owner instruction. `benchmark-spec.yaml` is YAML-valid but its 250 scenario
-commands and fixture paths are not yet evidence-backed.
+S1 baseline is `b85ea31`; evidence freeze is integrated on
+`feat/benchmark-harness-s1-integration`. The corpus has one source-evidenced
+supported smoke scenario. Remaining scenarios are typed, non-executable states
+until their fixture and command evidence exists.
 
 ## Goal
 
@@ -88,7 +89,7 @@ Fixture extraction is evidence-driven.
 
 | WP | Owner files | Scope | Depends on |
 |---|---|---|---|
-| W0 | `benchmarks/benchmark-spec.yaml`, this contract | Lead-only fixture inventory/schema corrections | none |
+| W0 | `benchmarks/benchmark-spec.yaml`, `benchmarks/fixtures/**`, this contract | Lead-only fixture inventory/schema corrections | none |
 | W1 | `benchmarks/runner/**` | Standalone Rust runner + unit tests | contract |
 | W2 | `benchmarks/scripts/00_*.sh` through `06_*.sh`, `verify_hashes.sh` | Non-interactive environment, clone, extract, build, dry-run, chunk execution | runner CLI contract |
 | W3 | `benchmarks/scripts/07_*.sh` through `09_*.sh`, `validate_contract.py`, `benchmarks/reporter/**` | Merge, analysis, validation, archive; fail closed | runner raw-record contract |

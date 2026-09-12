@@ -35,6 +35,9 @@ source_evidence:
     - run
     - volume
   projects:
+  - id: lightr-fixtures
+    repo: local
+    commit: aa8be4981cfcf0856729a362a60c586580474f31
   - id: kubernetes-kind
     repo: https://github.com/kubernetes/kubernetes.git
     tag: v1.29.4
@@ -48,17 +51,15 @@ source_evidence:
 scenarios:
 - id: build-single-stage
   category: build
-  availability: unsupported
-  reason: No verified build fixture path/context or exact command exists at declared
-    source commit.
+  availability: supported
   fixture:
-    project: kubernetes-kind
-    path: null
-    context: null
+    project: lightr-fixtures
+    path: benchmarks/fixtures/scratch-copy
+    context: benchmarks/fixtures/scratch-copy
   docker:
-    command: null
+    command: $DOCKER build --tag lightr-scratch-copy:local "$FIXTURE_DIR"
   lightr:
-    command: null
+    command: $LIGHTR build --name @scratch/copy "$FIXTURE_DIR"
   metrics: &1
   - wall_clock_ms
   - cpu_user_ms
@@ -67,6 +68,21 @@ scenarios:
   tags:
   - build
   - unverified-fixture
+  assertions:
+  - kind: exit_code
+    expected: 0
+    scope: docker_and_lightr
+  - kind: command
+    command: $DOCKER image inspect lightr-scratch-copy:local
+    expected: 0
+    scope: docker
+  - kind: command
+    command: $LIGHTR hydrate "$OUTPUT_DIR" --name @scratch/copy && cmp -- "$FIXTURE_DIR/data.txt" "$OUTPUT_DIR/data.txt"
+    expected: 0
+    scope: lightr
+  lightr_evidence:
+    source_file: crates/lightr-cli/src/cli/cmd/mod.rs
+    help_surface: build
 - id: build-multi-stage-go
   category: build
   availability: unsupported

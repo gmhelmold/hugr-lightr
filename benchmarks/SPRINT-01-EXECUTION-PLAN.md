@@ -10,8 +10,8 @@ truth needed to implement and measure parity in S2-S4.
 
 ## Start State
 
-The current benchmark files are untracked. The spec is YAML-valid but cannot
-yet be trusted as an executable corpus:
+Initial benchmark scaffold was YAML-valid but could not be trusted as an
+executable corpus:
 
 - scenario tags do not satisfy the declared taxonomy;
 - several commands and fixture paths are generic or not evidence-backed;

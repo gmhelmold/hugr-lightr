@@ -1,9 +1,10 @@
 # Smoke Candidates From Current Source
 
-Status: candidate ledger only. Do not promote these to `benchmark-spec.yaml`
-until fixture materialization is checked into a source-evidenced fixture project.
-Each candidate uses exact fixture bytes already constructed by the A25 acceptance
-test, not a registry image or a new Dockerfile.
+Status: candidate ledger. Candidate 1 is promoted as `build-single-stage` after
+the exact fixture bytes were checked in at `benchmarks/fixtures/scratch-copy`
+and pinned to commit `aa8be4981cfcf0856729a362a60c586580474f31`.
+Candidates 2 and 3 remain unpromoted until runner setup/cleanup semantics are
+implemented and tested.
 
 ## Shared Fixture
 
