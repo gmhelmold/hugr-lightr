@@ -118,10 +118,13 @@ pub(super) fn mount_proc(target: &std::path::Path) {
 /// #91: populate the container's /dev with the standard device nodes by
 /// BIND-mounting the host's (rootless cannot `mknod`). Called after pivot_root
 /// + `chdir /` but BEFORE `/.put_old` is unmounted, while the host nodes are
-/// still reachable at `/.put_old/dev/*`. A fresh tmpfs at /dev gives a clean,
-/// writable surface for the bind targets without mutating the rootfs. Entirely
-/// best-effort: any step that fails is skipped (a device we can't wire must not
-/// fail an otherwise-good run — pre-#91 there was no /dev at all).
+/// still reachable at `/.put_old/dev/*`.
+///
+/// A fresh tmpfs at /dev gives a clean, writable surface for the bind targets
+/// without mutating the rootfs. Entirely best-effort: any step that fails is
+/// skipped (a device we can't wire must not fail an otherwise-good run —
+/// pre-#91 there was no /dev at all).
+#[allow(clippy::doc_lazy_continuation)]
 pub(super) fn setup_minimal_dev() {
     use std::ffi::CString;
     let _ = std::fs::create_dir_all("/dev");

@@ -319,6 +319,7 @@ pub(super) fn chdir_and_resolve(
 /// it FAILED, so we signal the pipe and `_exit(127)`. Never returns (`-> !`).
 /// The CStrings backing `prog_resolved`/`argv_ptrs` are owned by the caller and
 /// outlive this call (it always execs or `_exit`s).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn apply_and_exec(
     desired_caps: Option<&[u32]>,
     apparmor: Option<&str>,

@@ -98,7 +98,9 @@ pub(super) fn apply_user_if_any(
 ///     `/etc/group` (`name:passwd:gid:...`).
 ///   - gid ABSENT: numeric uid ⇒ gid 0 (Docker: `--user 1000` ⇒ gid 0); NAME uid ⇒
 ///     the primary gid from that user's `/etc/passwd` entry.
+///
 /// Any unresolvable name / malformed value ⇒ `Err` (caller fails closed).
+#[allow(clippy::doc_lazy_continuation)]
 fn resolve_user(spec: &str) -> std::result::Result<(u32, u32), String> {
     if spec.is_empty() {
         return Err("empty user spec".to_string());
@@ -127,7 +129,7 @@ fn resolve_user(spec: &str) -> std::result::Result<(u32, u32), String> {
 
     // Resolve the gid part.
     let gid: u32 = match gid_part {
-        Some(g) if g.is_empty() => return Err(format!("malformed user spec {spec:?}")),
+        Some("") => return Err(format!("malformed user spec {spec:?}")),
         Some(g) if g.bytes().all(|b| b.is_ascii_digit()) => g
             .parse::<u32>()
             .map_err(|_| format!("invalid numeric gid {g:?}"))?,
