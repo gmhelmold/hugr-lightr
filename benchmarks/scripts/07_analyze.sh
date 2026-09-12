@@ -3,9 +3,9 @@ set -euo pipefail
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 RUNNER="${BENCH_RUNNER:-$ROOT/benchmarks/runner/target/release/bench-runner}"
-RAW_DIR="${RAW_DIR:-$ROOT/results/raw}"
-MERGED_DIR="${MERGED_DIR:-$ROOT/results/merged}"
-REPORTS_DIR="${REPORTS_DIR:-$ROOT/results/reports}"
+RAW_DIR="${RAW_DIR:-$ROOT/benchmarks/work/results/full}"
+MERGED_DIR="${MERGED_DIR:-$ROOT/benchmarks/work/merged}"
+REPORTS_DIR="${REPORTS_DIR:-$ROOT/benchmarks/work/reports}"
 
 if [ ! -x "$RUNNER" ]; then
     printf 'bench-runner not executable: %s\n' "$RUNNER" >&2

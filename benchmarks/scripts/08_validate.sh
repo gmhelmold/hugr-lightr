@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-MERGED_JSONL="${MERGED_JSONL:-$ROOT/results/merged/merged.jsonl}"
+MERGED_JSONL="${MERGED_JSONL:-$ROOT/benchmarks/work/merged/merged.jsonl}"
 : "${ROUNDS:?ROUNDS must match bench-runner --rounds}"
 
 if [ ! -f "$MERGED_JSONL" ]; then
