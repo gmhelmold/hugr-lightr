@@ -57,9 +57,9 @@ scenarios:
     path: benchmarks/fixtures/scratch-copy
     context: benchmarks/fixtures/scratch-copy
   docker:
-    command: $DOCKER build --tag lightr-scratch-copy:local "$FIXTURE_DIR"
+    command: $DOCKER build --tag lightr-scratch-copy:local $FIXTURE_DIR
   lightr:
-    command: $LIGHTR build --name @scratch/copy "$FIXTURE_DIR"
+    command: $LIGHTR build --name @scratch/copy $FIXTURE_DIR
   metrics: &1
   - wall_clock_ms
   - cpu_user_ms
@@ -77,7 +77,15 @@ scenarios:
     expected: 0
     scope: docker
   - kind: command
-    command: $LIGHTR hydrate "$OUTPUT_DIR" --name @scratch/copy && cmp -- "$FIXTURE_DIR/data.txt" "$OUTPUT_DIR/data.txt"
+    command: $DOCKER image rm --force lightr-scratch-copy:local
+    expected: 0
+    scope: docker
+  - kind: command
+    command: $LIGHTR hydrate $OUTPUT_DIR/hydrated --name @scratch/copy && cmp -- $FIXTURE_DIR/data.txt $OUTPUT_DIR/hydrated/data.txt
+    expected: 0
+    scope: lightr
+  - kind: command
+    command: $LIGHTR oci rmi @scratch/copy
     expected: 0
     scope: lightr
   lightr_evidence:

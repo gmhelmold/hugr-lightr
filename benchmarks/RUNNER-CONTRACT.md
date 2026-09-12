@@ -43,10 +43,14 @@ $FIXTURE_DIR  materialized scenario fixture directory
 $OUTPUT_DIR   scenario-private output directory
 ```
 
+Runner shell-quotes every expansion. Declared commands must not wrap these
+tokens in shell quotes.
+
 Unknown `$NAME`, missing executable, or a command timeout fails the supported
 scenario. Commands run with `sh -c`; each has a 300-second deadline. On Unix,
 spawn a new process group and kill that group on timeout. Never substitute a
-host `docker` or `lightr` from `PATH`.
+host `docker` or `lightr` from `PATH`. Every scenario command and assertion
+runs with `LIGHTR_HOME` set to its private output subdirectory.
 
 ## Assertions
 

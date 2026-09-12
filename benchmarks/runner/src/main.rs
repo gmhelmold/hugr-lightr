@@ -261,10 +261,18 @@ fn execute_record(s: &Scenario, tool: &str, round: usize, fixture: Option<(&Path
         (failed_result(error, now), Err(error.to_string()))
     } else if let Some((fixture_dir, _, _)) = fixture {
         let expanded = expand(command, docker, lightr, fixture_dir, output_dir);
-        match &expanded { Ok(command) => (run_shell(command, Duration::from_secs(TIMEOUT_SECS)), expanded), Err(error) => (failed_result(error, now), expanded) }
+        match &expanded { Ok(command) => (run_shell(command, Duration::from_secs(TIMEOUT_SECS), Some(&output_dir.join("lightr-home"))), expanded), Err(error) => (failed_result(error, now), expanded) }
     } else { (failed_result("fixture unavailable", now), Err("fixture unavailable".into())) };
     let passed = result.error.is_none() && !result.timed_out && result.status.as_ref().is_some_and(|status| status.success());
     let outcome = if result.timed_out { "timed_out" } else if passed { "passed" } else { "failed" };
+    if !passed {
+        eprintln!(
+            "bench-runner: {}/{} command failed: {}",
+            s.id,
+            tool,
+            String::from_utf8_lossy(&result.stderr).trim()
+        );
+    }
     let record = record_base(s, tool, round, outcome, &result, expanded.as_deref().unwrap_or(command), spec_hash, fixture.map(|v| v.1.to_string()), fixture.map(|v| v.2.to_string()), versions, Vec::new());
     (record, result)
 }
@@ -273,7 +281,12 @@ fn apply_assertions(record: &mut RawRecord, scenario: &Scenario, tool: &str, res
     for assertion in scenario.assertions.iter().filter(|assertion| applies(&assertion.scope, tool)) {
         record.assertions.push(evaluate_assertion(assertion, result, docker, lightr, fixture, output));
     }
-    if record.outcome == "passed" && record.assertions.iter().any(|assertion| !assertion.passed) { record.outcome = "failed".into(); }
+    if record.outcome == "passed" && record.assertions.iter().any(|assertion| !assertion.passed) {
+        for assertion in record.assertions.iter().filter(|assertion| !assertion.passed) {
+            eprintln!("bench-runner: {}/{} assertion {} failed: {}", scenario.id, tool, assertion.kind, assertion.detail);
+        }
+        record.outcome = "failed".into();
+    }
 }
 
 fn materialize_fixture(spec_path: &Path, scenario: &Scenario, project: Option<&Project>, out: &Path) -> Result<(PathBuf, String, String), String> {
@@ -338,7 +351,12 @@ fn expand(command: &str, docker: &Path, lightr: &Path, fixture: &Path, output: &
 
 fn shell_quote(value: &str) -> String { format!("'{}'", value.replace('\'', "'\\''")) }
 
-fn run_shell(command: &str, timeout: Duration) -> CommandResult { run_command(Command::new("sh").args(["-c", command]), timeout) }
+fn run_shell(command: &str, timeout: Duration, lightr_home: Option<&Path>) -> CommandResult {
+    let mut shell = Command::new("sh");
+    shell.args(["-c", command]);
+    if let Some(home) = lightr_home { shell.env("LIGHTR_HOME", home); }
+    run_command(&mut shell, timeout)
+}
 
 fn run_command(command: &mut Command, timeout: Duration) -> CommandResult {
     let started = unix_ms();
@@ -369,7 +387,7 @@ fn evaluate_assertion(assertion: &Assertion, result: &CommandResult, docker: &Pa
         "stderr_regex" => Regex::new(expected.as_str().unwrap_or("")).map(|r| r.is_match(&String::from_utf8_lossy(&result.stderr))).map_err(|e| e.to_string()),
         "file_sha256" => assertion.path.as_deref().ok_or_else(|| "file_sha256 missing path".to_string()).and_then(|path| expand(path, docker, lightr, fixture, output)).and_then(|path| fs::read(path.trim_matches('\'')).map_err(|e| e.to_string())).map(|b| sha256(&b) == expected.as_str().unwrap_or("")),
         "http_status" => assertion.url.as_deref().ok_or_else(|| "http_status missing url".to_string()).and_then(http_status).map(|status| status == expected.as_u64().unwrap_or(0) as u16),
-        "command" => assertion.command.as_deref().ok_or_else(|| "command assertion missing command".to_string()).and_then(|command| expand(command, docker, lightr, fixture, output)).map(|command| { let probe = run_shell(&command, Duration::from_secs(TIMEOUT_SECS)); !probe.timed_out && probe.error.is_none() && probe.status.as_ref().and_then(|s| s.code()) == expected.as_i64().map(|v| v as i32) }),
+        "command" => assertion.command.as_deref().ok_or_else(|| "command assertion missing command".to_string()).and_then(|command| expand(command, docker, lightr, fixture, output)).map(|command| { let probe = run_shell(&command, Duration::from_secs(TIMEOUT_SECS), Some(&output.join("lightr-home"))); !probe.timed_out && probe.error.is_none() && probe.status.as_ref().and_then(|s| s.code()) == expected.as_i64().map(|v| v as i32) }),
         other => Err(format!("unknown assertion kind: {other}")),
     };
     match verdict { Ok(true) => AssertionResult { kind: assertion.kind.clone(), passed: true, detail: "matched".into() }, Ok(false) => AssertionResult { kind: assertion.kind.clone(), passed: false, detail: "mismatch".into() }, Err(e) => AssertionResult { kind: assertion.kind.clone(), passed: false, detail: e } }
@@ -436,8 +454,9 @@ mod tests {
     #[test] fn supported_fixture_requires_context() { let mut spec = corpus(); let mut supported = scenario("supported", Availability::Supported); supported.fixture.as_mut().unwrap().context = None; spec.scenarios[0] = supported; assert!(validate_spec(&spec).unwrap_err().contains("missing supported fixture path/context")); }
     #[test] fn invalid_chunk_args_rejected() { assert!(run(Path::new("missing"), 0, 0, 1, Path::new("/tmp/x"), Path::new("x"), Path::new("x")).is_err()); assert!(run(Path::new("missing"), 1, 1, 1, Path::new("/tmp/x"), Path::new("x"), Path::new("x")).is_err()); assert!(run(Path::new("missing"), 0, 1, 0, Path::new("/tmp/x"), Path::new("x"), Path::new("x")).is_err()); }
     #[test] fn missing_local_fixture_commit_fails() { let root = temp("missing-commit"); let spec = root.join("benchmarks/spec.yaml"); fs::create_dir_all(spec.parent().unwrap()).unwrap(); fs::write(&spec, "x").unwrap(); let scenario = scenario("x", Availability::Supported); let project = Project { id: "local".into(), repo: "local".into(), commit: Some("0000000000000000000000000000000000000000".into()) }; assert!(materialize_fixture(&spec, &scenario, Some(&project), &root.join("out")).unwrap_err().contains("missing local fixture commit")); }
-    #[test] fn failed_command_is_failed() { let result = run_shell("exit 7", Duration::from_secs(1)); assert_eq!(result.status.unwrap().code(), Some(7)); }
-    #[test] fn timeout_is_typed() { let result = run_shell("sleep 1", Duration::from_millis(20)); assert!(result.timed_out); }
+    #[test] fn failed_command_is_failed() { let result = run_shell("exit 7", Duration::from_secs(1), None); assert_eq!(result.status.unwrap().code(), Some(7)); }
+    #[test] fn timeout_is_typed() { let result = run_shell("sleep 1", Duration::from_millis(20), None); assert!(result.timed_out); }
+    #[test] fn scenario_shell_gets_private_lightr_home() { let home = temp("lightr-home"); let command = format!("test \"$LIGHTR_HOME\" = {}", shell_quote(&home.display().to_string())); let result = run_shell(&command, Duration::from_secs(1), Some(&home)); assert!(result.status.unwrap().success()); }
     #[test] fn typed_skip_record() { let record = skip_record(&scenario("skip", Availability::Unsupported), "spec"); assert_eq!(record.tool, "skip"); assert_eq!(record.outcome, "skipped"); assert_eq!(record.round, 0); }
     #[test] fn duplicate_raw_tuple_rejected() { let root = temp("duplicate"); let record = skip_record(&scenario("skip", Availability::Unsupported), "spec"); assert!(merge_rows(vec![record.clone(), record], &root).unwrap_err().contains("duplicate raw tuple")); }
 }
