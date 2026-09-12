@@ -1,47 +1,73 @@
-#!/bin/bash
-# 02_extract_dockerfiles.sh - Extrai Dockerfiles e compose files
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+SPEC="$ROOT/benchmarks/benchmark-spec.yaml"
+: "${GIT_BIN:?set GIT_BIN to an absolute git binary path}"
 
-echo "=== EXTRAINDO DOCKERFILES ==="
+require_absolute_executable() {
+    case "$1" in
+        /*) ;;
+        *) printf 'GIT_BIN must be an absolute path: %s\n' "$1" >&2; exit 1 ;;
+    esac
+    if [[ ! -x "$1" ]]; then
+        printf 'GIT_BIN is not executable: %s\n' "$1" >&2
+        exit 1
+    fi
+}
 
-mkdir -p dockerfiles/kubernetes
-mkdir -p dockerfiles/elasticsearch
-mkdir -p composefiles/kubernetes
-mkdir -p composefiles/elasticsearch
+local_project_commit() {
+    local wanted_project=$1
+    awk -v wanted="$wanted_project" '
+        /^source_evidence:/ { source = 1; next }
+        source && /^scenarios:/ { exit }
+        source && /^  projects:/ { projects = 1; next }
+        projects && /^  - id:/ { id = $3; repo = commit = ""; next }
+        projects && /^    repo:/ { repo = $2; next }
+        projects && /^    commit:/ {
+            commit = $2
+            if (id == wanted && repo == "local") print commit
+        }
+    ' "$SPEC"
+}
 
-# Kubernetes Dockerfiles
-echo "Copiando Dockerfiles do Kubernetes..."
-cp kubernetes/build/pause/Dockerfile dockerfiles/kubernetes/pause.Dockerfile 2>/dev/null || echo "pause.Dockerfile não encontrado"
-cp kubernetes/build/debian-base/Dockerfile dockerfiles/kubernetes/debian-base.Dockerfile 2>/dev/null || echo "debian-base.Dockerfile não encontrado"
-cp kubernetes/build/kube-apiserver/Dockerfile dockerfiles/kubernetes/kube-apiserver.Dockerfile 2>/dev/null || echo "kube-apiserver.Dockerfile não encontrado"
-cp kubernetes/build/kube-controller-manager/Dockerfile dockerfiles/kubernetes/kube-controller-manager.Dockerfile 2>/dev/null || echo "kube-controller-manager.Dockerfile não encontrado"
-cp kubernetes/build/kube-scheduler/Dockerfile dockerfiles/kubernetes/kube-scheduler.Dockerfile 2>/dev/null || echo "kube-scheduler.Dockerfile não encontrado"
-cp kubernetes/build/kube-proxy/Dockerfile dockerfiles/kubernetes/kube-proxy.Dockerfile 2>/dev/null || echo "kube-proxy.Dockerfile não encontrado"
-cp kubernetes/build/kubectl/Dockerfile dockerfiles/kubernetes/kubectl.Dockerfile 2>/dev/null || echo "kubectl.Dockerfile não encontrado"
-cp kubernetes/cluster/images/etcd/Dockerfile dockerfiles/kubernetes/etcd.Dockerfile 2>/dev/null || echo "etcd.Dockerfile não encontrado"
-cp kubernetes/cluster/images/coredns/Dockerfile dockerfiles/kubernetes/coredns.Dockerfile 2>/dev/null || echo "coredns.Dockerfile não encontrado"
-cp kubernetes/cmd/kind/Dockerfile dockerfiles/kubernetes/kind-node.Dockerfile 2>/dev/null || echo "kind-node.Dockerfile não encontrado"
+supported_fixtures() {
+    awk '
+        /^scenarios:/ { scenarios = 1; next }
+        scenarios && /^- id:/ {
+            if (id != "" && availability == "supported") print project "|" path
+            id = $3; availability = project = path = ""; fixture = 0; next
+        }
+        scenarios && /^  availability:/ { availability = $2; next }
+        scenarios && /^  fixture:/ { fixture = 1; next }
+        fixture && /^    project:/ { project = $2; next }
+        fixture && /^    path:/ { path = $2; next }
+        END { if (id != "" && availability == "supported") print project "|" path }
+    ' "$SPEC"
+}
 
-# Elasticsearch Dockerfiles
-cp elasticsearch/docker/Dockerfile dockerfiles/elasticsearch/elasticsearch.Dockerfile 2>/dev/null || echo "elasticsearch.Dockerfile não encontrado"
-cp elasticsearch/docker/Dockerfile.arm64 dockerfiles/elasticsearch/elasticsearch-arm64.Dockerfile 2>/dev/null || echo "elasticsearch-arm64.Dockerfile não encontrado"
-cp elasticsearch/docker/Dockerfile.fips dockerfiles/elasticsearch/elasticsearch-fips.Dockerfile 2>/dev/null || echo "elasticsearch-fips.Dockerfile não encontrado"
+require_absolute_executable "$GIT_BIN"
+if [[ ! -f "$SPEC" ]]; then
+    printf 'benchmark spec not found: %s\n' "$SPEC" >&2
+    exit 1
+fi
 
-# Compose files Kubernetes
-cp kubernetes/kind/examples/multi-node.yaml composefiles/kubernetes/multi-node.yaml 2>/dev/null || echo "multi-node.yaml não encontrado"
-cp kubernetes/kind/examples/kind-with-registry.yaml composefiles/kubernetes/kind-with-registry.yaml 2>/dev/null || echo "kind-with-registry.yaml não encontrado"
-cp kubernetes/kind/examples/kind-with-calico.yaml composefiles/kubernetes/kind-with-calico.yaml 2>/dev/null || echo "kind-with-calico.yaml não encontrado"
-cp kubernetes/kind/examples/kind-with-cilium.yaml composefiles/kubernetes/kind-with-cilium.yaml 2>/dev/null || echo "kind-with-cilium.yaml não encontrado"
+while IFS='|' read -r project path; do
+    if [[ -z "$project" || -z "$path" || "$path" == null ]]; then
+        printf 'supported scenario has no fixture project or path\n' >&2
+        exit 1
+    fi
+    commit=$(local_project_commit "$project")
+    if [[ -z "$commit" ]]; then
+        printf 'supported fixture project must be local in S1: %s\n' "$project" >&2
+        exit 1
+    fi
+    "$GIT_BIN" -C "$ROOT" rev-parse --verify "${commit}^{commit}" >/dev/null
+    object_type=$("$GIT_BIN" -C "$ROOT" cat-file -t "${commit}:${path}")
+    if [[ "$object_type" != tree ]]; then
+        printf 'fixture path is not a tree at pinned commit: %s:%s\n' "$commit" "$path" >&2
+        exit 1
+    fi
+done < <(supported_fixtures)
 
-# Compose files Elasticsearch
-cp elasticsearch/docker-compose.yml composefiles/elasticsearch/single.yml 2>/dev/null || echo "single.yml não encontrado"
-cp elasticsearch/docker-compose.cluster.yml composefiles/elasticsearch/cluster.yml 2>/dev/null || echo "cluster.yml não encontrado"
-cp elasticsearch/docker-compose.security.yml composefiles/elasticsearch/security.yml 2>/dev/null || echo "security.yml não encontrado"
-cp elasticsearch/docker-compose.snapshot.yml composefiles/elasticsearch/snapshot.yml 2>/dev/null || echo "snapshot.yml não encontrado"
-cp elasticsearch/docker-compose.ccr.yml composefiles/elasticsearch/ccr.yml 2>/dev/null || echo "ccr.yml não encontrado"
-cp elasticsearch/docker-compose.ilm.yml composefiles/elasticsearch/ilm.yml 2>/dev/null || echo "ilm.yml não encontrado"
-cp elasticsearch/docker-compose.beats.yml composefiles/elasticsearch/beats.yml 2>/dev/null || echo "beats.yml não encontrado"
-cp elasticsearch/docker-compose.fleet.yml composefiles/elasticsearch/fleet.yml 2>/dev/null || echo "fleet.yml não encontrado"
-
-echo "=== DOCKERFILES EXTRAÍDOS ==="
+# bench-runner alone materializes verified fixtures with git archive.

@@ -1,23 +1,43 @@
-#!/bin/bash
-# 06_full_suite.sh - Suite completa (250 cenários x 64 rounds)
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+SPEC="$ROOT/benchmarks/benchmark-spec.yaml"
+RUNNER_BIN="$ROOT/benchmarks/runner/target/release/bench-runner"
+LIGHTR_BIN="$ROOT/target/release/lightr"
+OUT_DIR="$ROOT/benchmarks/work/results/full"
+ROUNDS=${ROUNDS:-64}
+: "${DOCKER_BIN:?set DOCKER_BIN to an absolute Docker binary path}"
+: "${CHUNK:?set CHUNK to selected chunk index}"
+: "${TOTAL_CHUNKS:?set TOTAL_CHUNKS to total chunk count}"
 
-echo "=== SUITE COMPLETA DE BENCHMARK ==="
-echo "AVISO: Este script executa 250 cenários x 64 rounds = 16.000 execuções"
-echo "Tempo estimado: 48+ horas"
-echo ""
-read -p "Confirmar execução completa? (y/N) " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-  echo "Cancelado."
-  exit 1
+require_absolute_executable() {
+    local path=$1
+    local name=$2
+    case "$path" in
+        /*) ;;
+        *) printf '%s must be an absolute path: %s\n' "$name" "$path" >&2; exit 1 ;;
+    esac
+    if [[ ! -x "$path" ]]; then
+        printf '%s is not executable: %s\n' "$name" "$path" >&2
+        exit 1
+    fi
+}
+
+if [[ ! "$CHUNK" =~ ^[0-9]+$ || ! "$TOTAL_CHUNKS" =~ ^[1-9][0-9]*$ || "$CHUNK" -ge "$TOTAL_CHUNKS" ]]; then
+    printf 'invalid chunk selection: CHUNK=%s TOTAL_CHUNKS=%s\n' "$CHUNK" "$TOTAL_CHUNKS" >&2
+    exit 1
 fi
+if [[ ! "$ROUNDS" =~ ^[1-9][0-9]*$ ]]; then
+    printf 'ROUNDS must be a positive integer: %s\n' "$ROUNDS" >&2
+    exit 1
+fi
+require_absolute_executable "$RUNNER_BIN" RUNNER_BIN
+require_absolute_executable "$DOCKER_BIN" DOCKER_BIN
+require_absolute_executable "$LIGHTR_BIN" LIGHTR_BIN
+bash "$ROOT/benchmarks/scripts/00_verify_environment.sh"
+mkdir -p "$OUT_DIR/chunk-$CHUNK"
 
-echo "Iniciando suite completa..."
-# O bench-runner real executaria aqui
-# bench-runner --spec benchmarks/benchmark-spec.yaml --rounds 64 --output results/
-
-echo "=== SUITE COMPLETA INICIADA ==="
-echo "Monitorar progresso em results/"
-echo "Tempo estimado: 48+ horas"
+"$RUNNER_BIN" verify-spec --spec "$SPEC"
+"$RUNNER_BIN" run --spec "$SPEC" --chunk "$CHUNK" --chunks "$TOTAL_CHUNKS" --rounds "$ROUNDS" \
+    --out "$OUT_DIR/chunk-$CHUNK" --docker "$DOCKER_BIN" --lightr "$LIGHTR_BIN"

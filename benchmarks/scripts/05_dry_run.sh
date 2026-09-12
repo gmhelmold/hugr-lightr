@@ -1,26 +1,38 @@
-#!/bin/bash
-# 05_dry_run.sh - Dry run piloto (build-single-stage x3)
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+SPEC="$ROOT/benchmarks/benchmark-spec.yaml"
+RUNNER_BIN="$ROOT/benchmarks/runner/target/release/bench-runner"
+LIGHTR_BIN="$ROOT/target/release/lightr"
+OUT_DIR="$ROOT/benchmarks/work/results/dry-run"
+: "${DOCKER_BIN:?set DOCKER_BIN to an absolute Docker binary path}"
+: "${CHUNK:?set CHUNK to selected chunk index}"
+: "${TOTAL_CHUNKS:?set TOTAL_CHUNKS to total chunk count}"
 
-echo "=== DRY RUN PILOTO ==="
+require_absolute_executable() {
+    local path=$1
+    local name=$2
+    case "$path" in
+        /*) ;;
+        *) printf '%s must be an absolute path: %s\n' "$name" "$path" >&2; exit 1 ;;
+    esac
+    if [[ ! -x "$path" ]]; then
+        printf '%s is not executable: %s\n' "$name" "$path" >&2
+        exit 1
+    fi
+}
 
-# Verificar se bench-runner existe
-if [ ! -f "benchmarks/runner/target/release/bench-runner" ]; then
-  echo "bench-runner não encontrado. Execute 04_build_runner.sh primeiro."
-  exit 1
+if [[ ! "$CHUNK" =~ ^[0-9]+$ || ! "$TOTAL_CHUNKS" =~ ^[1-9][0-9]*$ || "$CHUNK" -ge "$TOTAL_CHUNKS" ]]; then
+    printf 'invalid chunk selection: CHUNK=%s TOTAL_CHUNKS=%s\n' "$CHUNK" "$TOTAL_CHUNKS" >&2
+    exit 1
 fi
+require_absolute_executable "$RUNNER_BIN" RUNNER_BIN
+require_absolute_executable "$DOCKER_BIN" DOCKER_BIN
+require_absolute_executable "$LIGHTR_BIN" LIGHTR_BIN
+bash "$ROOT/benchmarks/scripts/00_verify_environment.sh"
+mkdir -p "$OUT_DIR/chunk-$CHUNK"
 
-echo "Executando dry run: build-single-stage x3 rounds..."
-
-# Simulação do dry run (substituir por execução real do bench-runner)
-for i in 1 2 3; do
-  echo "Round $i/3..."
-  # Simular execução
-  echo "  docker build -t pause:bench -f dockerfiles/kubernetes/pause.Dockerfile ."
-  echo "  lightr build -t pause:bench -f dockerfiles/kubernetes/pause.Dockerfile ."
-  sleep 1
-done
-
-echo "=== DRY RUN CONCLUÍDO ==="
-echo "Próximo: executar 06_full_suite.sh para suite completa"
+"$RUNNER_BIN" verify-spec --spec "$SPEC"
+"$RUNNER_BIN" run --spec "$SPEC" --chunk "$CHUNK" --chunks "$TOTAL_CHUNKS" --rounds 3 \
+    --out "$OUT_DIR/chunk-$CHUNK" --docker "$DOCKER_BIN" --lightr "$LIGHTR_BIN"

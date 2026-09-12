@@ -1,43 +1,72 @@
-#!/bin/bash
-# verify_hashes.sh - Verifica commit hashes dos repositórios
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+SPEC="$ROOT/benchmarks/benchmark-spec.yaml"
+: "${GIT_BIN:?set GIT_BIN to an absolute git binary path}"
 
-echo "=== VERIFICAÇÃO DE COMMIT HASHES ==="
-echo ""
-
-# Kubernetes
-echo "Verificando Kubernetes v1.29.4..."
-K8S_HASH=$(git ls-remote https://github.com/kubernetes/kubernetes.git v1.29.4 | cut -f1)
-K8S_EXPECTED="5d985937e8a112a321916efd4ad3936c7db6345f"
-
-echo "Kubernetes v1.29.4:"
-echo "  Esperado: $K8S_EXPECTED"
-echo "  Atual:    $(git ls-remote https://github.com/kubernetes/kubernetes.git v1.29.4 | cut -f1)"
-
-if [ "$(git ls-remote https://github.com/kubernetes/kubernetes.git v1.29.4 | cut -f1)" = "5d985937e8a112a321916efd4ad3936c7db6345f" ]; then
-  echo "✓ Kubernetes v1.29.4: OK"
-else
-  echo "✗ Kubernetes hash MISMATCH!"
-  exit 1
+case "$GIT_BIN" in
+    /*) ;;
+    *) printf 'GIT_BIN must be an absolute path: %s\n' "$GIT_BIN" >&2; exit 1 ;;
+esac
+if [[ ! -x "$GIT_BIN" ]]; then
+    printf 'GIT_BIN is not executable: %s\n' "$GIT_BIN" >&2
+    exit 1
+fi
+if [[ ! -f "$SPEC" ]]; then
+    printf 'benchmark spec not found: %s\n' "$SPEC" >&2
+    exit 1
 fi
 
-echo ""
+parse_projects() {
+    awk '
+        /^source_evidence:/ { source = 1; next }
+        source && /^scenarios:/ { exit }
+        source && /^  projects:/ { projects = 1; next }
+        projects && /^  - id:/ {
+            if (id != "") print id "|" repo "|" commit "|" tag "|" raw "|" peeled
+            id = $3; repo = commit = tag = raw = peeled = ""; next
+        }
+        projects && /^    repo:/ { repo = $2; next }
+        projects && /^    commit:/ { commit = $2; next }
+        projects && /^    tag:/ { tag = $2; next }
+        projects && /^    raw_tag_object:/ { raw = $2; next }
+        projects && /^    peeled_commit:/ { peeled = $2; next }
+        END { if (projects && id != "") print id "|" repo "|" commit "|" tag "|" raw "|" peeled }
+    ' "$SPEC"
+}
 
-# Elasticsearch
-echo "Verificando Elasticsearch v8.13.4..."
-ES_EXPECTED="85ff3fe65dcf2ab0185083aee4b8f462a92ab289"
+while IFS='|' read -r id repo commit tag raw peeled; do
+    if [[ -z "$id" || -z "$repo" ]]; then
+        printf 'source project is missing id or repo\n' >&2
+        exit 1
+    fi
+    if [[ "$repo" == local ]]; then
+        if [[ -z "$commit" ]]; then
+            printf 'local source is missing commit: %s\n' "$id" >&2
+            exit 1
+        fi
+        actual=$("$GIT_BIN" -C "$ROOT" rev-parse --verify "${commit}^{commit}")
+        if [[ "$actual" != "$commit" ]]; then
+            printf 'local source commit mismatch for %s: expected %s, got %s\n' "$id" "$commit" "$actual" >&2
+            exit 1
+        fi
+        continue
+    fi
 
-echo "Elasticsearch v8.13.4:"
-echo "  Esperado: $ES_EXPECTED"
-echo "  Atual:    $(git ls-remote https://github.com/elastic/elasticsearch.git v8.13.4 | cut -f1)"
-
-if [ "$(git ls-remote https://github.com/elastic/elasticsearch.git v8.13.4 | cut -f1)" = "85ff3fe65dcf2ab0185083aee4b8f462a92ab289" ]; then
-  echo "✓ Elasticsearch v8.13.4: OK"
-else
-  echo "✗ Elasticsearch hash MISMATCH!"
-  exit 1
-fi
-
-echo ""
-echo "=== TODOS OS HASHES CONFIRMADOS ==="
+    if [[ -z "$tag" || -z "$raw" || -z "$peeled" ]]; then
+        printf 'remote source is missing tag evidence: %s\n' "$id" >&2
+        exit 1
+    fi
+    remote_refs=$("$GIT_BIN" ls-remote "$repo" "refs/tags/$tag" "refs/tags/$tag^{}")
+    actual_raw=$(printf '%s\n' "$remote_refs" | awk -v ref="refs/tags/$tag" '$2 == ref { print $1 }')
+    actual_peeled=$(printf '%s\n' "$remote_refs" | awk -v ref="refs/tags/$tag^{}" '$2 == ref { print $1 }')
+    if [[ "$actual_raw" != "$raw" ]]; then
+        printf 'remote tag object mismatch for %s: expected %s, got %s\n' "$id" "$raw" "$actual_raw" >&2
+        exit 1
+    fi
+    if [[ "$actual_peeled" != "$peeled" ]]; then
+        printf 'remote peeled commit mismatch for %s: expected %s, got %s\n' "$id" "$peeled" "$actual_peeled" >&2
+        exit 1
+    fi
+done < <(parse_projects)
