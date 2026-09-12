@@ -31,7 +31,7 @@ readme = "README.md"
 # publish stays false: ADR-0008 lifted the LICENSE gate (Apache-2.0), but
 # pushing to crates.io is a separate GTM decision (whitepaper §9.8: launch
 # after Runners M1). Flip to true when that timing call is made.
-publish = true
+publish = false
 
 [workspace.dependencies]
 blake3 = { version = "1", features = ["rayon", "mmap"] }
@@ -63,15 +63,15 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Pipes",
     "Win32_System_Threading",
 ] }
-lightr-core = { path = "crates/lightr-core", version = "0.1.0" }
-lightr-store = { path = "crates/lightr-store", version = "0.1.0" }
-lightr-index = { path = "crates/lightr-index", version = "0.1.0" }
-lightr-init = { path = "crates/lightr-init", version = "0.1.0" }
-lightr-run = { path = "crates/lightr-run", version = "0.1.0" }
-lightr-oci = { path = "crates/lightr-oci", version = "0.1.0" }
-lightr-engine = { path = "crates/lightr-engine", version = "0.1.0" }
-lightr-build = { path = "crates/lightr-build", version = "0.1.0" }
-lightr-views = { path = "crates/lightr-views", version = "0.1.0" }
+lightr-core = { path = "crates/lightr-core" }
+lightr-store = { path = "crates/lightr-store" }
+lightr-index = { path = "crates/lightr-index" }
+lightr-init = { path = "crates/lightr-init" }
+lightr-run = { path = "crates/lightr-run" }
+lightr-oci = { path = "crates/lightr-oci" }
+lightr-engine = { path = "crates/lightr-engine" }
+lightr-build = { path = "crates/lightr-build" }
+lightr-views = { path = "crates/lightr-views" }
 
 [profile.release]
 lto = "fat"
