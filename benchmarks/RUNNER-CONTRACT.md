@@ -73,10 +73,12 @@ host_os, host_arch, host_kernel, assertions
 
 `tool` is `docker`, `lightr`, or `skip`. `outcome` is `passed`, `failed`,
 `skipped`, or `timed_out`. Supported scenarios emit exactly one `docker` and
-one `lightr` record per round. Non-supported scenarios emit one `skip` record
-with `round: 0` and their reason. Digests are SHA-256 hex; unavailable command
-output is SHA-256 of empty bytes, never omitted. Version probe failure is a
-supported-scenario failure, not a fabricated version.
+one `lightr` record for each zero-based `round` in `0..rounds`. Non-supported
+scenarios emit one `skip` record with `round: 0` and their reason. Skip records
+set `fixture_tree_sha256`, `source_commit`, and `lightr_sha256` to `null`;
+all other digest fields are SHA-256 hex, including SHA-256 of empty command
+output. Version probe failure is a supported-scenario failure, not a fabricated
+version.
 
 `merge` reads JSONL recursively, rejects malformed rows and duplicate
 `(scenario_id, tool, round)` tuples, writes `merged.jsonl` plus `summary.json`.
