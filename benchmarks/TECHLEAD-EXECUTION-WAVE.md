@@ -50,6 +50,9 @@ structured assertions evaluated after explicit normalization. Supported types:
 Standalone crate: `benchmarks/runner/` with its own `[workspace]`; do not
 modify root Cargo workspace.
 
+`benchmarks/RUNNER-CONTRACT.md` freezes runner fixture, token, JSONL, timeout,
+merge, and test semantics for W1-W3. Agents do not change it.
+
 ```text
 bench-runner verify-spec --spec PATH
 bench-runner run --spec PATH --chunk N --chunks N --rounds N --out DIR \
