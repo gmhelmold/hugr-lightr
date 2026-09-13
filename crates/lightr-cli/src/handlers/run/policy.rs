@@ -11,6 +11,215 @@ use lightr_store::Store;
 use super::runflags::RunFlags;
 use super::RcConfig;
 
+#[cfg(test)]
+use lightr_engine::engine::spec::SecurityControl;
+
+/// Source-level lowering witness. Exhaustive match makes new inventory controls
+/// fail test compilation until parser, run-config, and spec destination are declared.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct SecurityControlMap {
+    pub control: SecurityControl,
+    pub cli: &'static str,
+    pub run_config: &'static str,
+    pub exec_spec: Option<&'static str>,
+}
+
+#[cfg(test)]
+pub(crate) const fn security_control_map(control: SecurityControl) -> SecurityControlMap {
+    match control {
+        SecurityControl::User => SecurityControlMap {
+            control,
+            cli: "--user",
+            run_config: "user",
+            exec_spec: Some("user"),
+        },
+        SecurityControl::Hostname => SecurityControlMap {
+            control,
+            cli: "--hostname",
+            run_config: "hostname",
+            exec_spec: Some("hostname"),
+        },
+        SecurityControl::Labels => SecurityControlMap {
+            control,
+            cli: "--label",
+            run_config: "labels",
+            exec_spec: None,
+        },
+        SecurityControl::Tty => SecurityControlMap {
+            control,
+            cli: "--tty",
+            run_config: "tty",
+            exec_spec: None,
+        },
+        SecurityControl::Init => SecurityControlMap {
+            control,
+            cli: "--init",
+            run_config: "init",
+            exec_spec: Some("init"),
+        },
+        SecurityControl::Privileged => SecurityControlMap {
+            control,
+            cli: "--privileged",
+            run_config: "privileged",
+            exec_spec: None,
+        },
+        SecurityControl::ReadOnly => SecurityControlMap {
+            control,
+            cli: "--read-only",
+            run_config: "read_only",
+            exec_spec: Some("read_only"),
+        },
+        SecurityControl::CapAdd => SecurityControlMap {
+            control,
+            cli: "--cap-add",
+            run_config: "cap_add",
+            exec_spec: Some("cap_add"),
+        },
+        SecurityControl::CapDrop => SecurityControlMap {
+            control,
+            cli: "--cap-drop",
+            run_config: "cap_drop",
+            exec_spec: Some("cap_drop"),
+        },
+        SecurityControl::Seccomp => SecurityControlMap {
+            control,
+            cli: "--seccomp",
+            run_config: "seccomp",
+            exec_spec: Some("seccomp"),
+        },
+        SecurityControl::AppArmor => SecurityControlMap {
+            control,
+            cli: "--apparmor",
+            run_config: "apparmor",
+            exec_spec: Some("apparmor"),
+        },
+        SecurityControl::MemoryLimit => SecurityControlMap {
+            control,
+            cli: "--memory",
+            run_config: "limits.memory_bytes",
+            exec_spec: Some("limits"),
+        },
+        SecurityControl::CpuLimit => SecurityControlMap {
+            control,
+            cli: "--cpus",
+            run_config: "limits.cpu_millis",
+            exec_spec: Some("limits"),
+        },
+        SecurityControl::PidsLimit => SecurityControlMap {
+            control,
+            cli: "--pids-limit",
+            run_config: "limits.pids_max",
+            exec_spec: Some("limits"),
+        },
+        SecurityControl::Ulimit => SecurityControlMap {
+            control,
+            cli: "--ulimit",
+            run_config: "ulimits",
+            exec_spec: Some("ulimits"),
+        },
+        SecurityControl::OomScoreAdj => SecurityControlMap {
+            control,
+            cli: "--oom-score-adj",
+            run_config: "oom_score_adj",
+            exec_spec: Some("oom_score_adj"),
+        },
+        SecurityControl::ShmSize => SecurityControlMap {
+            control,
+            cli: "--shm-size",
+            run_config: "shm_size",
+            exec_spec: Some("shm_size"),
+        },
+        SecurityControl::Tmpfs => SecurityControlMap {
+            control,
+            cli: "--tmpfs",
+            run_config: "tmpfs",
+            exec_spec: Some("tmpfs"),
+        },
+        SecurityControl::NetworkMode => SecurityControlMap {
+            control,
+            cli: "--net",
+            run_config: "net_isolate",
+            exec_spec: Some("net_isolate"),
+        },
+        SecurityControl::AddHost => SecurityControlMap {
+            control,
+            cli: "--add-host",
+            run_config: "add_host",
+            exec_spec: Some("add_host"),
+        },
+        SecurityControl::Healthcheck => SecurityControlMap {
+            control,
+            cli: "--health-*",
+            run_config: "healthcheck",
+            exec_spec: None,
+        },
+        SecurityControl::Secret => SecurityControlMap {
+            control,
+            cli: "--secret",
+            run_config: "secrets",
+            exec_spec: None,
+        },
+        SecurityControl::Config => SecurityControlMap {
+            control,
+            cli: "--config",
+            run_config: "configs",
+            exec_spec: None,
+        },
+    }
+}
+
+#[cfg(test)]
+mod security_inventory_tests {
+    use super::*;
+
+    #[test]
+    fn inventory_is_complete_unique_and_matches_compile_forced_mapping() {
+        let inventory: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../benchmarks/s3/security/inventory.json"
+        )))
+        .unwrap();
+        let rows = inventory["controls"].as_array().unwrap();
+        assert_eq!(rows.len(), SecurityControl::ALL.len());
+        let mut seen = std::collections::BTreeSet::new();
+        for row in rows {
+            let control = row["control"].as_str().unwrap();
+            assert!(
+                seen.insert(control),
+                "duplicate inventory control: {control}"
+            );
+            let mapped = SecurityControl::ALL
+                .iter()
+                .copied()
+                .find(|c| c.name() == control)
+                .unwrap_or_else(|| panic!("unknown inventory control: {control}"));
+            let map = security_control_map(mapped);
+            assert_eq!(map.control, mapped);
+            assert_eq!(row["cli"].as_str(), Some(map.cli));
+            assert_eq!(row["run_config"].as_str(), Some(map.run_config));
+            assert_eq!(row["exec_spec"].as_str(), map.exec_spec);
+            for engine in ["native", "ns", "vz"] {
+                assert!(
+                    matches!(
+                        row[engine].as_str(),
+                        Some("enforced" | "refused" | "unsupported")
+                    ),
+                    "{control}/{engine} needs typed engine outcome"
+                );
+            }
+            for required in ["enforcement", "oracle", "fixture", "mutation"] {
+                assert!(
+                    row[required]
+                        .as_str()
+                        .is_some_and(|value| !value.is_empty()),
+                    "{control} missing {required}"
+                );
+            }
+        }
+    }
+}
+
 /// WP-#92: `--privileged` cannot be honestly enforced on the rootless `ns` engine
 /// (no real privilege in an unprivileged user namespace), so it is HONEST-ERRORED
 /// (exit 2) BEFORE any provisioning rather than silently recorded — a silent no-op

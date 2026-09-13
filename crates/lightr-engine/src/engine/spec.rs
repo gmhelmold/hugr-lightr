@@ -2,6 +2,91 @@
 
 use std::path::Path;
 
+/// Closed S3 security inventory. Adding a control requires an exhaustive
+/// parser-to-spec mapping in the CLI before code can compile.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SecurityControl {
+    User,
+    Hostname,
+    Labels,
+    Tty,
+    Init,
+    Privileged,
+    ReadOnly,
+    CapAdd,
+    CapDrop,
+    Seccomp,
+    AppArmor,
+    MemoryLimit,
+    CpuLimit,
+    PidsLimit,
+    Ulimit,
+    OomScoreAdj,
+    ShmSize,
+    Tmpfs,
+    NetworkMode,
+    AddHost,
+    Healthcheck,
+    Secret,
+    Config,
+}
+
+impl SecurityControl {
+    pub const ALL: [Self; 23] = [
+        Self::User,
+        Self::Hostname,
+        Self::Labels,
+        Self::Tty,
+        Self::Init,
+        Self::Privileged,
+        Self::ReadOnly,
+        Self::CapAdd,
+        Self::CapDrop,
+        Self::Seccomp,
+        Self::AppArmor,
+        Self::MemoryLimit,
+        Self::CpuLimit,
+        Self::PidsLimit,
+        Self::Ulimit,
+        Self::OomScoreAdj,
+        Self::ShmSize,
+        Self::Tmpfs,
+        Self::NetworkMode,
+        Self::AddHost,
+        Self::Healthcheck,
+        Self::Secret,
+        Self::Config,
+    ];
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Hostname => "hostname",
+            Self::Labels => "labels",
+            Self::Tty => "tty",
+            Self::Init => "init",
+            Self::Privileged => "privileged",
+            Self::ReadOnly => "read_only",
+            Self::CapAdd => "cap_add",
+            Self::CapDrop => "cap_drop",
+            Self::Seccomp => "seccomp",
+            Self::AppArmor => "apparmor",
+            Self::MemoryLimit => "memory_limit",
+            Self::CpuLimit => "cpu_limit",
+            Self::PidsLimit => "pids_limit",
+            Self::Ulimit => "ulimit",
+            Self::OomScoreAdj => "oom_score_adj",
+            Self::ShmSize => "shm_size",
+            Self::Tmpfs => "tmpfs",
+            Self::NetworkMode => "network_mode",
+            Self::AddHost => "add_host",
+            Self::Healthcheck => "healthcheck",
+            Self::Secret => "secret",
+            Self::Config => "config",
+        }
+    }
+}
+
 // ── Mount types (R-MOUNT, parity-contract.md §0) ────────────────────────────
 //
 // `ExecSpec` borrows a `&[ResolvedMount]` (R-EXECSPEC). Because `lightr-run`
