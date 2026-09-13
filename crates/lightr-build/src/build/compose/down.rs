@@ -3,6 +3,8 @@ use lightr_core::{LightrError, Result};
 use std::path::{Path, PathBuf};
 
 use super::model::{ServiceSpec, StackSpec};
+use super::supervise::service_cwd_path;
+use super::supervise_replicas::replica_run_names;
 
 /// #75 FIX-1: every run dir recorded for a service, de-duplicated and in record
 /// order. Folds the current `run_dirs` list (one entry per replica instance) with
@@ -37,6 +39,17 @@ pub fn compose_down(stack_dir: &Path) -> Result<()> {
                         let dir = PathBuf::from(run_dir);
                         if dir.exists() {
                             let _ = lightr_run::stop(&dir, 2);
+                        }
+                    }
+                    // Service workdirs are generated under a project-scoped
+                    // namespace. Remove only names this stack's own spec can
+                    // derive, after all recorded runs have been stopped.
+                    if let Ok(run_names) = replica_run_names(svc) {
+                        for run_name in run_names {
+                            let cwd = service_cwd_path(&spec.project, &run_name);
+                            if cwd.exists() {
+                                std::fs::remove_dir_all(cwd).map_err(LightrError::Io)?;
+                            }
                         }
                     }
                 }
