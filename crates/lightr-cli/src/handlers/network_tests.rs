@@ -166,7 +166,7 @@ fn inspect_rejects_predefined_networks() {
 // ── connect / disconnect ──────────────────────────────────────────────────────
 
 #[test]
-fn connect_is_honest_exit_2() {
+fn s3_network_connect_is_typed_refusal_exit_2() {
     let code = run(NetworkCmd::Connect {
         network: "web".to_string(),
         container: "ctr1".to_string(),
@@ -175,7 +175,7 @@ fn connect_is_honest_exit_2() {
 }
 
 #[test]
-fn disconnect_is_honest_exit_2() {
+fn s3_network_disconnect_is_typed_refusal_exit_2() {
     let code = run(NetworkCmd::Disconnect {
         network: "web".to_string(),
         container: "ctr1".to_string(),

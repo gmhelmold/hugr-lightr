@@ -28,7 +28,7 @@
 //! they are parallel-safe under `cargo test --workspace`.
 
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use lightr_core::LightrError;
 use lightr_run::name_validate;
@@ -52,11 +52,6 @@ fn is_predefined(name: &str) -> bool {
 /// surface them as `Io` (exit-1) rather than collapsing to a usage error.
 fn json_err(e: serde_json::Error) -> LightrError {
     LightrError::Io(io::Error::other(e.to_string()))
-}
-
-/// `<home>/net/<name>` — the on-disk dir the registry owns for a network.
-fn net_dir(home: &Path, name: &str) -> PathBuf {
-    home.join("net").join(name)
 }
 
 // ── ls ──────────────────────────────────────────────────────────────────────
@@ -135,14 +130,7 @@ fn rm_one(home: &Path, name: &str) -> Result<(), LightrError> {
     }
     let reg = NetworkRegistry::open(home, &name.to_string())
         .map_err(|_| LightrError::RefNotFound(format!("network {name}")))?;
-    let members = reg.members().map_err(LightrError::Io)?;
-    if !members.is_empty() {
-        return Err(LightrError::Io(io::Error::other(format!(
-            "network {name} has active endpoints ({} member(s)); cannot remove",
-            members.len()
-        ))));
-    }
-    std::fs::remove_dir_all(net_dir(home, name)).map_err(LightrError::Io)?;
+    reg.remove().map_err(LightrError::Io)?;
     println!("{name}");
     Ok(())
 }

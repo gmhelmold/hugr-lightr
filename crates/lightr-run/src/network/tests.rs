@@ -97,6 +97,25 @@ fn leave_returns_remaining_count() {
 }
 
 #[test]
+fn s3_network_registry_remove_refuses_member_then_removes_empty_network() {
+    let h = home();
+    let id = "lifecycle".to_string();
+    let reg = NetworkRegistry::create(h.path(), &id).unwrap();
+    reg.join("api", &[], &[]).unwrap();
+
+    let err = reg.remove().unwrap_err();
+    assert!(err.to_string().contains("active endpoints"));
+    assert!(NetworkRegistry::open(h.path(), &id).is_ok());
+
+    reg.leave("api").unwrap();
+    reg.remove().unwrap();
+    let err = NetworkRegistry::open(h.path(), &id)
+        .err()
+        .expect("network removed");
+    assert_eq!(err.kind(), io::ErrorKind::NotFound);
+}
+
+#[test]
 fn list_enumerates_networks_sorted() {
     let h = home();
     NetworkRegistry::create(h.path(), &"zeta".to_string()).unwrap();

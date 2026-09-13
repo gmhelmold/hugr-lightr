@@ -184,6 +184,21 @@ impl NetworkRegistry {
         Ok(remaining)
     }
 
+    /// Remove an empty network while holding its membership lock. This closes the
+    /// inspect-then-delete race: a concurrent spawn cannot join after the empty
+    /// check and before the directory disappears.
+    pub fn remove(&self) -> io::Result<()> {
+        let _guard = FlockGuard::acquire(&self.lock_path(), true)?;
+        let members = self.read_members()?;
+        if !members.is_empty() {
+            return Err(io::Error::other(format!(
+                "network has active endpoints ({} member(s)); cannot remove",
+                members.len()
+            )));
+        }
+        fs::remove_dir_all(&self.dir)
+    }
+
     /// All current members (the switch's flooding set + DNS/lease seed).
     pub fn members(&self) -> io::Result<Vec<Member>> {
         let _guard = FlockGuard::acquire(&self.lock_path(), false)?;
