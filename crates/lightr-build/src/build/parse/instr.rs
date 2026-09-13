@@ -5,12 +5,15 @@
 //! dispatcher lives in `super` (`parse/mod.rs`); ONBUILD recurses back into it.
 
 use super::ast::{CmdForm, Healthcheck, HealthcheckOpts, Instr};
-use super::flags::{split_flags, take_flag};
+use super::flags::{split_flags, validate_flags};
 use super::parse_instruction;
 use lightr_core::{LightrError, Result};
 
 pub(super) fn parse_from(rest: &str) -> Result<Instr> {
-    let (platform, rest) = take_flag(rest, "platform");
+    let (flags, positional) = split_flags(rest);
+    validate_flags(&flags, "FROM", &["platform"])?;
+    let platform = find_flag(&flags, "platform");
+    let rest = positional.join(" ");
     let toks: Vec<&str> = rest.split_ascii_whitespace().collect();
     if toks.is_empty() {
         return Err(LightrError::InvalidManifest(
@@ -37,6 +40,7 @@ pub(super) fn parse_from(rest: &str) -> Result<Instr> {
 
 pub(super) fn parse_add(rest: &str) -> Result<Instr> {
     let (flags, positional) = split_flags(rest);
+    validate_flags(&flags, "ADD", &["chown", "chmod"])?;
     let chown = find_flag(&flags, "chown");
     let chmod = find_flag(&flags, "chmod");
     let (src, dest) = src_dest(&positional, "ADD")?;
@@ -50,6 +54,7 @@ pub(super) fn parse_add(rest: &str) -> Result<Instr> {
 
 pub(super) fn parse_copy(rest: &str) -> Result<Instr> {
     let (flags, positional) = split_flags(rest);
+    validate_flags(&flags, "COPY", &["from", "chown", "chmod"])?;
     let from = find_flag(&flags, "from");
     let chown = find_flag(&flags, "chown");
     let chmod = find_flag(&flags, "chmod");
@@ -60,6 +65,26 @@ pub(super) fn parse_copy(rest: &str) -> Result<Instr> {
         from,
         chown,
         chmod,
+    })
+}
+
+pub(super) fn parse_run(rest: &str) -> Result<Instr> {
+    if let Some(flag) = rest
+        .split_ascii_whitespace()
+        .next()
+        .and_then(|token| token.strip_prefix("--"))
+    {
+        let name = flag.split_once('=').map_or(flag, |(name, _)| name);
+        let error = if name == "mount" {
+            "RUN: unsupported flag --mount".to_string()
+        } else {
+            format!("RUN: unknown flag --{name}")
+        };
+        return Err(LightrError::InvalidManifest(error));
+    }
+    Ok(Instr::Run {
+        argv: cmd_argv(rest),
+        form: cmd_form(rest),
     })
 }
 

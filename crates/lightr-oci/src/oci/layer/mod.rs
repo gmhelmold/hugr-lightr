@@ -91,7 +91,7 @@ pub(super) fn layer_timeout_secs() -> u64 {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Apply `blobs` in order into `tempdir`, honouring OCI whiteouts and path
-/// safety. Returns the number of escaped entries that were skipped.
+/// safety. Archive traversal rejects the entire import.
 ///
 /// Each blob may be gzip-compressed (auto-detected by magic bytes 0x1f 0x8b)
 /// or a plain tar archive.
@@ -109,10 +109,9 @@ pub(super) fn layer_timeout_secs() -> u64 {
 ///   Between passes — apply directory creates + all whiteouts.
 ///   Pass 2 (`apply_ops`) — write regular files and symlinks.
 ///   After pass 2 — resolve hardlinks (FIX 5).
-pub(super) fn apply_layers(tempdir: &Path, blobs: &[LayerBlob]) -> Result<u64> {
+pub(super) fn apply_layers(tempdir: &Path, blobs: &[LayerBlob]) -> Result<()> {
     let timeout = layer_timeout_secs();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout);
-    let mut skipped: u64 = 0;
     let mut entry_count: u64 = 0;
 
     for blob in blobs {
@@ -136,20 +135,14 @@ pub(super) fn apply_layers(tempdir: &Path, blobs: &[LayerBlob]) -> Result<u64> {
         // FIX 3: all whiteout operations execute before any file writes.
         // FIX 4: opaque whiteout clears the dir in the accumulated tree and
         //        creates it if absent.
-        let (dirs, whiteouts, pending, whited_out_paths) = collect_ops(
-            &mut archive,
-            tempdir,
-            deadline,
-            &mut entry_count,
-            &mut skipped,
-            timeout,
-        )?;
+        let (dirs, whiteouts, pending, whited_out_paths) =
+            collect_ops(&mut archive, tempdir, deadline, &mut entry_count, timeout)?;
 
         // ── Pass 2: apply dirs → whiteouts → files → hardlinks ───────────────
         apply_ops(tempdir, &dirs, &whiteouts, &pending, &whited_out_paths)?;
     }
 
-    Ok(skipped)
+    Ok(())
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -174,7 +167,7 @@ pub(super) fn apply_and_snapshot(
     fs::create_dir_all(&tempdir).map_err(LightrError::Io)?;
     let _guard = TempDirGuard(tempdir.clone());
 
-    let _skipped = apply_layers(&tempdir, &blobs)?;
+    apply_layers(&tempdir, &blobs)?;
 
     let report = lightr_index::snapshot(&tempdir, store, name)?;
 

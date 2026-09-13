@@ -5,8 +5,10 @@
 //! the spec to an engine — argv (entrypoint/cmd via `effective_argv`) and the
 //! cwd (workdir, CLI-over-image). They never spawn an engine, so they are
 //! parallel-safe and platform-independent.
-use super::{merge_image_env, resolve_run_cwd};
+use super::{image_config_from_oci, load_image_config, merge_image_env, resolve_run_cwd};
 use lightr_build::{effective_argv, ImageConfig};
+use lightr_core::LightrError;
+use lightr_store::Store;
 use std::path::{Path, PathBuf};
 
 fn pairs(kv: &[(&str, &str)]) -> Vec<(String, String)> {
@@ -161,4 +163,82 @@ fn user_none_when_neither_set() {
     let image_user: Option<String> = None;
     let cli: Option<&str> = None;
     assert_eq!(cli.or(image_user.as_deref()), None);
+}
+
+#[test]
+fn retained_oci_config_converts_runtime_fields() {
+    let cfg = image_config_from_oci(
+        br#"{"config":{"Entrypoint":["/init"],"Cmd":["serve"],"Env":["PATH=/bin","LANG=C"],"WorkingDir":"/app","User":"1000:1000"}}"#,
+    )
+    .unwrap();
+
+    assert_eq!(cfg.entrypoint, Some(vec!["/init".to_string()]));
+    assert_eq!(cfg.cmd, Some(vec!["serve".to_string()]));
+    assert_eq!(cfg.env, pairs(&[("PATH", "/bin"), ("LANG", "C")]));
+    assert_eq!(cfg.workdir.as_deref(), Some("/app"));
+    assert_eq!(cfg.user.as_deref(), Some("1000:1000"));
+}
+
+#[test]
+fn sidecar_wins_over_retained_oci_config() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let store = Store::open(tmp.path().join("store")).unwrap();
+    store
+        .image_config_put("img", br#"{"config":{"Cmd":["stored"]}}"#)
+        .unwrap();
+    let rootfs = tmp.path().join("rootfs");
+    std::fs::create_dir(&rootfs).unwrap();
+    ImageConfig {
+        cmd: Some(vec!["sidecar".to_string()]),
+        ..Default::default()
+    }
+    .save(&rootfs)
+    .unwrap();
+
+    assert_eq!(
+        load_image_config(Some(&rootfs), Some("img"), &store)
+            .unwrap()
+            .cmd,
+        Some(vec!["sidecar".to_string()])
+    );
+}
+
+#[test]
+fn malformed_stored_oci_config_is_rejected() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let store = Store::open(tmp.path().join("store")).unwrap();
+    store.image_config_put("img", b"not JSON").unwrap();
+    let rootfs = tmp.path().join("rootfs");
+    std::fs::create_dir(&rootfs).unwrap();
+
+    assert!(matches!(
+        load_image_config(Some(&rootfs), Some("img"), &store),
+        Err(LightrError::InvalidManifest(message)) if message.contains("OCI image config parse")
+    ));
+}
+
+#[test]
+fn oci_defaults_follow_final_cli_precedence() {
+    let cfg = image_config_from_oci(
+        br#"{"config":{"Entrypoint":["/init"],"Cmd":["serve"],"Env":["LANG=C","PATH=/bin"],"WorkingDir":"/app","User":"app"}}"#,
+    )
+    .unwrap();
+    let command = vec!["shell".to_string()];
+    let cli_env = pairs(&[("LANG", "en_US"), ("DEBUG", "1")]);
+
+    assert_eq!(effective_argv(&cfg, &command), vec!["/init", "shell"]);
+    assert_eq!(
+        merge_image_env(&cfg.env, &cli_env),
+        pairs(&[("LANG", "en_US"), ("PATH", "/bin"), ("DEBUG", "1")])
+    );
+    assert_eq!(
+        resolve_run_cwd(
+            Some("/cli"),
+            cfg.workdir.as_deref(),
+            true,
+            Path::new("/fallback")
+        ),
+        PathBuf::from("/cli")
+    );
+    assert_eq!(Some("1000:1000").or(cfg.user.as_deref()), Some("1000:1000"));
 }
