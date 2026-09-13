@@ -67,7 +67,7 @@ jobs:
       - name: Run smoke chunk
         env:
           CHUNK: "0"
-          TOTAL_CHUNKS: "20"
+          TOTAL_CHUNKS: "1"
           ROUNDS: "1"
           DOCKER_BIN: ${{ github.workspace }}/benchmarks/ci/docker
         run: bash benchmarks/scripts/06_full_suite.sh
