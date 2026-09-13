@@ -20,7 +20,9 @@ fixture/commands/assertions/source evidence. It permits no executable commands
 for a non-supported scenario.
 
 `run` selects source-list order where `index % chunks == chunk`; `chunks > 0`,
-`chunk < chunks`, `rounds > 0`, and explicit `--mode` are required. Each
+`chunk < chunks`, `rounds > 0`, and explicit `--mode` are required for S2
+differential evidence. Legacy S1 callers without `--mode` retain their existing
+private-per-round state semantics and are recorded as `cold`. Each
 supported scenario first runs one unrecorded warmup pair, then records exactly
 the supplied paired rounds. It creates
 `<out>/records.jsonl`, never prints synthetic success. Any selected supported

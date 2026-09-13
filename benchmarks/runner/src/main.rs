@@ -37,7 +37,7 @@ enum Action {
         #[arg(long)]
         rounds: usize,
         #[arg(long, value_enum)]
-        mode: Mode,
+        mode: Option<Mode>,
         #[arg(long)]
         out: PathBuf,
         #[arg(long)]
@@ -217,7 +217,16 @@ fn main() {
             out,
             docker,
             lightr,
-        } => run(&spec, chunk, chunks, rounds, mode, &out, &docker, &lightr),
+        } => run(
+            &spec,
+            chunk,
+            chunks,
+            rounds,
+            mode.unwrap_or(Mode::Cold),
+            &out,
+            &docker,
+            &lightr,
+        ),
         Action::Merge { input, out } => merge(&input, &out),
     };
     if let Err(error) = result {
