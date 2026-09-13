@@ -41,10 +41,7 @@ pub(crate) fn prepare_service_cwd(
     // `remove_dir_all` below lets project B wipe project A's RUNNING cwd. The
     // project is sanitized to the same grammar service run-dir names use so the
     // path is always filesystem-safe.
-    let cwd = std::env::temp_dir().join(format!(
-        "lightr-svc-{}-{run_name}",
-        sanitize_cwd_segment(project)
-    ));
+    let cwd = service_cwd_path(project, run_name);
     if cwd.exists() {
         std::fs::remove_dir_all(&cwd).map_err(LightrError::Io)?;
     }
@@ -53,6 +50,16 @@ pub(crate) fn prepare_service_cwd(
         lightr_index::hydrate(&cwd, store, &svc.image_ref)?;
     }
     Ok(cwd)
+}
+
+/// Stable compose service working-directory location. `compose_down` uses this
+/// same derivation after stopping every instance so project-scoped workdirs do
+/// not outlive their stack.
+pub(crate) fn service_cwd_path(project: &str, run_name: &str) -> PathBuf {
+    std::env::temp_dir().join(format!(
+        "lightr-svc-{}-{run_name}",
+        sanitize_cwd_segment(project)
+    ))
 }
 
 /// WP-DISC: sanitize a compose service name into an env-var key prefix.
@@ -271,6 +278,12 @@ fn start_one_instance(
             for s in &mut stack_spec.services {
                 if s.name == svc.name {
                     s.run_dirs.push(run_dir.clone());
+                    // `depends_on` resolves its service target through the
+                    // legacy scalar. Keep it as the first instance so health
+                    // and completion gates observe an eager dependency.
+                    if s.run_dir.is_none() {
+                        s.run_dir = Some(run_dir.clone());
+                    }
                 }
             }
             if let Ok(new_bytes) = serde_json::to_vec_pretty(&stack_spec) {

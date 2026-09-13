@@ -1,0 +1,66 @@
+schema_version: 1
+cases:
+  - case_id: compose-eager-semantic-matrix
+    fixture: fixtures/eager-stack
+    eager: true
+    docker:
+      - ${DOCKER}
+      - compose
+      - --project-name
+      - ${S3_NAMESPACE}
+      - --file
+      - ${FIXTURE_DIR}/compose.yml
+      - up
+      - --detach
+    lightr:
+      - ${LIGHTR}
+      - compose
+      - up
+      - --file
+      - ${FIXTURE_DIR}/compose.yml
+      - --project-name
+      - ${S3_NAMESPACE}
+      - --eager
+    readiness:
+      - ${FIXTURE_DIR}/probe-ready.sh
+      - ${S3_NAMESPACE}
+    teardown:
+      docker:
+        - ${DOCKER}
+        - compose
+        - --project-name
+        - ${S3_NAMESPACE}
+        - --file
+        - ${FIXTURE_DIR}/compose.yml
+        - down
+        - --volumes
+      lightr:
+        - ${LIGHTR}
+        - compose
+        - down
+        - --file
+        - ${FIXTURE_DIR}/compose.yml
+        - --project-name
+        - ${S3_NAMESPACE}
+    resources:
+      - ${S3_NAMESPACE}
+      - ${S3_NAMESPACE}-web
+      - ${S3_NAMESPACE}-db
+    healthcheck: true
+    assertions:
+      - id: command-exit
+        shared: true
+      - id: service-port-readiness
+        shared: true
+      - id: dependency-ordering
+        shared: true
+      - id: selected-profiles
+        shared: true
+      - id: project-isolation
+        shared: true
+      - id: teardown
+        shared: true
+      - id: logs
+        shared: true
+      - id: health-state
+        shared: true

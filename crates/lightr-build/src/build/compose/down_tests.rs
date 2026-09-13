@@ -117,3 +117,33 @@ fn compose_down_stops_both_replicas_and_removes_stack() {
         "compose down must remove the stack dir after stopping every instance"
     );
 }
+
+#[test]
+fn compose_down_removes_only_its_project_service_namespace() {
+    let tmp = TempDir::new().unwrap();
+    let stack_dir = tmp.path().join("stack");
+    fs::create_dir_all(&stack_dir).unwrap();
+    let svc = svc_with_run_dirs("web", vec![], None);
+    let spec = StackSpec {
+        ttl_secs: 60,
+        created_at_unix: 0,
+        project: "s3-project-a".to_string(),
+        supervisor_pid: None,
+        services: vec![svc],
+    };
+    fs::write(
+        stack_dir.join("spec.json"),
+        serde_json::to_vec_pretty(&spec).unwrap(),
+    )
+    .unwrap();
+
+    let own = super::service_cwd_path("s3-project-a", "web");
+    let other = super::service_cwd_path("s3-project-b", "web");
+    fs::create_dir_all(&own).unwrap();
+    fs::create_dir_all(&other).unwrap();
+
+    assert!(compose_down(&stack_dir).is_ok());
+    assert!(!own.exists(), "down must clean its project namespace");
+    assert!(other.exists(), "down must not clean another project namespace");
+    let _ = fs::remove_dir_all(other);
+}
