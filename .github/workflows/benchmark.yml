@@ -1,136 +1,163 @@
-name: lightr-benchmark
+name: benchmark-evidence
 
-# Adversarial benchmark: lightr vs Docker / Podman on an identical GitHub-hosted
-# Linux runner (reproducible, public hardware).
-#
-# HONEST SAME-ISOLATION (task #82, after #81 landed `--net=none`): the cold-start
-# section now runs EVERY variant with a full namespace set INCLUDING the network
-# namespace — lightr `--engine ns --net=none` (CLONE_NEWUSER|NEWNS|NEWPID|NEWNET,
-# rootless) vs `podman --network=none` (rootless — the fairest apples-to-apples,
-# same privilege class + same ns set) vs `docker --network=none` (rootful daemon —
-# labelled as reference, NOT same privilege). Privilege class is printed in every
-# row so the comparison cannot be silently overstated again.
-#
-# Variance: n=100 by default; each row reports mean / stddev / p50 / p95 / min /
-# max (nearest-rank percentiles) — a single avg hides the daemon's tail latency.
-#
-# Unambiguous wins (not runtime-vs-runtime): daemonless footprint + memoization.
-# See docs/benchmarks/RESULTS.md for the honest framing. Manual dispatch only.
 on:
+  push:
+  pull_request:
   workflow_dispatch:
     inputs:
-      iterations: { description: "iterations (>=100 for stable variance)", default: "100" }
+      full:
+        description: Run all 20 evidence chunks
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
 
 jobs:
-  bench:
-    runs-on: ubuntu-latest
+  verify:
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Kernel userns diagnostic (environment vs lightr bug)
+      - name: Verify CI paths
         run: |
-          set +e -x
-          echo "=== reference: unshare util rootless container (now WITH netns) ==="
-          unshare --user --map-root-user --mount --pid --net --fork -- /bin/true; echo "REF_FULL_EXIT=$?"
-          unshare --user --map-root-user -- id 2>&1 | head -2; echo "REF_MAPROOT_EXIT=$?"
-          true
-      - name: Toolchain
-        run: rustup toolchain install 1.96.0 --profile minimal --no-self-update && rustup default 1.96.0
-      - name: Build lightr (release)
-        run: cargo build -p lightr-cli --release -j2
-      - name: Set up runtimes
+          bash benchmarks/ci/validate_paths.sh
+          bash benchmarks/ci/test_validate_paths.sh
+      - name: Check shell syntax
         run: |
-          set +e -x
-          sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null
-          sudo apt-get update -qq && sudo apt-get install -y -qq podman bc
-          # ubuntu-24.04 GH runners harden unprivileged userns via AppArmor; allow
-          # it (the default on normal Linux hosts) so BOTH lightr's rootless ns
-          # engine AND rootless podman can create user+net namespaces.
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 2>/dev/null || true
-          sysctl kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || true
-          echo "=== subuid/subgid present for rootless podman? ==="
-          grep "$(id -un)" /etc/subuid /etc/subgid 2>/dev/null || echo "NO subuid/subgid (rootless podman may be UNAVAILABLE)"
-          docker pull -q alpine:latest; docker pull -q gcc:latest
-          # ROOTLESS podman store (separate from rootful) — pull without sudo so the
-          # same-isolation comparison runs rootless, matching lightr --engine ns.
-          podman pull -q docker.io/library/alpine:latest 2>&1 | tail -1
-          true
-
-      - name: Prepare alpine rootfs as a lightr CAS ref
+          bash -n benchmarks/ci/docker
+          bash -n benchmarks/ci/install_docker.sh
+          bash -n benchmarks/ci/validate_paths.sh
+          bash -n benchmarks/ci/test_validate_paths.sh
+          bash -n benchmarks/scripts/00_verify_environment.sh
+          bash -n benchmarks/scripts/06_full_suite.sh
+          bash -n benchmarks/scripts/08_validate.sh
+          bash -n benchmarks/scripts/09_publish.sh
+          bash -n benchmarks/scripts/test_corpus.sh
+          bash -n benchmarks/scripts/test_preparation_scripts.sh
+      - name: Build standalone runner
+        run: cargo build --manifest-path benchmarks/runner/Cargo.toml --release
+      - name: Verify corpus
         run: |
-          set +e -x
-          BIN="$PWD/target/release/lightr"
-          cid=$(docker create alpine:latest); docker export "$cid" -o /tmp/al.tar; docker rm "$cid"
-          mkdir -p /tmp/alroot && sudo tar -xf /tmp/al.tar -C /tmp/alroot
-          "$BIN" snapshot --dir /tmp/alroot --name alpine 2>&1 | head -8
-          echo "=== SMOKE: ns --net=none runs (full isolation incl. netns) ==="
-          "$BIN" run --engine ns --net=none --rootfs alpine -- /bin/true 2>&1 | tail -4; echo "ns_netnone_smoke_exit=${PIPESTATUS[0]}"
-          true
+          "$GITHUB_WORKSPACE/benchmarks/runner/target/release/bench-runner" verify-spec --spec "$GITHUB_WORKSPACE/benchmarks/benchmark-spec.yaml"
+          bash benchmarks/scripts/test_corpus.sh
+      - name: Test runner
+        run: cargo test --manifest-path benchmarks/runner/Cargo.toml
+      - name: Test preparation scripts
+        run: bash benchmarks/scripts/test_preparation_scripts.sh
+      - name: Test reporter
+        run: python3 -m unittest benchmarks.reporter.tests.test_reporter
 
-      - name: Benchmark
+  smoke:
+    if: github.event_name != 'workflow_dispatch' || inputs.full == false
+    needs: verify
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Docker
+        run: bash benchmarks/ci/install_docker.sh
+      - name: Build Lightr CLI
+        run: cargo build -p lightr-cli --release
+      - name: Build standalone runner
+        run: cargo build --manifest-path benchmarks/runner/Cargo.toml --release
+      - name: Run smoke chunk
+        env:
+          CHUNK: "0"
+          TOTAL_CHUNKS: "20"
+          ROUNDS: "1"
+          DOCKER_BIN: ${{ github.workspace }}/benchmarks/ci/docker
+        run: bash benchmarks/scripts/06_full_suite.sh
+      - name: Merge and validate smoke evidence
+        env:
+          RAW_DIR: ${{ github.workspace }}/benchmarks/work/results/full
+          MERGED_DIR: ${{ github.workspace }}/benchmarks/work/merged
+          MERGED_JSONL: ${{ github.workspace }}/benchmarks/work/merged/merged.jsonl
+          ROUNDS: "1"
         run: |
-          set +e
-          BIN="$PWD/target/release/lightr"; N="${{ inputs.iterations }}"
-          R=/tmp/bench.txt; : > "$R"
+          "$GITHUB_WORKSPACE/benchmarks/runner/target/release/bench-runner" merge --input "$RAW_DIR" --out "$MERGED_DIR"
+          bash benchmarks/scripts/08_validate.sh
+      - name: Report smoke evidence
+        run: python3 benchmarks/reporter/report.py --input "$GITHUB_WORKSPACE/benchmarks/work/merged/merged.jsonl" --out "$GITHUB_WORKSPACE/benchmarks/work/reports"
+      - name: Archive smoke evidence
+        env:
+          RAW_DIR: ${{ github.workspace }}/benchmarks/work/results/full
+          MERGED_DIR: ${{ github.workspace }}/benchmarks/work/merged
+          REPORTS_DIR: ${{ github.workspace }}/benchmarks/work/reports
+          ARCHIVE_DIR: ${{ github.workspace }}/benchmarks/work/archive
+        run: bash benchmarks/scripts/09_publish.sh
+      - name: Upload smoke evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-evidence-smoke
+          path: benchmarks/work/archive
+          if-no-files-found: error
 
-          # Collect every sample, then report mean/sd/p50/p95/min/max (nearest-rank).
-          # $1=name, $2=iters, rest=command. Cold-start uses the full N (variance);
-          # the memoization probe uses a small count (each docker compile is ~20s —
-          # the ~1900x gap is structural, it does NOT need n=100 to be visible).
-          bench(){
-            local name="$1" reps="$2"; shift 2
-            local tmp=/tmp/samp.$$; : > "$tmp"; local i a b ok=0
-            for i in $(seq 1 "$reps"); do
-              a=$(date +%s.%N)
-              if eval "$@" >/dev/null 2>&1; then
-                b=$(date +%s.%N)
-                awk -v a="$a" -v b="$b" 'BEGIN{printf "%.4f\n",(b-a)*1000}' >> "$tmp"
-                ok=$((ok+1))
-              fi
-            done
-            if [ "$ok" = 0 ]; then
-              printf "%-30s UNAVAILABLE (0/%d)\n" "$name" "$reps" | tee -a "$R"; rm -f "$tmp"; return
-            fi
-            sort -n "$tmp" | awk -v name="$name" -v ok="$ok" -v n="$reps" '
-              function rank(p,  r){ r=int((p/100)*NR + 0.999999); if(r<1)r=1; if(r>NR)r=NR; return v[r] }
-              {v[NR]=$1; s+=$1}
-              END{
-                m=s/NR; for(i=1;i<=NR;i++){d=v[i]-m; ss+=d*d} sd=sqrt(ss/NR)
-                printf "%-30s mean=%8.1f sd=%7.1f p50=%8.1f p95=%8.1f min=%8.1f max=%8.1f ms (ok %d/%d)\n", \
-                  name, m, sd, rank(50), rank(95), v[1], v[NR], ok, n
-              }' | tee -a "$R"
-            rm -f "$tmp"
-          }
-
-          echo "===== FOOTPRINT idle (daemonless = unambiguous win) =====" | tee -a "$R"
-          dr=$(ps -o rss= -p "$(pgrep -f dockerd|head -1)" 2>/dev/null|tr -d ' '); cr=$(ps -o rss= -p "$(pgrep -x containerd|head -1)" 2>/dev/null|tr -d ' ')
-          printf "docker daemons: %d MB | podman: 0 (forks per run) | lightr: 0 (no daemon)\n" $(( (${dr:-0}+${cr:-0})/1024 ))|tee -a "$R"
-
-          echo "" | tee -a "$R"
-          echo "===== COLD-START — HONEST SAME-ISOLATION (full ns INCL. network ns) =====" | tee -a "$R"
-          echo "  rootless rows = same privilege class as lightr; rootful = reference only" | tee -a "$R"
-          # warm each path once (page cache / first-run setup) before timing
-          "$BIN" run --engine ns --net=none --rootfs alpine -- /bin/true >/dev/null 2>&1
-          podman run --rm --network=none alpine true >/dev/null 2>&1
-          docker run --rm --network=none alpine true >/dev/null 2>&1
-          bench "lightr ns --net=none [rootless]"  "$N" '"'"$BIN"'" run --engine ns --net=none --rootfs alpine -- /bin/true'
-          bench "podman --network=none [rootless]" "$N" 'podman run --rm --network=none alpine true'
-          bench "docker --network=none [rootful]"  "$N" 'docker run --rm --network=none alpine true'
-
-          echo "" | tee -a "$R"
-          echo "===== lightr NATIVE (no isolation — trusted/CI mode, for context) =====" | tee -a "$R"
-          "$BIN" run -- true >/dev/null 2>&1
-          bench "lightr native (no isol.)"  "$N" '"'"$BIN"'" run -- true'
-
-          echo "" | tee -a "$R"
-          echo "===== MEMOIZATION on real build (compile 20k C fns -O2; a FEATURE docker lacks) =====" | tee -a "$R"
-          echo "  (n=10 — each docker compile is ~20s; the gap is structural, not a tail)" | tee -a "$R"
-          python3 -c "print('\n'.join('int f%d(int x){return x*%d+%d;}'%(i,i,i) for i in range(20000)))" > /tmp/w.c
-          bench "docker compile (always)"   10 'docker run --rm -v /tmp:/w gcc:latest gcc -O2 -c /w/w.c -o /tmp/d.o'
-          "$BIN" run -- gcc -O2 -c /tmp/w.c -o /tmp/l.o >/dev/null 2>&1
-          bench "lightr compile (memoized)" 10 '"'"$BIN"'" run -- gcc -O2 -c /tmp/w.c -o /tmp/l.o'
-
-          { echo "## lightr SOTA benchmark — ubuntu-latest, $N iters (variance)"; echo '```'; cat "$R"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-          echo "----- RESULTS -----"; cat "$R"
-      - uses: actions/upload-artifact@v4
+  full:
+    if: github.event_name == 'workflow_dispatch' && inputs.full
+    needs: verify
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        chunk: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Docker
+        run: bash benchmarks/ci/install_docker.sh
+      - name: Build Lightr CLI
+        run: cargo build -p lightr-cli --release
+      - name: Build standalone runner
+        run: cargo build --manifest-path benchmarks/runner/Cargo.toml --release
+      - name: Run evidence chunk
+        env:
+          CHUNK: ${{ matrix.chunk }}
+          TOTAL_CHUNKS: "20"
+          ROUNDS: "1"
+          DOCKER_BIN: ${{ github.workspace }}/benchmarks/ci/docker
+        run: bash benchmarks/scripts/06_full_suite.sh
+      - name: Upload raw chunk
         if: always()
-        with: { name: bench-results, path: /tmp/bench.txt }
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-raw-chunk-${{ matrix.chunk }}
+          path: benchmarks/work/results/full/chunk-${{ matrix.chunk }}
+          if-no-files-found: error
+
+  full-merge:
+    needs: full
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build standalone runner
+        run: cargo build --manifest-path benchmarks/runner/Cargo.toml --release
+      - name: Download raw chunks
+        uses: actions/download-artifact@v4
+        with:
+          pattern: benchmark-raw-chunk-*
+          path: benchmarks/work/results/full
+          merge-multiple: true
+      - name: Merge and validate full evidence
+        env:
+          RAW_DIR: ${{ github.workspace }}/benchmarks/work/results/full
+          MERGED_DIR: ${{ github.workspace }}/benchmarks/work/merged
+          MERGED_JSONL: ${{ github.workspace }}/benchmarks/work/merged/merged.jsonl
+          ROUNDS: "1"
+        run: |
+          "$GITHUB_WORKSPACE/benchmarks/runner/target/release/bench-runner" merge --input "$RAW_DIR" --out "$MERGED_DIR"
+          bash benchmarks/scripts/08_validate.sh
+      - name: Report full evidence
+        run: python3 benchmarks/reporter/report.py --input "$GITHUB_WORKSPACE/benchmarks/work/merged/merged.jsonl" --out "$GITHUB_WORKSPACE/benchmarks/work/reports"
+      - name: Archive full evidence
+        env:
+          RAW_DIR: ${{ github.workspace }}/benchmarks/work/results/full
+          MERGED_DIR: ${{ github.workspace }}/benchmarks/work/merged
+          REPORTS_DIR: ${{ github.workspace }}/benchmarks/work/reports
+          ARCHIVE_DIR: ${{ github.workspace }}/benchmarks/work/archive
+        run: bash benchmarks/scripts/09_publish.sh
+      - name: Upload full evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-evidence-full
+          path: benchmarks/work/archive
+          if-no-files-found: error
