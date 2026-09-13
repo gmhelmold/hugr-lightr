@@ -297,7 +297,9 @@ fn materialize_fixture(spec_path: &Path, scenario: &Scenario, project: Option<&P
     let fixture = scenario.fixture.as_ref().and_then(|f| f.path.as_deref()).ok_or_else(|| format!("missing fixture path for {}", scenario.id))?;
     let context = scenario.fixture.as_ref().and_then(|f| f.context.as_deref()).ok_or_else(|| format!("missing fixture context for {}", scenario.id))?;
     let fixture_path = Path::new(fixture);
+    let context_path = Path::new(context);
     if fixture_path.is_absolute() || fixture_path.components().any(|c| matches!(c, Component::ParentDir | Component::RootDir | Component::Prefix(_))) { return Err(format!("unsafe fixture path for {}", scenario.id)); }
+    if context_path.is_absolute() || context_path.components().any(|c| matches!(c, Component::ParentDir | Component::RootDir | Component::Prefix(_))) { return Err(format!("unsafe fixture context for {}", scenario.id)); }
     let root = spec_path.parent().and_then(Path::parent).ok_or_else(|| "spec must have benchmarks parent".to_string())?;
     let verified = Command::new("git").args(["-C"]).arg(root).args(["rev-parse", "--verify", &format!("{commit}^{{commit}}")]).output().map_err(|e| format!("verify fixture commit: {e}"))?;
     if !verified.status.success() { return Err(format!("missing local fixture commit: {commit}")); }
@@ -311,7 +313,6 @@ fn materialize_fixture(spec_path: &Path, scenario: &Scenario, project: Option<&P
     tar.stdin.take().ok_or_else(|| "extract fixture stdin unavailable".to_string())?.write_all(&archive.stdout).map_err(|e| e.to_string())?;
     if !tar.wait().map_err(|e| e.to_string())?.success() { return Err(format!("extract fixture {} failed", fixture)); }
     if fs::read_dir(&destination).map_err(|e| e.to_string())?.next().is_none() { return Err(format!("fixture path absent at commit: {}", fixture)); }
-    let context_path = Path::new(context);
     let relative_context = context_path.strip_prefix(fixture_path).map_err(|_| format!("fixture context escapes fixture path for {}", scenario.id))?;
     let materialized_context = destination.join(relative_context);
     if !materialized_context.is_dir() { return Err(format!("fixture context absent at commit: {}", context)); }
@@ -460,6 +461,7 @@ mod tests {
     #[test] fn supported_fixture_requires_context() { let mut spec = corpus(); let mut supported = scenario("supported", Availability::Supported); supported.fixture.as_mut().unwrap().context = None; spec.scenarios[0] = supported; assert!(validate_spec(&spec).unwrap_err().contains("missing supported fixture path/context")); }
     #[test] fn invalid_chunk_args_rejected() { assert!(run(Path::new("missing"), 0, 0, 1, Path::new("/tmp/x"), Path::new("x"), Path::new("x")).is_err()); assert!(run(Path::new("missing"), 1, 1, 1, Path::new("/tmp/x"), Path::new("x"), Path::new("x")).is_err()); assert!(run(Path::new("missing"), 0, 1, 0, Path::new("/tmp/x"), Path::new("x"), Path::new("x")).is_err()); }
     #[test] fn missing_local_fixture_commit_fails() { let root = temp("missing-commit"); let spec = root.join("benchmarks/spec.yaml"); fs::create_dir_all(spec.parent().unwrap()).unwrap(); fs::write(&spec, "x").unwrap(); let scenario = scenario("x", Availability::Supported); let project = Project { id: "local".into(), repo: "local".into(), commit: Some("0000000000000000000000000000000000000000".into()) }; assert!(materialize_fixture(&spec, &scenario, Some(&project), &root.join("out")).unwrap_err().contains("missing local fixture commit")); }
+    #[test] fn fixture_context_parent_traversal_is_rejected_before_materialization() { let root = temp("unsafe-context"); let spec = root.join("benchmarks/spec.yaml"); fs::create_dir_all(spec.parent().unwrap()).unwrap(); fs::write(&spec, "x").unwrap(); let mut scenario = scenario("x", Availability::Supported); scenario.fixture.as_mut().unwrap().context = Some("fixtures/x/../../outside".into()); let project = Project { id: "local".into(), repo: "local".into(), commit: Some("0000000000000000000000000000000000000000".into()) }; assert!(materialize_fixture(&spec, &scenario, Some(&project), &root.join("out")).unwrap_err().contains("unsafe fixture context")); }
     #[test] fn failed_command_is_failed() { let result = run_shell("exit 7", Duration::from_secs(1), None); assert_eq!(result.status.unwrap().code(), Some(7)); }
     #[test] fn timeout_is_typed() { let result = run_shell("sleep 1", Duration::from_millis(20), None); assert!(result.timed_out); }
     #[test] fn scenario_shell_gets_private_lightr_home() { let home = temp("lightr-home"); let command = format!("test \"$LIGHTR_HOME\" = {}", shell_quote(&home.display().to_string())); let result = run_shell(&command, Duration::from_secs(1), Some(&home)); assert!(result.status.unwrap().success()); }

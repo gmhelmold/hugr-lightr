@@ -160,6 +160,7 @@ def validate_records(records: list[dict[str, Any]], scenarios: dict[str, str], r
     typed_skips = 0
     seen: set[tuple[str, str, int]] = set()
     supported_seen: set[tuple[str, str, int]] = set()
+    skips_seen: set[tuple[str, str, int]] = set()
 
     for index, record in enumerate(records, start=1):
         location = f"record {index}"
@@ -200,15 +201,19 @@ def validate_records(records: list[dict[str, Any]], scenarios: dict[str, str], r
                 errors.append(f"{location}: non-supported scenario is not typed skip")
             else:
                 typed_skips += 1
+                skips_seen.add(key)
 
     for scenario_id, availability in scenarios.items():
-        if availability != "supported":
-            continue
-        for tool in ("docker", "lightr"):
-            for round_number in range(rounds):
-                expected = (scenario_id, tool, round_number)
-                if expected not in supported_seen:
-                    errors.append(f"missing expected supported record: {expected}")
+        if availability == "supported":
+            for tool in ("docker", "lightr"):
+                for round_number in range(rounds):
+                    expected = (scenario_id, tool, round_number)
+                    if expected not in supported_seen:
+                        errors.append(f"missing expected supported record: {expected}")
+        else:
+            expected = (scenario_id, "skip", 0)
+            if expected not in skips_seen:
+                errors.append(f"missing expected typed skip: {expected}")
     return errors, {"typed_skips": typed_skips, "records": len(records)}
 
 

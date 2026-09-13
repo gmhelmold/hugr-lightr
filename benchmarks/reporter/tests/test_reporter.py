@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import re
 import shutil
 import subprocess
 import sys
@@ -35,6 +36,23 @@ class ReporterTests(unittest.TestCase):
             record["spec_sha256"] = digest
             if record["availability"] == "supported":
                 record["assertions"] = [{"kind": "exit_code", "passed": True}]
+        existing = {record["scenario_id"] for record in records}
+        skip_template = next(record for record in records if record["tool"] == "skip")
+        scenario_id = None
+        for line in SPEC.read_text(encoding="utf-8").splitlines():
+            match = re.match(r"^- id: ([^\s#]+)\s*$", line)
+            if match:
+                scenario_id = match.group(1)
+                continue
+            match = re.match(r"^  availability: ([^\s#]+)\s*$", line)
+            if scenario_id and match:
+                if match.group(1) != "supported" and scenario_id not in existing:
+                    skip = dict(skip_template)
+                    skip["scenario_id"] = scenario_id
+                    skip["availability"] = match.group(1)
+                    skip["spec_sha256"] = digest
+                    records.append(skip)
+                scenario_id = None
         raw_path.write_text("\n".join(json.dumps(record, sort_keys=True) for record in records) + "\n", encoding="utf-8")
 
     def test_reports_come_from_checked_in_raw_fixture(self) -> None:
@@ -75,8 +93,17 @@ class ReporterTests(unittest.TestCase):
             self.assert_green_fixture(raw_path)
 
             original = raw_path.read_text(encoding="utf-8")
-            lines = original.splitlines()
-            raw_path.write_text("\n".join(lines[:-1]) + "\n", encoding="utf-8")
+            records = [json.loads(line) for line in original.splitlines()]
+            records = [
+                record
+                for record in records
+                if not (
+                    record["scenario_id"] == "build-single-stage"
+                    and record["tool"] == "lightr"
+                    and record["round"] == 1
+                )
+            ]
+            raw_path.write_text("\n".join(json.dumps(record, sort_keys=True) for record in records) + "\n", encoding="utf-8")
             red = subprocess.run(command, check=False, text=True, capture_output=True)
             self.assertNotEqual(red.returncode, 0)
             self.assertIn("missing expected supported record", red.stderr)
@@ -84,6 +111,24 @@ class ReporterTests(unittest.TestCase):
             raw_path.write_text(original, encoding="utf-8")
             restored = subprocess.run(command, check=False, text=True, capture_output=True)
             self.assertEqual(restored.returncode, 0, restored.stderr)
+
+    def test_validator_rejects_missing_typed_skip_then_restores_green(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            raw_path = Path(temporary) / "raw.jsonl"
+            shutil.copyfile(FIXTURE, raw_path)
+            self.pin_fixture_spec_digest(raw_path)
+            original = raw_path.read_text(encoding="utf-8")
+            self.assert_green_fixture(raw_path)
+
+            records = [json.loads(line) for line in original.splitlines()]
+            records = [record for record in records if record["scenario_id"] != "build-multi-stage-go"]
+            raw_path.write_text("\n".join(json.dumps(record, sort_keys=True) for record in records) + "\n", encoding="utf-8")
+            red = subprocess.run(self.validator_command(raw_path), check=False, text=True, capture_output=True)
+            self.assertNotEqual(red.returncode, 0)
+            self.assertIn("missing expected typed skip", red.stderr)
+
+            raw_path.write_text(original, encoding="utf-8")
+            self.assert_green_fixture(raw_path)
 
     def test_validator_rejects_malformed_duplicate_and_bad_supported_outcomes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
