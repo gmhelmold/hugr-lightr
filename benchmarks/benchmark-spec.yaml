@@ -1,0 +1,4326 @@
+---
+metadata:
+  spec_version: 1.0.0-s1-a-frozen
+  target: Docker CLI/Engine 28.3.2
+  source_commit: b85ea310f6d5ea4fcf843f37edaa26ab2ac5b3af
+  status: evidence-gated
+taxonomy:
+  category:
+  - build
+  - buildkit
+  - run
+  - compose
+  - network
+  - volume
+  - security
+  - resources
+  - logging
+  - registry
+  - health
+  - plugin
+  - swarm
+  evidence:
+  - unverified-fixture
+source_evidence:
+  lightr_cli:
+    commit: b85ea310f6d5ea4fcf843f37edaa26ab2ac5b3af
+    files:
+    - crates/lightr-cli/src/cli/cmd/mod.rs
+    - crates/lightr-cli/src/cli/cmd/subcommands.rs
+    observed_surface:
+    - build
+    - compose
+    - network
+    - oci
+    - run
+    - volume
+  projects:
+  - id: lightr-fixtures
+    repo: local
+    commit: aa8be4981cfcf0856729a362a60c586580474f31
+  - id: kubernetes-kind
+    repo: https://github.com/kubernetes/kubernetes.git
+    tag: v1.29.4
+    raw_tag_object: 5d985937e8a112a321916efd4ad3936c7db6345f
+    peeled_commit: 55019c83b0fd51ef4ced8c29eec2c4847f896e74
+  - id: elasticsearch
+    repo: https://github.com/elastic/elasticsearch.git
+    tag: v8.13.4
+    raw_tag_object: 85ff3fe65dcf2ab0185083aee4b8f462a92ab289
+    peeled_commit: da95df118650b55a500dcc181889ac35c6d8da7c
+scenarios:
+- id: build-single-stage
+  category: build
+  availability: supported
+  fixture:
+    project: lightr-fixtures
+    path: benchmarks/fixtures/scratch-copy
+    context: benchmarks/fixtures/scratch-copy
+  docker:
+    command: $DOCKER build --tag lightr-scratch-copy:local $FIXTURE_DIR
+  lightr:
+    command: $LIGHTR build --name @scratch/copy $FIXTURE_DIR
+  metrics: &1
+  - wall_clock_ms
+  - cpu_user_ms
+  - cpu_sys_ms
+  - rss_peak_bytes
+  tags:
+  - build
+  - unverified-fixture
+  assertions:
+  - kind: exit_code
+    expected: 0
+    scope: docker_and_lightr
+  - kind: command
+    command: $DOCKER image inspect lightr-scratch-copy:local
+    expected: 0
+    scope: docker
+  - kind: command
+    command: $DOCKER image rm --force lightr-scratch-copy:local
+    expected: 0
+    scope: docker
+  - kind: command
+    command: $LIGHTR hydrate $OUTPUT_DIR/hydrated --name @scratch/copy && cmp -- $FIXTURE_DIR/data.txt $OUTPUT_DIR/hydrated/data.txt
+    expected: 0
+    scope: lightr
+  - kind: command
+    command: $LIGHTR oci rmi @scratch/copy
+    expected: 0
+    scope: lightr
+  lightr_evidence:
+    source_file: crates/lightr-cli/src/cli/cmd/mod.rs
+    help_surface: build
+- id: build-multi-stage-go
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-multi-stage-java
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-cache-from-local
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-cache-from-registry
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-secret-mount
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-ssh-mount
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-target-stage
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-platform-cross
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-buildkit-inline-cache
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: buildkit-cache-mount
+  category: buildkit
+  availability: unsupported
+  reason: No verified BuildKit fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - buildkit
+  - unverified-fixture
+- id: buildkit-secret-mount
+  category: buildkit
+  availability: unsupported
+  reason: No verified BuildKit fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - buildkit
+  - unverified-fixture
+- id: buildkit-ssh-mount
+  category: buildkit
+  availability: unsupported
+  reason: No verified BuildKit fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - buildkit
+  - unverified-fixture
+- id: buildkit-attestation-sbom
+  category: buildkit
+  availability: unsupported
+  reason: No verified BuildKit fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - buildkit
+  - unverified-fixture
+- id: build-arg-inject
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-label-add
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-no-cache-force
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-compress-gzip
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-compress-zstd
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-copy-chown
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-arg-env-subst
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-arg-file
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-label-version
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-healthcheck-add
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-expose-port
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-entrypoint-override
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-cmd-override
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-user-set
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-workdir-set
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: buildkit-export-tar
+  category: buildkit
+  availability: unsupported
+  reason: No verified BuildKit fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - buildkit
+  - unverified-fixture
+- id: buildkit-export-oci
+  category: buildkit
+  availability: unsupported
+  reason: No verified BuildKit fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - buildkit
+  - unverified-fixture
+- id: security-seccomp-default
+  category: security
+  availability: unsupported
+  reason: No verified security fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - security
+  - unverified-fixture
+- id: security-seccomp-unconfined
+  category: security
+  availability: unsupported
+  reason: No verified security fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - security
+  - unverified-fixture
+- id: security-userns-remap
+  category: security
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - security
+  - unverified-fixture
+- id: security-readonly-rootfs
+  category: security
+  availability: unsupported
+  reason: No verified security fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - security
+  - unverified-fixture
+- id: security-capabilities-drop
+  category: security
+  availability: unsupported
+  reason: No verified security fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - security
+  - unverified-fixture
+- id: security-capabilities-add
+  category: security
+  availability: unsupported
+  reason: No verified security fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - security
+  - unverified-fixture
+- id: security-no-new-privileges
+  category: security
+  availability: unsupported
+  reason: No verified security fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - security
+  - unverified-fixture
+- id: security-selinux-enforcing
+  category: security
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - security
+  - unverified-fixture
+- id: resources-cpu-quota
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: resources-memory-oom
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: resources-io-weight
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: resources-hugepages-limit
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: resources-rdma-device-access
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: resources-pids-limit
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: resources-cpu-shares
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: resources-memory-reservation
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: resources-blkio-throttle
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: health-liveness
+  category: health
+  availability: unsupported
+  reason: No verified health fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - health
+  - unverified-fixture
+- id: health-readiness
+  category: health
+  availability: unsupported
+  reason: No verified health fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - health
+  - unverified-fixture
+- id: health-startup
+  category: health
+  availability: unsupported
+  reason: No verified health fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - health
+  - unverified-fixture
+- id: health-init-process
+  category: health
+  availability: unsupported
+  reason: No verified health fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - health
+  - unverified-fixture
+- id: health-zombie-reaping
+  category: health
+  availability: unsupported
+  reason: No verified health fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - health
+  - unverified-fixture
+- id: health-init-tini
+  category: health
+  availability: unsupported
+  reason: No verified health fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - health
+  - unverified-fixture
+- id: health-init-dumb-init
+  category: health
+  availability: unsupported
+  reason: No verified health fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - health
+  - unverified-fixture
+- id: security-user-namespace-isolation
+  category: security
+  availability: unsupported
+  reason: No verified security fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - security
+  - unverified-fixture
+- id: security-gpu-isolation
+  category: security
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - security
+  - unverified-fixture
+- id: resources-cpu-throttle
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: resources-memory-swap
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: network-create-bridge
+  category: network
+  availability: unsupported
+  reason: No verified network fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: network-create-macvlan
+  category: network
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: network-create-ipvlan
+  category: network
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: network-create-overlay
+  category: network
+  availability: unsupported
+  reason: No verified network fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: network-dns-resolution
+  category: network
+  availability: unsupported
+  reason: No verified network fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: network-service-discovery
+  category: network
+  availability: unsupported
+  reason: No verified network fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: network-load-balancing
+  category: network
+  availability: unsupported
+  reason: No verified network fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: network-mesh-encryption
+  category: network
+  availability: unsupported
+  reason: No verified network fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: volume-create-local
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: volume-create-nfs
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: volume-create-tmpfs
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: volume-backup-restore
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: volume-clone
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: volume-snapshot
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: volume-driver-nfs
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: volume-driver-cifs
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: plugin-volume-local
+  category: plugin
+  availability: out_of_scope
+  reason: Plugin ecosystem is out_of_scope in Sprint 1 (SPRINT-01-EXECUTION-PLAN.md:70);
+    no executable fixture is declared.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - plugin
+  - unverified-fixture
+- id: plugin-volume-nfs
+  category: plugin
+  availability: out_of_scope
+  reason: Plugin ecosystem is out_of_scope in Sprint 1 (SPRINT-01-EXECUTION-PLAN.md:70);
+    no executable fixture is declared.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - plugin
+  - unverified-fixture
+- id: plugin-network-weave
+  category: plugin
+  availability: out_of_scope
+  reason: Plugin ecosystem is out_of_scope in Sprint 1 (SPRINT-01-EXECUTION-PLAN.md:70);
+    no executable fixture is declared.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - plugin
+  - unverified-fixture
+- id: plugin-authz
+  category: plugin
+  availability: out_of_scope
+  reason: Plugin ecosystem is out_of_scope in Sprint 1 (SPRINT-01-EXECUTION-PLAN.md:70);
+    no executable fixture is declared.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - plugin
+  - unverified-fixture
+- id: plugin-log-driver
+  category: plugin
+  availability: out_of_scope
+  reason: Plugin ecosystem is out_of_scope in Sprint 1 (SPRINT-01-EXECUTION-PLAN.md:70);
+    no executable fixture is declared.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - plugin
+  - unverified-fixture
+- id: plugin-metrics
+  category: plugin
+  availability: out_of_scope
+  reason: Plugin ecosystem is out_of_scope in Sprint 1 (SPRINT-01-EXECUTION-PLAN.md:70);
+    no executable fixture is declared.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - plugin
+  - unverified-fixture
+- id: swarm-service-create
+  category: swarm
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - swarm
+  - unverified-fixture
+- id: swarm-service-scale
+  category: swarm
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - swarm
+  - unverified-fixture
+- id: swarm-service-update
+  category: swarm
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - swarm
+  - unverified-fixture
+- id: swarm-service-rollback
+  category: swarm
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - swarm
+  - unverified-fixture
+- id: swarm-network-overlay
+  category: swarm
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - swarm
+  - unverified-fixture
+- id: swarm-volume-driver
+  category: swarm
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - swarm
+  - unverified-fixture
+- id: swarm-service-replicas
+  category: swarm
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - swarm
+  - unverified-fixture
+- id: swarm-placement-constraints
+  category: swarm
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - swarm
+  - unverified-fixture
+- id: network-host-mode
+  category: network
+  availability: unsupported
+  reason: No verified network fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: network-none-mode
+  category: network
+  availability: unsupported
+  reason: No verified network fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: volume-bind-mount
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: volume-anonymous
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: network-dns-search
+  category: network
+  availability: unsupported
+  reason: No verified network fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: network-ipvlan-l2
+  category: network
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: network-ipvlan-l3
+  category: network
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: plugin-authz-opa
+  category: plugin
+  availability: out_of_scope
+  reason: Plugin ecosystem is out_of_scope in Sprint 1 (SPRINT-01-EXECUTION-PLAN.md:70);
+    no executable fixture is declared.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - plugin
+  - unverified-fixture
+- id: swarm-secret-distribute
+  category: swarm
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - swarm
+  - unverified-fixture
+- id: swarm-config-distribute
+  category: swarm
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - swarm
+  - unverified-fixture
+- id: registry-pull
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-push
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-manifest-v2
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-manifest-v2s
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-manifest-list
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-multi-arch
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-content-trust
+  category: registry
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-cosign-sign
+  category: registry
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-cosign-verify
+  category: registry
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-cosign-keyless
+  category: registry
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-sbom-spdx
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-sbom-cyclonedx
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-attestation-slsa
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-provenance-min
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-provenance-max
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-referrers-api
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-oci-image-spec
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-oci-layout
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-image-index
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-foreign-layer
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-mtls
+  category: registry
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-basic-auth
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-bearer-auth
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-sni
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-rate-limit
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-retry-after
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-gc-blobs
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: gc-untagged
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: storage-backend-filesystem
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: storage-backend-s3
+  category: registry
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: storage-backend-azure
+  category: registry
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: storage-backend-memory
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-manifest-annotations
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-manifest-parent
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-manifest-empty
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-distribution-spec
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-manifest-list-full
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: registry-oci-distribution-complete
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: build-multi-stage-complex
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-cross-compile-arm64
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-fips
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-distroless
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-scratch
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-custom-frontend
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-cache-eviction
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-cache-gc
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-provenance-inline
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-sbom-inline
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-attestation-cosign
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-image-index
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-manifest-list
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-advanced-secret
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-advanced-ssh
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-complex-llb
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-cross-platform-qemu
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-zstd-max
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-export-tar
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: build-export-oci
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: compose-healthcheck-depends-on
+  category: compose
+  availability: unsupported
+  reason: No verified compose fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - compose
+  - unverified-fixture
+- id: compose-resource-limit-deploy
+  category: compose
+  availability: unsupported
+  reason: No verified compose fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - compose
+  - unverified-fixture
+- id: compose-include-depends
+  category: compose
+  availability: unsupported
+  reason: No verified compose fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - compose
+  - unverified-fixture
+- id: compose-volume-clone
+  category: compose
+  availability: unsupported
+  reason: No verified compose fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - compose
+  - unverified-fixture
+- id: compose-snapshot-restore
+  category: compose
+  availability: unsupported
+  reason: No verified compose fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - compose
+  - unverified-fixture
+- id: compose-network-overlay
+  category: compose
+  availability: unsupported
+  reason: No verified compose fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - compose
+  - unverified-fixture
+- id: compose-service-mesh
+  category: compose
+  availability: unsupported
+  reason: No verified compose fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - compose
+  - unverified-fixture
+- id: compose-driver-nfs
+  category: compose
+  availability: unsupported
+  reason: No verified compose fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - compose
+  - unverified-fixture
+- id: compose-driver-cifs
+  category: compose
+  availability: unsupported
+  reason: No verified compose fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - compose
+  - unverified-fixture
+- id: compose-overlay-cross-subnet
+  category: compose
+  availability: unsupported
+  reason: No verified compose fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - compose
+  - unverified-fixture
+- id: compose-dns-discovery
+  category: compose
+  availability: unsupported
+  reason: No verified compose fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - compose
+  - unverified-fixture
+- id: compose-deploy-replicas
+  category: compose
+  availability: unsupported
+  reason: No verified compose fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - compose
+  - unverified-fixture
+- id: compose-deploy-placement
+  category: compose
+  availability: unsupported
+  reason: No verified compose fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - compose
+  - unverified-fixture
+- id: compose-healthcheck-startup
+  category: compose
+  availability: unsupported
+  reason: No verified compose fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - compose
+  - unverified-fixture
+- id: compose-depends-on-healthy
+  category: compose
+  availability: unsupported
+  reason: No verified compose fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - compose
+  - unverified-fixture
+- id: volume-restore-compress-tar-gz
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: volume-backup-incremental
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: network-encryption-wireguard
+  category: network
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: network-dns-round-robin
+  category: network
+  availability: unsupported
+  reason: No verified network fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: network-service-mesh-envoy
+  category: network
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: build-additional-1
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: buildkit-additional-1
+  category: buildkit
+  availability: unsupported
+  reason: No verified BuildKit fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - buildkit
+  - unverified-fixture
+- id: security-additional-1
+  category: security
+  availability: unsupported
+  reason: No verified security fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - security
+  - unverified-fixture
+- id: resources-additional-1
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: network-additional-1
+  category: network
+  availability: unsupported
+  reason: No verified network fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: volume-additional-1
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: plugin-additional-1
+  category: plugin
+  availability: out_of_scope
+  reason: Plugin ecosystem is out_of_scope in Sprint 1 (SPRINT-01-EXECUTION-PLAN.md:70);
+    no executable fixture is declared.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - plugin
+  - unverified-fixture
+- id: swarm-additional-1
+  category: swarm
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - swarm
+  - unverified-fixture
+- id: registry-additional-1
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: health-additional-1
+  category: health
+  availability: unsupported
+  reason: No verified health fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - health
+  - unverified-fixture
+- id: logging-additional-1
+  category: logging
+  availability: unsupported
+  reason: No verified logging fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - logging
+  - unverified-fixture
+- id: build-additional-2
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: buildkit-additional-2
+  category: buildkit
+  availability: unsupported
+  reason: No verified BuildKit fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - buildkit
+  - unverified-fixture
+- id: security-additional-2
+  category: security
+  availability: unsupported
+  reason: No verified security fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - security
+  - unverified-fixture
+- id: resources-additional-2
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: network-additional-2
+  category: network
+  availability: unsupported
+  reason: No verified network fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: volume-additional-2
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: plugin-additional-2
+  category: plugin
+  availability: out_of_scope
+  reason: Plugin ecosystem is out_of_scope in Sprint 1 (SPRINT-01-EXECUTION-PLAN.md:70);
+    no executable fixture is declared.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - plugin
+  - unverified-fixture
+- id: swarm-additional-2
+  category: swarm
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - swarm
+  - unverified-fixture
+- id: registry-additional-2
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: health-additional-2
+  category: health
+  availability: unsupported
+  reason: No verified health fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - health
+  - unverified-fixture
+- id: logging-additional-2
+  category: logging
+  availability: unsupported
+  reason: No verified logging fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - logging
+  - unverified-fixture
+- id: build-additional-3
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: buildkit-additional-3
+  category: buildkit
+  availability: unsupported
+  reason: No verified BuildKit fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - buildkit
+  - unverified-fixture
+- id: security-additional-3
+  category: security
+  availability: unsupported
+  reason: No verified security fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - security
+  - unverified-fixture
+- id: resources-additional-3
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: network-additional-3
+  category: network
+  availability: unsupported
+  reason: No verified network fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: volume-additional-3
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: plugin-additional-3
+  category: plugin
+  availability: out_of_scope
+  reason: Plugin ecosystem is out_of_scope in Sprint 1 (SPRINT-01-EXECUTION-PLAN.md:70);
+    no executable fixture is declared.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - plugin
+  - unverified-fixture
+- id: swarm-additional-3
+  category: swarm
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - swarm
+  - unverified-fixture
+- id: registry-additional-3
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: health-additional-3
+  category: health
+  availability: unsupported
+  reason: No verified health fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - health
+  - unverified-fixture
+- id: logging-additional-3
+  category: logging
+  availability: unsupported
+  reason: No verified logging fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - logging
+  - unverified-fixture
+- id: build-additional-4
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: buildkit-additional-4
+  category: buildkit
+  availability: unsupported
+  reason: No verified BuildKit fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - buildkit
+  - unverified-fixture
+- id: security-additional-4
+  category: security
+  availability: unsupported
+  reason: No verified security fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - security
+  - unverified-fixture
+- id: resources-additional-4
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: network-additional-4
+  category: network
+  availability: unsupported
+  reason: No verified network fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: volume-additional-4
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: plugin-additional-4
+  category: plugin
+  availability: out_of_scope
+  reason: Plugin ecosystem is out_of_scope in Sprint 1 (SPRINT-01-EXECUTION-PLAN.md:70);
+    no executable fixture is declared.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - plugin
+  - unverified-fixture
+- id: swarm-additional-4
+  category: swarm
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - swarm
+  - unverified-fixture
+- id: registry-additional-4
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: health-additional-4
+  category: health
+  availability: unsupported
+  reason: No verified health fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - health
+  - unverified-fixture
+- id: logging-additional-4
+  category: logging
+  availability: unsupported
+  reason: No verified logging fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - logging
+  - unverified-fixture
+- id: build-additional-5
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: buildkit-additional-5
+  category: buildkit
+  availability: unsupported
+  reason: No verified BuildKit fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - buildkit
+  - unverified-fixture
+- id: security-additional-5
+  category: security
+  availability: unsupported
+  reason: No verified security fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - security
+  - unverified-fixture
+- id: resources-additional-5
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: network-additional-5
+  category: network
+  availability: unsupported
+  reason: No verified network fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: volume-additional-5
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: plugin-additional-5
+  category: plugin
+  availability: out_of_scope
+  reason: Plugin ecosystem is out_of_scope in Sprint 1 (SPRINT-01-EXECUTION-PLAN.md:70);
+    no executable fixture is declared.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - plugin
+  - unverified-fixture
+- id: swarm-additional-5
+  category: swarm
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - swarm
+  - unverified-fixture
+- id: registry-additional-5
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: health-additional-5
+  category: health
+  availability: unsupported
+  reason: No verified health fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - health
+  - unverified-fixture
+- id: logging-additional-5
+  category: logging
+  availability: unsupported
+  reason: No verified logging fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - logging
+  - unverified-fixture
+- id: build-additional-6
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: buildkit-additional-6
+  category: buildkit
+  availability: unsupported
+  reason: No verified BuildKit fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - buildkit
+  - unverified-fixture
+- id: security-additional-6
+  category: security
+  availability: unsupported
+  reason: No verified security fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - security
+  - unverified-fixture
+- id: resources-additional-6
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: network-additional-6
+  category: network
+  availability: unsupported
+  reason: No verified network fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: volume-additional-6
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: plugin-additional-6
+  category: plugin
+  availability: out_of_scope
+  reason: Plugin ecosystem is out_of_scope in Sprint 1 (SPRINT-01-EXECUTION-PLAN.md:70);
+    no executable fixture is declared.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - plugin
+  - unverified-fixture
+- id: swarm-additional-6
+  category: swarm
+  availability: hardware_gated
+  reason: Host capability required and no verified fixture or exact command exists
+    at declared source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - swarm
+  - unverified-fixture
+- id: registry-additional-6
+  category: registry
+  availability: unsupported
+  reason: No verified registry fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - registry
+  - unverified-fixture
+- id: health-additional-6
+  category: health
+  availability: unsupported
+  reason: No verified health fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - health
+  - unverified-fixture
+- id: logging-additional-6
+  category: logging
+  availability: unsupported
+  reason: No verified logging fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - logging
+  - unverified-fixture
+- id: build-additional-7
+  category: build
+  availability: unsupported
+  reason: No verified build fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - build
+  - unverified-fixture
+- id: buildkit-additional-7
+  category: buildkit
+  availability: unsupported
+  reason: No verified BuildKit fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - buildkit
+  - unverified-fixture
+- id: security-additional-7
+  category: security
+  availability: unsupported
+  reason: No verified security fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - security
+  - unverified-fixture
+- id: resources-additional-7
+  category: resources
+  availability: unsupported
+  reason: No verified resource-limit fixture path/context or exact command exists
+    at declared source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - resources
+  - unverified-fixture
+- id: network-additional-7
+  category: network
+  availability: unsupported
+  reason: No verified network fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - network
+  - unverified-fixture
+- id: volume-additional-7
+  category: volume
+  availability: unsupported
+  reason: No verified volume fixture path/context or exact command exists at declared
+    source commit.
+  fixture:
+    project: elasticsearch
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - volume
+  - unverified-fixture
+- id: plugin-additional-7
+  category: plugin
+  availability: out_of_scope
+  reason: Plugin ecosystem is out_of_scope in Sprint 1 (SPRINT-01-EXECUTION-PLAN.md:70);
+    no executable fixture is declared.
+  fixture:
+    project: kubernetes-kind
+    path: null
+    context: null
+  docker:
+    command: null
+  lightr:
+    command: null
+  metrics: *1
+  tags:
+  - plugin
+  - unverified-fixture
