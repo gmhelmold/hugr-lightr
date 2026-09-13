@@ -187,6 +187,7 @@ fn validate_spec(spec: &Spec) -> Result<(), String> {
     let mut ids = BTreeSet::new();
     for scenario in &spec.scenarios {
         if !ids.insert(&scenario.id) { return Err(format!("duplicate scenario id: {}", scenario.id)); }
+        if scenario.id.is_empty() || !scenario.id.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-') { return Err(format!("unsafe scenario id: {}", scenario.id)); }
         if !categories.contains(&scenario.category) { return Err(format!("unknown category for {}: {}", scenario.id, scenario.category)); }
         if !known_availability.contains(&scenario.availability) { return Err(format!("unknown availability for {}", scenario.id)); }
         if scenario.tags.len() < 2 || scenario.tags.iter().any(|tag| !tags.contains(tag)) {
@@ -294,6 +295,7 @@ fn materialize_fixture(spec_path: &Path, scenario: &Scenario, project: Option<&P
     if project.repo != "local" { return Err(format!("unsupported project type for {}: {}", scenario.id, project.repo)); }
     let commit = project.commit.as_deref().ok_or_else(|| format!("missing fixture commit for {}", scenario.id))?;
     let fixture = scenario.fixture.as_ref().and_then(|f| f.path.as_deref()).ok_or_else(|| format!("missing fixture path for {}", scenario.id))?;
+    let context = scenario.fixture.as_ref().and_then(|f| f.context.as_deref()).ok_or_else(|| format!("missing fixture context for {}", scenario.id))?;
     let fixture_path = Path::new(fixture);
     if fixture_path.is_absolute() || fixture_path.components().any(|c| matches!(c, Component::ParentDir | Component::RootDir | Component::Prefix(_))) { return Err(format!("unsafe fixture path for {}", scenario.id)); }
     let root = spec_path.parent().and_then(Path::parent).ok_or_else(|| "spec must have benchmarks parent".to_string())?;
@@ -309,8 +311,12 @@ fn materialize_fixture(spec_path: &Path, scenario: &Scenario, project: Option<&P
     tar.stdin.take().ok_or_else(|| "extract fixture stdin unavailable".to_string())?.write_all(&archive.stdout).map_err(|e| e.to_string())?;
     if !tar.wait().map_err(|e| e.to_string())?.success() { return Err(format!("extract fixture {} failed", fixture)); }
     if fs::read_dir(&destination).map_err(|e| e.to_string())?.next().is_none() { return Err(format!("fixture path absent at commit: {}", fixture)); }
+    let context_path = Path::new(context);
+    let relative_context = context_path.strip_prefix(fixture_path).map_err(|_| format!("fixture context escapes fixture path for {}", scenario.id))?;
+    let materialized_context = destination.join(relative_context);
+    if !materialized_context.is_dir() { return Err(format!("fixture context absent at commit: {}", context)); }
     let hash = tree_sha256(&destination)?;
-    Ok((destination, hash, commit.to_string()))
+    Ok((materialized_context, hash, commit.to_string()))
 }
 
 fn probe_versions(docker: &Path, lightr: &Path) -> Versions {

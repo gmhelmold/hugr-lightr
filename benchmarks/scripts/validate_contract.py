@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -154,7 +155,7 @@ def record_errors(record: dict[str, Any], location: str) -> list[str]:
     return errors
 
 
-def validate_records(records: list[dict[str, Any]], scenarios: dict[str, str], rounds: int) -> tuple[list[str], dict[str, int]]:
+def validate_records(records: list[dict[str, Any]], scenarios: dict[str, str], rounds: int, spec_sha256: str) -> tuple[list[str], dict[str, int]]:
     errors: list[str] = []
     typed_skips = 0
     seen: set[tuple[str, str, int]] = set()
@@ -176,6 +177,10 @@ def validate_records(records: list[dict[str, Any]], scenarios: dict[str, str], r
             continue
         if record["availability"] != scenario_availability:
             errors.append(f"{location}: availability differs from spec")
+        if record["spec_sha256"] != spec_sha256:
+            errors.append(f"{location}: spec digest differs from spec")
+        if record["elapsed_ms"] != record["ended_at_unix_ms"] - record["started_at_unix_ms"]:
+            errors.append(f"{location}: elapsed_ms differs from timestamps")
         if scenario_availability == "supported":
             if record["tool"] not in {"docker", "lightr"}:
                 errors.append(f"{location}: supported scenario must use docker or lightr tool")
@@ -185,6 +190,10 @@ def validate_records(records: list[dict[str, Any]], scenarios: dict[str, str], r
                 errors.append(f"{location}: supported record outcome is {record['outcome']}")
             if record["outcome"] != "passed":
                 errors.append(f"{location}: supported record does not pass")
+            if record["exit_code"] != 0:
+                errors.append(f"{location}: supported passed record has nonzero exit")
+            if not record["assertions"] or any(not isinstance(assertion, dict) or assertion.get("passed") is not True for assertion in record["assertions"]):
+                errors.append(f"{location}: supported record has missing or failed assertions")
             supported_seen.add(key)
         else:
             if record["tool"] != "skip" or record["round"] != 0 or record["outcome"] != "skipped":
@@ -214,9 +223,14 @@ def main(argv: list[str] | None = None) -> int:
 
     records, errors = load_records(args.input)
     scenarios, spec_errors = parse_frozen_scenarios(args.spec)
+    try:
+        spec_sha256 = hashlib.sha256(args.spec.read_bytes()).hexdigest()
+    except OSError as error:
+        spec_sha256 = ""
+        spec_errors.append(f"cannot hash spec {args.spec}: {error}")
     errors.extend(spec_errors)
     if not errors:
-        validation_errors, summary = validate_records(records, scenarios, args.rounds)
+        validation_errors, summary = validate_records(records, scenarios, args.rounds, spec_sha256)
         errors.extend(validation_errors)
     else:
         summary = {"typed_skips": 0, "records": len(records)}

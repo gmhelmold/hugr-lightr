@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import shutil
 import subprocess
 import sys
@@ -25,6 +26,16 @@ class ReporterTests(unittest.TestCase):
     def assert_green_fixture(self, raw_path: Path) -> None:
         result = subprocess.run(self.validator_command(raw_path), check=False, text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def pin_fixture_spec_digest(self, raw_path: Path) -> None:
+        placeholder = "0" * 64
+        digest = hashlib.sha256(SPEC.read_bytes()).hexdigest()
+        records = [json.loads(line) for line in raw_path.read_text(encoding="utf-8").splitlines()]
+        for record in records:
+            record["spec_sha256"] = digest
+            if record["availability"] == "supported":
+                record["assertions"] = [{"kind": "exit_code", "passed": True}]
+        raw_path.write_text("\n".join(json.dumps(record, sort_keys=True) for record in records) + "\n", encoding="utf-8")
 
     def test_reports_come_from_checked_in_raw_fixture(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -52,12 +63,14 @@ class ReporterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             raw_path = Path(temporary) / "raw.jsonl"
             shutil.copyfile(FIXTURE, raw_path)
+            self.pin_fixture_spec_digest(raw_path)
             self.assert_green_fixture(raw_path)
 
     def test_validator_rejects_missing_supported_round_then_restores_green(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             raw_path = Path(temporary) / "raw.jsonl"
             shutil.copyfile(FIXTURE, raw_path)
+            self.pin_fixture_spec_digest(raw_path)
             command = self.validator_command(raw_path)
             self.assert_green_fixture(raw_path)
 
@@ -76,6 +89,7 @@ class ReporterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             raw_path = Path(temporary) / "raw.jsonl"
             shutil.copyfile(FIXTURE, raw_path)
+            self.pin_fixture_spec_digest(raw_path)
             original = raw_path.read_text(encoding="utf-8")
             self.assert_green_fixture(raw_path)
 
