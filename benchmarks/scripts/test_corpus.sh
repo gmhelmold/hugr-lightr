@@ -7,7 +7,11 @@ spec=${1:-"$root/benchmarks/benchmark-spec.yaml"}
 ruby -r yaml -r open3 - "$root" "$spec" <<'RUBY'
 root = ARGV.fetch(0)
 spec_path = ARGV.fetch(1)
-spec = YAML.load_file(spec_path)
+spec = if Gem::Version.new(Psych::VERSION) >= Gem::Version.new("4.0")
+  YAML.load_file(spec_path, aliases: true)
+else
+  YAML.load_file(spec_path)
+end
 errors = []
 scenarios = spec["scenarios"]
 unless scenarios.is_a?(Array)
