@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "baseline": "bea26dd843f5ecdc8f32cab4dd6faa8740436723",
+  "cards": [
+    {
+      "id": "S3-CARD-ENGINE-001",
+      "clause_id": "S3-CORPUS-ENGINE-001",
+      "title": "tests::from_str_roundtrip"
+    },
+    {
+      "id": "S3-CARD-STORE-001",
+      "clause_id": "S3-CORPUS-STORE-001",
+      "title": "tests::default_root_honors_lightr_home"
+    }
+  ]
+}
