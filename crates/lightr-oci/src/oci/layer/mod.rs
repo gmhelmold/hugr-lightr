@@ -135,13 +135,8 @@ pub(super) fn apply_layers(tempdir: &Path, blobs: &[LayerBlob]) -> Result<()> {
         // FIX 3: all whiteout operations execute before any file writes.
         // FIX 4: opaque whiteout clears the dir in the accumulated tree and
         //        creates it if absent.
-        let (dirs, whiteouts, pending, whited_out_paths) = collect_ops(
-            &mut archive,
-            tempdir,
-            deadline,
-            &mut entry_count,
-            timeout,
-        )?;
+        let (dirs, whiteouts, pending, whited_out_paths) =
+            collect_ops(&mut archive, tempdir, deadline, &mut entry_count, timeout)?;
 
         // ── Pass 2: apply dirs → whiteouts → files → hardlinks ───────────────
         apply_ops(tempdir, &dirs, &whiteouts, &pending, &whited_out_paths)?;
