@@ -90,53 +90,17 @@ pub(super) fn parse_image_ref(image: &str) -> Result<(String, String, String)> {
 // Multi-arch selection (WP-A-pull item 5)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Pick a manifest descriptor from a manifest list:
-///   1. `linux/<host-arch>`
-///   2. `linux/amd64` fallback
-///   3. Any `linux/*` entry fallback
-///   4. Error listing available arches.
+/// Pick only a `linux/<host-arch>` manifest descriptor. S2 has no emulation.
 pub(super) fn pick_from_manifest_list(manifests: &[OciDescriptor]) -> Result<&OciDescriptor> {
     let arch = host_arch();
-
-    // Collect linux entries for fallback reporting.
-    let linux_entries: Vec<&OciDescriptor> = manifests
-        .iter()
-        .filter(|m| {
-            m.platform
-                .as_ref()
-                .map(|p| p.os == "linux")
-                .unwrap_or(false)
-        })
-        .collect();
-
-    // 1. Exact match: linux/<host>.
-    if let Some(m) = linux_entries.iter().find(|m| {
+    if let Some(m) = manifests.iter().find(|m| {
         m.platform
             .as_ref()
-            .map(|p| p.architecture == arch)
+            .map(|p| p.os == "linux" && p.architecture == arch)
             .unwrap_or(false)
     }) {
         return Ok(m);
     }
-
-    // 2. Fallback to linux/amd64.
-    if arch != "amd64" {
-        if let Some(m) = linux_entries.iter().find(|m| {
-            m.platform
-                .as_ref()
-                .map(|p| p.architecture == "amd64")
-                .unwrap_or(false)
-        }) {
-            return Ok(m);
-        }
-    }
-
-    // 3. Any linux entry.
-    if let Some(m) = linux_entries.first() {
-        return Ok(m);
-    }
-
-    // 4. Error: list what was available.
     let available: Vec<String> = manifests
         .iter()
         .filter_map(|m| {
@@ -146,7 +110,7 @@ pub(super) fn pick_from_manifest_list(manifests: &[OciDescriptor]) -> Result<&Oc
         })
         .collect();
     Err(LightrError::InvalidManifest(format!(
-        "manifest list has no linux entry; available: [{}]",
+        "manifest list has no linux/{arch} entry; available: [{}]",
         available.join(", ")
     )))
 }

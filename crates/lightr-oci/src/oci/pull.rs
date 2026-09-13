@@ -7,7 +7,7 @@ use super::layer::{apply_and_snapshot, LayerBlob};
 use super::model::{ImportReport, ManifestList, OciManifest};
 use super::reference::{fetch_docker_token, parse_image_ref, pick_from_manifest_list};
 use super::retain::{retain_image_manifest, RetainBlob};
-use super::util::sha256_hex;
+use super::util::{platform_of_config, required_sha256_hex, sha256_hex, validate_image_config};
 use lightr_core::{LightrError, Result};
 use lightr_store::Store;
 use std::fs;
@@ -20,7 +20,7 @@ use std::fs;
 ///   - Retry + exponential backoff on 429 and 5xx.
 ///   - Streaming blob download (sha256 computed over the reader, never full Vec).
 ///   - Typed errors: 401/403 → Registry/auth, 404 → Registry/not-found, etc.
-///   - Multi-arch: picks linux/<host>, falls back to amd64, then any linux.
+///   - Multi-arch: picks only linux/<host>; S2 has no emulation fallback.
 pub fn pull(image: &str, store: &Store, name: &str) -> Result<ImportReport> {
     // Validate/parse image ref; reject empty/malformed refs → InvalidRef → exit 2.
     let (registry, repo, tag) = parse_image_ref(image)?;
@@ -133,6 +133,31 @@ pub fn pull(image: &str, store: &Store, name: &str) -> Result<ImportReport> {
     fs::create_dir_all(&blob_tmp_dir).map_err(LightrError::Io)?;
     let _blob_guard = super::util::TempDirGuard(blob_tmp_dir.clone());
 
+    // Config is content-critical: unsupported digest, unreadable blob, hash
+    // mismatch, or non-object JSON aborts before snapshot can publish `name`.
+    let cfg_hex = required_sha256_hex(&config_desc.digest, "config")?;
+    let cfg_url = format!("https://{registry}/v2/{repo}/blobs/{}", config_desc.digest);
+    let cfg_file = blob_tmp_dir.join(format!("config-{cfg_hex}"));
+    stream_blob_to_file(
+        &agent,
+        &cfg_url,
+        auth_ref,
+        &cfg_file,
+        Some(cfg_hex),
+        &format!("{registry}/{repo}"),
+    )?;
+    let cfg_bytes = fs::read(&cfg_file).map_err(LightrError::Io)?;
+    validate_image_config(&cfg_bytes)?;
+    if platform.is_empty() {
+        platform = platform_of_config(&cfg_bytes);
+    }
+    let config_file = RetainSource {
+        path: cfg_file,
+        media_type: config_desc.media_type,
+        sha256_hex: Some(cfg_hex.to_string()),
+        size: config_desc.size,
+    };
+
     // Track each layer's temp-file path + descriptor metadata for WP-IMG-01
     // retention (the raw bytes are read back from these files after snapshot,
     // while the TempDirGuard is still alive).
@@ -175,46 +200,9 @@ pub fn pull(image: &str, store: &Store, name: &str) -> Result<ImportReport> {
         blobs.push(LayerBlob::File(blob_file));
     }
 
-    let report = apply_and_snapshot(blobs, layer_count, store, name)?;
-
-    // push-fidelity: capture the original image config (entrypoint/cmd/env/os/arch)
-    // so a later `oci push` re-emits a RUNNABLE image, not a config-less layer.
-    // Best-effort: the image filesystem is already snapshotted above, so a
-    // config-fetch hiccup must NOT fail the pull — push just falls back to a
-    // synthesized minimal config. Verified by sha256 (Some(cfg_hex)).
-    let mut config_file: Option<RetainSource> = None;
-    if let Some(cfg_hex) = sha256_hex(&config_desc.digest) {
-        let cfg_url = format!("https://{registry}/v2/{repo}/blobs/{}", config_desc.digest);
-        let cfg_file = blob_tmp_dir.join(format!("config-{cfg_hex}"));
-        let repo_disp = format!("{registry}/{repo}");
-        if stream_blob_to_file(
-            &agent,
-            &cfg_url,
-            auth_ref,
-            &cfg_file,
-            Some(cfg_hex),
-            &repo_disp,
-        )
-        .is_ok()
-        {
-            if let Ok(cfg_bytes) = fs::read(&cfg_file) {
-                let _ = store.image_config_put(name, &cfg_bytes);
-            }
-            config_file = Some(RetainSource {
-                path: cfg_file,
-                media_type: config_desc.media_type.clone(),
-                sha256_hex: Some(cfg_hex.to_string()),
-                size: config_desc.size,
-            });
-        }
-    }
-
-    // WP-IMG-01: retain the original (compressed) blobs + verbatim manifest +
-    // ordered descriptors + platform, so WP-IMG-02's faithful push can reproduce
-    // the image byte-for-byte. Verify-then-retain is fail-closed (a digest
-    // mismatch errors). Best-effort: the image is already snapshotted, so a
-    // retention I/O hiccup must NOT undo a successful pull — push then falls
-    // back to a synthesized single layer. (A digest MISMATCH still surfaces.)
+    // Metadata writes are part of success path, never ignored. Complete before
+    // snapshot publishes ref so metadata failures cannot leave accepted ref.
+    store.image_config_put(name, &cfg_bytes)?;
     retain_pulled(
         store,
         name,
@@ -223,6 +211,8 @@ pub fn pull(image: &str, store: &Store, name: &str) -> Result<ImportReport> {
         &config_file,
         &layer_files,
     )?;
+
+    let report = apply_and_snapshot(blobs, layer_count, store, name)?;
 
     Ok(report)
 }
@@ -245,21 +235,15 @@ fn retain_pulled(
     name: &str,
     manifest_bytes: &[u8],
     platform: &str,
-    config_file: &Option<RetainSource>,
+    config_file: &RetainSource,
     layer_files: &[RetainSource],
 ) -> Result<()> {
     let mut buffers: Vec<(Vec<u8>, &RetainSource)> = Vec::new();
-    if let Some(cfg) = config_file.as_ref() {
-        match fs::read(&cfg.path) {
-            Ok(b) => buffers.push((b, cfg)),
-            Err(_) => return Ok(()), // best-effort: no faithful record this pull
-        }
-    }
+    let cfg_bytes = fs::read(&config_file.path).map_err(LightrError::Io)?;
+    buffers.push((cfg_bytes, config_file));
     for src in layer_files {
-        match fs::read(&src.path) {
-            Ok(b) => buffers.push((b, src)),
-            Err(_) => return Ok(()),
-        }
+        let bytes = fs::read(&src.path).map_err(LightrError::Io)?;
+        buffers.push((bytes, src));
     }
     let blobs: Vec<RetainBlob<'_>> = buffers
         .iter()

@@ -30,14 +30,11 @@ fn retain_layout_roundtrip_faithful_record() {
         .unwrap()
         .expect("a faithful manifest record must be retained at import");
 
-    // make_layout writes a zero-size config descriptor (digest all-zero, not a
-    // real sha256 of the config blob) — `sha256_hex(config.digest)` is Some but
-    // the config blob at blobs/sha256/<all-zero> does not exist, so config
-    // retention is skipped (best-effort). The two layers ARE retained, in order.
+    // make_layout writes a verified config descriptor, retained before layers.
     assert_eq!(
         rec.descriptors.len(),
-        2,
-        "two layer descriptors retained (config skipped: synthetic layout config)"
+        3,
+        "config and two layer descriptors retained"
     );
 
     // Original manifest JSON retained verbatim (the blob at blobs/sha256/<hex>).
@@ -49,16 +46,20 @@ fn retain_layout_roundtrip_faithful_record() {
     assert_eq!(parsed["schemaVersion"], 2);
 
     // Each retained descriptor's CAS digest resolves to the EXACT raw blob.
-    let got0 = store.get_bytes(&rec.descriptors[0].digest).unwrap();
     let got1 = store.get_bytes(&rec.descriptors[1].digest).unwrap();
-    assert_eq!(got0, layer1, "layer 1 raw bytes retained byte-for-byte");
-    assert_eq!(got1, layer2, "layer 2 raw bytes retained byte-for-byte");
+    let got2 = store.get_bytes(&rec.descriptors[2].digest).unwrap();
+    assert_eq!(got1, layer1, "layer 1 raw bytes retained byte-for-byte");
+    assert_eq!(got2, layer2, "layer 2 raw bytes retained byte-for-byte");
     // Sizes mirror the original blobs.
-    assert_eq!(rec.descriptors[0].size, layer1.len() as u64);
-    assert_eq!(rec.descriptors[1].size, layer2.len() as u64);
+    assert_eq!(rec.descriptors[1].size, layer1.len() as u64);
+    assert_eq!(rec.descriptors[2].size, layer2.len() as u64);
     // Ordered media types preserved.
     assert_eq!(
         rec.descriptors[0].media_type,
+        "application/vnd.oci.image.config.v1+json"
+    );
+    assert_eq!(
+        rec.descriptors[1].media_type,
         "application/vnd.oci.image.layer.v1.tar+gzip"
     );
 }

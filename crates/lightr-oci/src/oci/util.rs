@@ -45,6 +45,24 @@ pub(super) fn sha256_hex(digest: &str) -> Option<&str> {
     digest.strip_prefix("sha256:")
 }
 
+/// Require OCI's supported sha256 digest form before resolving a blob path.
+pub(super) fn required_sha256_hex<'a>(digest: &'a str, what: &str) -> Result<&'a str> {
+    let hex = sha256_hex(digest).filter(|hex| hex_to_digest(hex).is_some());
+    hex.ok_or_else(|| LightrError::InvalidManifest(format!("unsupported {what} digest: {digest}")))
+}
+
+/// OCI image config must be present as a JSON object before a ref is published.
+pub(super) fn validate_image_config(config_bytes: &[u8]) -> Result<()> {
+    let value: serde_json::Value = serde_json::from_slice(config_bytes)
+        .map_err(|e| LightrError::InvalidManifest(format!("image config parse error: {e}")))?;
+    if !value.is_object() {
+        return Err(LightrError::InvalidManifest(
+            "image config must be a JSON object".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SHA-256 integrity helpers (FIX 1: REAL sha256 verification — close FAIL-OPEN)
 // ─────────────────────────────────────────────────────────────────────────────
