@@ -144,6 +144,9 @@ fn compose_down_removes_only_its_project_service_namespace() {
 
     assert!(compose_down(&stack_dir).is_ok());
     assert!(!own.exists(), "down must clean its project namespace");
-    assert!(other.exists(), "down must not clean another project namespace");
+    assert!(
+        other.exists(),
+        "down must not clean another project namespace"
+    );
     let _ = fs::remove_dir_all(other);
 }
