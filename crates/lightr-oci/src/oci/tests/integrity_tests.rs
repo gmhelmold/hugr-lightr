@@ -2,7 +2,7 @@
 
 use super::{make_layer, make_layout, tmp_store_and_home, ENV_LOCK};
 use crate::oci::import::import_layout;
-use crate::oci::util::{path_is_safe, sha256_hex_of, verify_sha256};
+use crate::oci::util::{host_arch, path_is_safe, sha256_hex_of, verify_sha256};
 use lightr_core::LightrError;
 use std::{fs, path::Path};
 use tempfile::TempDir;
@@ -161,6 +161,113 @@ fn test_verify_sha256_helper() {
     let bad_hex = "0".repeat(64);
     let err = verify_sha256(data, &bad_hex).unwrap_err();
     assert!(matches!(err, LightrError::Integrity { .. }));
+}
+
+fn rewrite_layout_manifest(layout: &Path, manifest: serde_json::Value) {
+    let bytes = serde_json::to_vec(&manifest).unwrap();
+    let hex = sha256_hex_of(&bytes);
+    fs::write(layout.join("blobs/sha256").join(&hex), bytes).unwrap();
+    fs::write(
+        layout.join("index.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "schemaVersion": 2,
+            "manifests": [{
+                "digest": format!("sha256:{hex}"),
+                "platform": {"os": "linux", "architecture": host_arch()}
+            }]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+}
+
+/// Config is required and validated before snapshot. Every rejection leaves no ref.
+#[test]
+fn test_oci_config_rejections_publish_no_ref() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    for case in ["missing", "malformed", "unsupported", "mismatch"] {
+        let tmp = TempDir::new().unwrap();
+        let (_home, store) = tmp_store_and_home();
+        let layout = make_layout(tmp.path(), &[make_layer(&[("x", b"x", 0o644)])]);
+        let blobs = layout.join("blobs/sha256");
+        let index: serde_json::Value =
+            serde_json::from_slice(&fs::read(layout.join("index.json")).unwrap()).unwrap();
+        let manifest_hex = index["manifests"][0]["digest"]
+            .as_str()
+            .unwrap()
+            .strip_prefix("sha256:")
+            .unwrap();
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(blobs.join(manifest_hex)).unwrap()).unwrap();
+        let old_hex = manifest["config"]["digest"]
+            .as_str()
+            .unwrap()
+            .strip_prefix("sha256:")
+            .unwrap()
+            .to_string();
+
+        match case {
+            "missing" => fs::remove_file(blobs.join(old_hex)).unwrap(),
+            "malformed" => {
+                let bytes = b"[]";
+                let hex = sha256_hex_of(bytes);
+                fs::write(blobs.join(&hex), bytes).unwrap();
+                manifest["config"]["digest"] = serde_json::json!(format!("sha256:{hex}"));
+                manifest["config"]["size"] = serde_json::json!(bytes.len());
+                rewrite_layout_manifest(&layout, manifest);
+            }
+            "unsupported" => {
+                manifest["config"]["digest"] = serde_json::json!("sha512:deadbeef");
+                rewrite_layout_manifest(&layout, manifest);
+            }
+            "mismatch" => fs::write(blobs.join(old_hex), b"{\"os\":\"linux\"}").unwrap(),
+            _ => unreachable!(),
+        }
+
+        let name = format!("config-{case}");
+        let result = import_layout(&layout, &store, &name);
+        assert!(
+            matches!(
+                result,
+                Err(LightrError::InvalidManifest(_)) | Err(LightrError::Integrity { .. })
+            ),
+            "{case} config must fail"
+        );
+        assert!(
+            store.ref_get(&name).unwrap().is_none(),
+            "{case} config published ref"
+        );
+    }
+}
+
+/// Index selection accepts only native Linux descriptor, never first descriptor.
+#[test]
+fn test_oci_layout_rejects_non_host_platform_without_ref() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let tmp = TempDir::new().unwrap();
+    let (_home, store) = tmp_store_and_home();
+    let layout = make_layout(tmp.path(), &[make_layer(&[("x", b"x", 0o644)])]);
+    let index: serde_json::Value =
+        serde_json::from_slice(&fs::read(layout.join("index.json")).unwrap()).unwrap();
+    let digest = index["manifests"][0]["digest"].clone();
+    let other = if host_arch() == "amd64" {
+        "arm64"
+    } else {
+        "amd64"
+    };
+    fs::write(
+        layout.join("index.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "schemaVersion": 2,
+            "manifests": [{"digest": digest, "platform": {"os": "linux", "architecture": other}}]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let result = import_layout(&layout, &store, "wrong-platform");
+    assert!(matches!(result, Err(LightrError::InvalidManifest(_))));
+    assert!(store.ref_get("wrong-platform").unwrap().is_none());
 }
 
 // ── FIX 3/4: whiteout ordering tests ─────────────────────────────────────

@@ -251,6 +251,16 @@ fn test_docker_save_tar_roundtrip() {
             mh.set_cksum();
             tar.append(&mh, manifest_json.as_slice()).unwrap();
 
+            // Legacy docker-save config is required before ref publication.
+            let config = br#"{"architecture":"amd64","os":"linux"}"#;
+            let mut ch = tar::Header::new_gnu();
+            ch.set_path("config.json").unwrap();
+            ch.set_mode(0o644);
+            ch.set_size(config.len() as u64);
+            ch.set_entry_type(tar::EntryType::Regular);
+            ch.set_cksum();
+            tar.append(&ch, &config[..]).unwrap();
+
             // layer0/layer.tar
             let mut lh = tar::Header::new_gnu();
             lh.set_path("layer0/layer.tar").unwrap();
@@ -348,4 +358,68 @@ fn test_docker_save_modern_rejects_sha_mismatch() {
         res.is_err(),
         "a blobs/sha256 digest mismatch must be rejected (fail-closed)"
     );
+}
+
+fn docker_save_with_config(config_path: &str, config: Option<&[u8]>) -> Vec<u8> {
+    let layer = make_layer(&[("x", b"x", 0o644)]);
+    let manifest = serde_json::to_vec(&serde_json::json!([{
+        "Config": config_path,
+        "Layers": ["layer.tar"]
+    }]))
+    .unwrap();
+    let mut bytes = Vec::new();
+    let mut tar = tar::Builder::new(&mut bytes);
+    for (path, data) in [
+        ("manifest.json", manifest.as_slice()),
+        ("layer.tar", layer.as_slice()),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_path(path).unwrap();
+        header.set_size(data.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append(&header, data).unwrap();
+    }
+    if let Some(data) = config {
+        let mut header = tar::Header::new_gnu();
+        header.set_path(config_path).unwrap();
+        header.set_size(data.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append(&header, data).unwrap();
+    }
+    tar.finish().unwrap();
+    drop(tar);
+    bytes
+}
+
+/// Docker-save config is mandatory: unsafe, missing, malformed, and mismatched
+/// legacy digest paths reject before a ref can be published.
+#[test]
+fn test_docker_save_config_rejections_publish_no_ref() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let valid = br#"{"architecture":"amd64","os":"linux"}"#;
+    let bad_digest = format!("{}.json", "0".repeat(64));
+    for (case, config_path, config) in [
+        ("unsafe", "../config.json", None),
+        ("missing", "missing.json", None),
+        ("malformed", "config.json", Some(&b"[]"[..])),
+        ("mismatch", bad_digest.as_str(), Some(&valid[..])),
+    ] {
+        let tmp = TempDir::new().unwrap();
+        let (_home, store) = tmp_store_and_home();
+        let tar_path = tmp.path().join(format!("{case}.tar"));
+        fs::write(&tar_path, docker_save_with_config(config_path, config)).unwrap();
+        let name = format!("docker-config-{case}");
+        let result = import_layout(&tar_path, &store, &name);
+        assert!(
+            matches!(
+                result,
+                Err(lightr_core::LightrError::InvalidManifest(_))
+                    | Err(lightr_core::LightrError::Integrity { .. })
+            ),
+            "{case} config must reject"
+        );
+        assert!(store.ref_get(&name).unwrap().is_none());
+    }
 }

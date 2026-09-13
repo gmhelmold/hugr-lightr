@@ -7,7 +7,7 @@ mod pull_tests;
 mod push_tests;
 mod retain_tests;
 
-use crate::oci::util::sha256_hex_of;
+use crate::oci::util::{host_arch, sha256_hex_of};
 use flate2::{write::GzEncoder, Compression};
 use lightr_store::Store;
 use std::{
@@ -92,14 +92,18 @@ pub(super) fn make_layout(dir: &Path, layers: &[Vec<u8>]) -> PathBuf {
         }));
     }
 
+    let config = format!(r#"{{"architecture":"{}","os":"linux"}}"#, host_arch()).into_bytes();
+    let config_hex = sha256_hex_of(&config);
+    fs::write(layout_dir.join("blobs/sha256").join(&config_hex), &config).unwrap();
+
     // Write manifest using REAL sha256.
     let manifest = serde_json::json!({
         "schemaVersion": 2,
         "mediaType": "application/vnd.oci.image.manifest.v1+json",
         "config": {
             "mediaType": "application/vnd.oci.image.config.v1+json",
-            "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-            "size": 0
+            "digest": format!("sha256:{config_hex}"),
+            "size": config.len()
         },
         "layers": layer_descs
     });
@@ -118,7 +122,8 @@ pub(super) fn make_layout(dir: &Path, layers: &[Vec<u8>]) -> PathBuf {
         "manifests": [{
             "mediaType": "application/vnd.oci.image.manifest.v1+json",
             "digest": format!("sha256:{manifest_hex}"),
-            "size": manifest_bytes.len()
+            "size": manifest_bytes.len(),
+            "platform": {"os": "linux", "architecture": host_arch()}
         }]
     });
     fs::write(
