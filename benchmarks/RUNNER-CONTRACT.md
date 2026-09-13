@@ -11,6 +11,9 @@ bench-runner verify-spec --spec PATH
 bench-runner run --spec PATH --chunk N --chunks N --rounds N --out DIR \
   --docker PATH --lightr PATH
 bench-runner merge --input DIR --out DIR
+bench-runner run-differential --spec PATH --chunk N --chunks N --rounds N --out DIR \
+  --docker PATH --lightr PATH --mode cold
+bench-runner merge-differential --input DIR --out DIR
 ```
 
 `verify-spec` rejects malformed YAML, non-250 corpus, duplicate IDs, unknown
@@ -87,6 +90,21 @@ version.
 `merge` reads JSONL recursively, rejects malformed rows and duplicate
 `(scenario_id, tool, round)` tuples, writes `merged.jsonl` plus `summary.json`.
 It reports counts only; no derived statistical claim.
+
+## S2 Differential JSONL
+
+`run-differential` emits schema v2 only. It accepts `--mode cold`; `warm` and
+`invalidate` fail with an explicit unsupported diagnostic until S2-5B. Before
+writing any v2 row, Docker client and server must both equal `28.3.2`; failures
+name observed values. Each v2 row retains every v1 field and adds non-empty
+`mode`, `hardware_identity` (OS-native probe, no fallback), `pair_id`, and
+`output_equivalence_sha256`.
+
+`merge` accepts v1 only. `merge-differential` accepts v2 only and rejects v1,
+mixed/malformed rows, empty required fields, duplicate `(pair_id, tool)` tuples,
+and empty evidence. Its factor is emitted only for successful same-fixture,
+same-hardware Docker 28.3.2 pairs with equal output-equivalence digests;
+otherwise summary has a typed no-factor reason.
 
 ## Tests
 
