@@ -152,6 +152,61 @@ fn test_path_escape_rejects_import_without_ref() {
     );
 }
 
+/// Malicious outer docker-save entries reject before archive selection or import.
+#[test]
+fn test_docker_save_outer_path_escape_rejects_import_without_ref() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let tmp = TempDir::new().unwrap();
+    let (_home, store) = tmp_store_and_home();
+
+    fn tar_block(name: &[u8], content: &[u8]) -> Vec<u8> {
+        let mut block = [0u8; 512];
+        let name_len = name.len().min(99);
+        block[..name_len].copy_from_slice(&name[..name_len]);
+        block[100..107].copy_from_slice(b"0000644");
+        block[108..115].copy_from_slice(b"0000000");
+        block[116..123].copy_from_slice(b"0000000");
+        let size = format!("{:011o}", content.len());
+        block[124..135].copy_from_slice(size.as_bytes());
+        block[136..147].copy_from_slice(b"00000000000");
+        block[148..156].copy_from_slice(b"        ");
+        block[156] = b'0';
+        let checksum: u32 = block.iter().map(|&byte| byte as u32).sum();
+        let checksum = format!("{:06o}\0 ", checksum);
+        block[148..156].copy_from_slice(checksum.as_bytes());
+
+        let mut entry = block.to_vec();
+        entry.extend_from_slice(content);
+        entry.extend(vec![0; (512 - content.len() % 512) % 512]);
+        entry
+    }
+
+    let layer = make_layer(&[("safe", b"safe", 0o644)]);
+    let manifest = serde_json::to_vec(&serde_json::json!([{
+        "Config": "config.json",
+        "Layers": ["layer/layer.tar"]
+    }]))
+    .unwrap();
+    let mut archive = tar_block(b"manifest.json", &manifest);
+    archive.extend(tar_block(b"layer/layer.tar", &layer));
+    archive.extend(tar_block(b"../ignored", b"ignored"));
+    archive.extend([0; 1024]);
+
+    let path = tmp.path().join("malicious-docker-save.tar");
+    fs::write(&path, archive).unwrap();
+    let result = import_layout(&path, &store, "outer-escape");
+
+    assert!(
+        matches!(&result, Err(lightr_core::LightrError::InvalidManifest(msg)) if msg.contains("unsafe docker save path")),
+        "outer traversal must reject import, got: {:?}",
+        result.as_ref().err()
+    );
+    assert!(
+        store.ref_get("outer-escape").unwrap().is_none(),
+        "rejected outer archive must not publish ref"
+    );
+}
+
 /// docker save-style tar roundtrip.
 #[test]
 fn test_docker_save_tar_roundtrip() {
