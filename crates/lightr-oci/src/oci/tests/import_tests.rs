@@ -77,9 +77,9 @@ fn test_import_idempotent() {
     );
 }
 
-/// A19 partial: path-escape entries are skipped, nothing written outside tempdir.
+/// Malicious layer traversal rejects the whole import and publishes no ref.
 #[test]
-fn test_path_escape_skipped() {
+fn test_path_escape_rejects_import_without_ref() {
     let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
     let tmp = TempDir::new().unwrap();
     let (_home, store) = tmp_store_and_home();
@@ -140,19 +140,16 @@ fn test_path_escape_skipped() {
 
     let layout_dir = make_layout(tmp.path(), &[layer_bytes]);
 
-    let report = import_layout(&layout_dir, &store, "escape-test").unwrap();
-
-    // The import should succeed
-    assert_eq!(report.layers, 1);
-
-    // evil file must NOT exist outside the snapshot (it was skipped)
-    // We can't easily check the tempdir after the fact, but we can verify
-    // the hydrated tree only has the safe file.
-    let hydrate_dir = tmp.path().join("hydrated-escape");
-    fs::create_dir_all(&hydrate_dir).unwrap();
-    lightr_index::hydrate(&hydrate_dir, &store, "escape-test").unwrap();
-    assert!(hydrate_dir.join("safe.txt").exists(), "safe.txt must exist");
-    // ../evil cannot land in the hydrate_dir since it was skipped
+    let result = import_layout(&layout_dir, &store, "escape-test");
+    assert!(
+        matches!(&result, Err(lightr_core::LightrError::InvalidManifest(msg)) if msg.contains("unsafe layer path")),
+        "traversal must reject import, got: {:?}",
+        result.as_ref().err()
+    );
+    assert!(
+        store.ref_get("escape-test").unwrap().is_none(),
+        "rejected import must not publish ref"
+    );
 }
 
 /// docker save-style tar roundtrip.
