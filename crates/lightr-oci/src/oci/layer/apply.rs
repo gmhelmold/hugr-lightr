@@ -66,7 +66,7 @@ pub(super) enum PendingEntry {
 ///
 /// Samples `deadline` every 256 entries; returns
 /// `(dirs, whiteouts, pending, whited_out_paths)`.
-/// Increments the shared `entry_count` and `skipped` counters.
+/// Increments shared `entry_count`.
 /// The four buckets produced by [`collect_ops`]: dirs to create, whiteouts to
 /// apply, pending file/symlink/hardlink entries, and the set of whited-out paths.
 type CollectedOps = (
@@ -81,7 +81,6 @@ pub(super) fn collect_ops<R: Read>(
     tempdir: &Path,
     deadline: Instant,
     entry_count: &mut u64,
-    skipped: &mut u64,
     timeout_secs: u64,
 ) -> Result<CollectedOps> {
     let mut dirs: Vec<PathBuf> = Vec::new();
@@ -105,10 +104,12 @@ pub(super) fn collect_ops<R: Read>(
         let mut entry = entry_result.map_err(LightrError::Io)?;
         let entry_path = entry.path().map_err(LightrError::Io)?.into_owned();
 
-        // Path safety: reject `..` or absolute entries
+        // Archive traversal invalidates whole import; never publish a partial tree.
         if !path_is_safe(&entry_path) {
-            *skipped += 1;
-            continue;
+            return Err(LightrError::InvalidManifest(format!(
+                "unsafe layer path: {}",
+                entry_path.display()
+            )));
         }
 
         // Strip a leading `.` component (common in OCI layers)
