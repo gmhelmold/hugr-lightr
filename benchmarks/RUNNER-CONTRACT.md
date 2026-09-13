@@ -11,6 +11,9 @@ bench-runner verify-spec --spec PATH
 bench-runner run --spec PATH --chunk N --chunks N --rounds N --out DIR \
   --docker PATH --lightr PATH
 bench-runner merge --input DIR --out DIR
+bench-runner run-differential --spec PATH --chunk N --chunks N --rounds N --out DIR \
+  --docker PATH --lightr PATH --mode cold
+bench-runner merge-differential --input DIR --out DIR
 ```
 
 `verify-spec` rejects malformed YAML, non-250 corpus, duplicate IDs, unknown
@@ -87,6 +90,29 @@ version.
 `merge` reads JSONL recursively, rejects malformed rows and duplicate
 `(scenario_id, tool, round)` tuples, writes `merged.jsonl` plus `summary.json`.
 It reports counts only; no derived statistical claim.
+
+## S2 Differential JSONL
+
+`run-differential` emits schema v2 only. It accepts `--mode cold`; `warm` and
+`invalidate` fail with an explicit unsupported diagnostic until S2-5B. Before
+writing any v2 row, Docker client and server must both equal `28.3.2`; failures
+name observed values. Each v2 row retains every v1 field and adds non-empty
+`mode`, `hardware_identity` (OS-native probe, no fallback), `pair_id`, and
+`output_equivalence_sha256`, `equivalence_status`, and `cold_precondition`.
+Equivalence digest hashes only ordered shared `docker_and_lightr` assertion
+kind, declared expected value, and normalized passing result; command streams
+never enter it. No shared assertion produces `no_shared_assertions` and no
+factor. Cold accepts only `$DOCKER build --tag SAFE_TAG $FIXTURE_DIR`; runner
+constructs separate `$DOCKER build --no-cache --tag SAFE_TAG $FIXTURE_DIR`
+command and audit receipt. Before each cold pair, it removes only declared
+Docker build tag, verifies it absent, and clears/verifies private
+`LIGHTR_HOME`; unsupported Docker command shapes reject cold before recording.
+
+`merge` accepts v1 only. `merge-differential` accepts v2 only and rejects v1,
+mixed/malformed rows, empty required fields, duplicate `(pair_id, tool)` tuples,
+and empty evidence. Its factor is emitted only for successful same-fixture,
+same-hardware Docker 28.3.2 pairs with equal output-equivalence digests;
+otherwise summary has a typed no-factor reason.
 
 ## Tests
 
