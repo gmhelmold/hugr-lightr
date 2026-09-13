@@ -16,12 +16,11 @@ use std::{
 };
 use tempfile::TempDir;
 
-// ── Serialization lock: snapshot/hydrate touch LIGHTR_HOME ───────────────
+// ── Serialization lock: env-var tests share process state ─────────────────
 pub(super) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 pub(super) fn tmp_store_and_home() -> (TempDir, Store) {
     let home = TempDir::new().unwrap();
-    std::env::set_var("LIGHTR_HOME", home.path());
     let store = Store::open(home.path().join("store")).unwrap();
     (home, store)
 }
