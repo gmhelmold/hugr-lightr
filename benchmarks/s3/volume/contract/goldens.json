@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "contract": "S3 named-volume lifecycle v1",
+  "goldens": [
+    {"id":"normal-teardown","owners":[],"rm":"allowed","prune":"allowed"},
+    {"id":"shared-mounts","owners":[],"rm":"allowed","prune":"allowed"},
+    {"id":"failed-spawn","owners":[],"rm":"allowed","prune":"allowed"},
+    {"id":"sigkill-owner-recovery","owners":[],"rm":"allowed","prune":"allowed"},
+    {"id":"pid-reused-ledger-recovery","owners":[],"rm":"allowed","prune":"allowed"},
+    {"id":"ambiguous-registry-refuses-rm-prune","owners":["nonce_a"],"rm":"refused:ambiguous-registry","prune":"refused:ambiguous-registry"},
+    {"id":"concurrent-rm-prune-refuse-active","owners":["nonce_a"],"rm":"refused:non-empty-owners","prune":"refused:non-empty-owners"}
+  ]
+}

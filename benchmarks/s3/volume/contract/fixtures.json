@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "contract": "S3 named-volume lifecycle v1",
+  "nonce_a": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "nonce_b": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "fixtures": [
+    {
+      "id": "normal-teardown",
+      "processes": 2,
+      "trace": ["acquire-pending:nonce_a", "spawn-barrier", "activate:nonce_a", "release-barrier", "terminal:run-a:nonce_a", "release:run-a:nonce_a:linux:200:20"]
+    },
+    {
+      "id": "shared-mounts",
+      "processes": 3,
+      "trace": ["activate:nonce_a", "activate:nonce_b", "terminal:run-a:nonce_a", "release:run-a:nonce_a:linux:200:20", "terminal:run-b:nonce_b", "release:run-b:nonce_b:linux:201:21"]
+    },
+    {
+      "id": "failed-spawn",
+      "processes": 1,
+      "trace": ["acquire-pending:nonce_a", "spawn-failed", "remove-pending:nonce_a"]
+    },
+    {
+      "id": "sigkill-owner-recovery",
+      "processes": 2,
+      "trace": ["activate:nonce_a", "sigkill:200", "registry-terminal:run-a:nonce_a", "recover-active:nonce_a"]
+    },
+    {
+      "id": "pid-reused-ledger-recovery",
+      "processes": 2,
+      "trace": ["activate:nonce_a", "registry-readable:run-a:nonce_a", "proc-token-mismatch:200:linux:200:99", "recover-active:nonce_a"]
+    },
+    {
+      "id": "ambiguous-registry-refuses-rm-prune",
+      "processes": 2,
+      "trace": ["activate:nonce_a", "registry-unreadable:run-a:nonce_a", "rm", "prune"]
+    },
+    {
+      "id": "concurrent-rm-prune-refuse-active",
+      "processes": 3,
+      "trace": ["activate:nonce_a", "concurrent:rm,prune"]
+    }
+  ]
+}
