@@ -5,10 +5,10 @@
 //! `(key, value)` pairs; everything after the first non-flag token is
 //! positional. No interpolation, no quoting beyond whitespace splitting.
 
-/// Split a flag-bearing instruction tail into its leading `--key=value` flags
+/// Split a flag-bearing instruction tail into its leading `--key[=value]` flags
 /// and the remaining positional tokens.
 ///
-/// Only `--key=value` tokens at the front are treated as flags; once a
+/// Only `--key[=value]` tokens at the front are treated as flags; once a
 /// non-flag token is seen, the rest are positional (Docker requires flags to
 /// precede positionals for these instructions).
 pub(super) fn split_flags(rest: &str) -> (Vec<(String, String)>, Vec<String>) {
@@ -18,10 +18,9 @@ pub(super) fn split_flags(rest: &str) -> (Vec<(String, String)>, Vec<String>) {
     for tok in rest.split_ascii_whitespace() {
         if in_flags {
             if let Some(flag) = tok.strip_prefix("--") {
-                if let Some((k, v)) = flag.split_once('=') {
-                    flags.push((k.to_string(), v.to_string()));
-                    continue;
-                }
+                let (key, value) = flag.split_once('=').unwrap_or((flag, ""));
+                flags.push((key.to_string(), value.to_string()));
+                continue;
             }
             in_flags = false;
         }
@@ -30,21 +29,23 @@ pub(super) fn split_flags(rest: &str) -> (Vec<(String, String)>, Vec<String>) {
     (flags, positional)
 }
 
-/// Extract a single named `--<name>=<value>` flag (if present at the front),
-/// returning `(Some(value), remaining_tail)`. Used by FROM's `--platform`.
-pub(super) fn take_flag(rest: &str, name: &str) -> (Option<String>, String) {
-    let (flags, positional) = split_flags(rest);
-    let value = flags
-        .iter()
-        .find(|(k, _)| k == name)
-        .map(|(_, v)| v.clone());
-    // Re-emit any flags that were NOT the requested one, preserving order,
-    // ahead of the positionals (faithful to "flags precede positionals").
-    let mut tail: Vec<String> = flags
-        .iter()
-        .filter(|(k, _)| k != name)
-        .map(|(k, v)| format!("--{k}={v}"))
-        .collect();
-    tail.extend(positional);
-    (value, tail.join(" "))
+/// Reject flags not explicitly supported by this instruction before execution.
+pub(super) fn validate_flags(
+    flags: &[(String, String)],
+    instruction: &str,
+    allowed: &[&str],
+) -> lightr_core::Result<()> {
+    for (name, value) in flags {
+        if !allowed.contains(&name.as_str()) {
+            return Err(lightr_core::LightrError::InvalidManifest(format!(
+                "{instruction}: unknown flag --{name}"
+            )));
+        }
+        if value.is_empty() {
+            return Err(lightr_core::LightrError::InvalidManifest(format!(
+                "{instruction}: flag --{name} requires =<value>"
+            )));
+        }
+    }
+    Ok(())
 }
