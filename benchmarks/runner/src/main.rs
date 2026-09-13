@@ -150,6 +150,9 @@ struct DifferentialRecord {
     output_equivalence_sha256: String,
     equivalence_status: String,
     cold_precondition: String,
+    original_fixture_tree_sha256: String,
+    mutation_sha256: String,
+    mutation_receipt: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -179,6 +182,7 @@ struct Versions {
 }
 
 struct ColdPrecondition { docker_command: String, receipt: String }
+struct ModeState { docker_command: Option<String>, fixture: PathBuf, fixture_hash: String, original_fixture_hash: String, mutation_sha256: String, mutation_receipt: String, receipt: String }
 
 fn main() {
     let result = match Cli::parse().command {
@@ -279,7 +283,7 @@ fn run(spec_path: &Path, chunk: usize, chunks: usize, rounds: usize, out: &Path,
 }
 
 fn run_differential(spec_path: &Path, chunk: usize, chunks: usize, rounds: usize, out: &Path, docker: &Path, lightr: &Path, mode: &str) -> Result<(), String> {
-    if mode != "cold" { return Err(format!("unsupported differential mode: {mode}; only cold is supported until S2-5B")); }
+    if !["cold", "warm", "invalidate"].contains(&mode) { return Err(format!("unsupported differential mode: {mode}; require cold, warm, or invalidate")); }
     if chunks == 0 || chunk >= chunks || rounds == 0 { return Err("require chunks > 0, chunk < chunks, and rounds > 0".into()); }
     let (spec, bytes) = load_spec(spec_path)?;
     let versions = probe_versions(docker, lightr);
@@ -296,19 +300,22 @@ fn run_differential(spec_path: &Path, chunk: usize, chunks: usize, rounds: usize
         for round in round_indices(rounds) {
             let scenario_out = out.join("scenarios").join(&scenario.id).join(round.to_string());
             fs::create_dir_all(&scenario_out).map_err(|e| format!("create scenario output {}: {e}", scenario_out.display()))?;
-            let cold = cold_precondition(scenario, docker, &scenario_out)?;
             let context = fixture.as_ref().ok().map(|(path, hash, commit)| (path.as_path(), hash.as_str(), commit.as_str()));
             let failure = fixture.as_ref().err().cloned();
-            let (mut docker_record, docker_result) = execute_record(scenario, "docker", round, context, &scenario_out, &versions, &spec_hash, docker, lightr, failure.as_deref(), Some(cold_docker_override(&cold)));
-            let (mut lightr_record, lightr_result) = execute_record(scenario, "lightr", round, context, &scenario_out, &versions, &spec_hash, docker, lightr, failure.as_deref(), None);
-            if let Some((fixture_dir, _, _)) = context {
+            let state = context.map(|(fixture_dir, fixture_hash, _)| differential_mode_state(mode, scenario, docker, lightr, fixture_dir, fixture_hash, &tree_sha256(fixture_dir)?, &scenario_out)).transpose()?;
+            let timed_context = state.as_ref().map(|state| (state.fixture.as_path(), state.fixture_hash.as_str(), context.unwrap().2));
+            let docker_override = state.as_ref().and_then(|state| state.docker_command.as_deref());
+            let (mut docker_record, docker_result) = execute_record(scenario, "docker", round, timed_context, &scenario_out, &versions, &spec_hash, docker, lightr, failure.as_deref(), docker_override);
+            let (mut lightr_record, lightr_result) = execute_record(scenario, "lightr", round, timed_context, &scenario_out, &versions, &spec_hash, docker, lightr, failure.as_deref(), None);
+            if let Some((fixture_dir, _, _)) = timed_context {
                 apply_assertions(&mut docker_record, scenario, "docker", &docker_result, docker, lightr, fixture_dir, &scenario_out);
                 apply_assertions(&mut lightr_record, scenario, "lightr", &lightr_result, docker, lightr, fixture_dir, &scenario_out);
             }
             failed |= docker_record.outcome != "passed" || lightr_record.outcome != "passed";
             let pair_id = format!("{}:{round}", scenario.id);
-            write_differential_record(&mut records, &differential_record(docker_record, scenario, mode, &hardware, &pair_id, &cold.receipt))?;
-            write_differential_record(&mut records, &differential_record(lightr_record, scenario, mode, &hardware, &pair_id, &cold.receipt))?;
+            let state = state.ok_or_else(|| "fixture unavailable".to_string())?;
+            write_differential_record(&mut records, &differential_record(docker_record, scenario, mode, &hardware, &pair_id, &state))?;
+            write_differential_record(&mut records, &differential_record(lightr_record, scenario, mode, &hardware, &pair_id, &state))?;
         }
     }
     if failed { Err("one or more selected supported scenarios failed".into()) } else { Ok(()) }
@@ -360,13 +367,28 @@ fn cold_precondition(scenario: &Scenario, docker: &Path, output: &Path) -> Resul
     Ok(ColdPrecondition { docker_command, receipt: format!("docker_image_absent:{tag};docker_no_cache;lightr_home_absent") })
 }
 
-fn cold_docker_override(cold: &ColdPrecondition) -> &str { &cold.docker_command }
+#[cfg(test)] fn cold_docker_override(cold: &ColdPrecondition) -> &str { &cold.docker_command }
 
-fn differential_record(raw: RawRecord, scenario: &Scenario, mode: &str, hardware: &str, pair_id: &str, cold_precondition: &str) -> DifferentialRecord {
+fn command_passed(result: &CommandResult) -> bool { result.error.is_none() && !result.timed_out && result.status.as_ref().is_some_and(|status| status.success()) }
+fn copy_tree(source: &Path, destination: &Path) -> Result<(), String> { if destination.exists() { fs::remove_dir_all(destination).map_err(|e| e.to_string())?; } fs::create_dir_all(destination).map_err(|e| e.to_string())?; for entry in fs::read_dir(source).map_err(|e| e.to_string())? { let entry = entry.map_err(|e| e.to_string())?; let target = destination.join(entry.file_name()); if entry.file_type().map_err(|e| e.to_string())?.is_dir() { copy_tree(&entry.path(), &target)?; } else if entry.file_type().map_err(|e| e.to_string())?.is_file() { fs::copy(entry.path(), target).map_err(|e| e.to_string())?; } } Ok(()) }
+fn differential_mode_state(mode: &str, scenario: &Scenario, docker: &Path, lightr: &Path, fixture: &Path, fixture_hash: &str, context_hash: &str, output: &Path) -> Result<ModeState, String> {
+    if mode == "cold" { let cold = cold_precondition(scenario, docker, output)?; return Ok(ModeState { docker_command: Some(cold.docker_command), fixture: fixture.into(), fixture_hash: fixture_hash.into(), original_fixture_hash: fixture_hash.into(), mutation_sha256: sha256(b"none"), mutation_receipt: "none".into(), receipt: cold.receipt }); }
+    let (_, tag) = cold_docker_command(scenario).map_err(|_| format!("{mode} unsupported for {}: require `$DOCKER build --tag SAFE_TAG $FIXTURE_DIR`", scenario.id))?;
+    let docker_setup = scenario.docker.as_ref().and_then(|command| command.command.as_deref()).unwrap_or(""); let docker_result = run_shell(&expand(docker_setup, docker, lightr, fixture, output)?, Duration::from_secs(TIMEOUT_SECS), Some(&output.join("lightr-home"))); if !command_passed(&docker_result) { return Err(format!("{mode} setup failed for {}: Docker", scenario.id)); }
+    let inspect = run_command(Command::new(docker).args(["image", "inspect", &tag]), Duration::from_secs(TIMEOUT_SECS)); if !command_passed(&inspect) { return Err(format!("{mode} setup unverified for {}: Docker image {tag}", scenario.id)); }
+    let lightr_setup = scenario.lightr.as_ref().and_then(|command| command.command.as_deref()).unwrap_or(""); let lightr_result = run_shell(&expand(lightr_setup, docker, lightr, fixture, output)?, Duration::from_secs(TIMEOUT_SECS), Some(&output.join("lightr-home"))); if !command_passed(&lightr_result) || !output.join("lightr-home").is_dir() { return Err(format!("{mode} setup unverified for {}: Lightr home", scenario.id)); }
+    if mode == "warm" { return Ok(ModeState { docker_command: None, fixture: fixture.into(), fixture_hash: fixture_hash.into(), original_fixture_hash: fixture_hash.into(), mutation_sha256: sha256(b"none"), mutation_receipt: "none".into(), receipt: format!("docker_image_present:{tag};lightr_home_preserved") }); }
+    let source = invalidate_input(scenario, fixture)?; let mutated = output.join("invalidate-fixture"); copy_tree(fixture, &mutated)?; let copied_source = mutated.join(&source); let old = fs::read(&copied_source).map_err(|e| format!("invalidate source {}: {e}", source.display()))?; let old_hash = sha256(&old); let mut new = old; new.extend_from_slice(b"\nlightr-s2-invalidate-v1\n"); let new_hash = sha256(&new); fs::write(&copied_source, &new).map_err(|e| format!("invalidate source {}: {e}", source.display()))?; let after = tree_sha256(&mutated)?; if old_hash == new_hash || tree_sha256(fixture)? != context_hash || after == context_hash { return Err(format!("invalidate mutation unverified for {}", scenario.id)); }
+    Ok(ModeState { docker_command: None, fixture: mutated, fixture_hash: after, original_fixture_hash: fixture_hash.into(), mutation_sha256: new_hash.clone(), mutation_receipt: format!("source:{};old_sha256:{old_hash};new_sha256:{new_hash}", source.display()), receipt: format!("docker_image_present:{tag};lightr_home_preserved;fixture_mutated") })
+}
+
+fn invalidate_input(scenario: &Scenario, fixture: &Path) -> Result<PathBuf, String> { let lightr = scenario.lightr.as_ref().and_then(|command| command.command.as_deref()).unwrap_or(""); if !lightr.contains("$FIXTURE_DIR") { return Err(format!("invalidate unsupported for {}: Lightr command lacks $FIXTURE_DIR", scenario.id)); } let dockerfile = fs::read_to_string(fixture.join("Dockerfile")).map_err(|_| format!("invalidate unsupported for {}: Dockerfile unavailable", scenario.id))?; if !dockerfile.lines().any(|line| line.trim_start().starts_with("COPY data.txt ")) { return Err(format!("invalidate unsupported for {}: no provably consumed local input", scenario.id)); } let input = fixture.join("data.txt"); if !input.is_file() { return Err(format!("invalidate unsupported for {}: COPY source data.txt unavailable", scenario.id)); } Ok(PathBuf::from("data.txt")) }
+
+fn differential_record(raw: RawRecord, scenario: &Scenario, mode: &str, hardware: &str, pair_id: &str, state: &ModeState) -> DifferentialRecord {
     let shared: Vec<_> = scenario.assertions.iter().filter(|assertion| assertion.scope == "docker_and_lightr").map(|assertion| format!("{}:{}:passed", assertion.kind, serde_json::to_string(&assertion.expected).unwrap_or_default())).collect();
     let (output_equivalence_sha256, equivalence_status) = if shared.is_empty() { (sha256(b"[]"), "no_shared_assertions".into()) } else { (sha256(shared.join("\n").as_bytes()), "comparable".into()) };
     let mut raw = raw; raw.schema_version = DIFFERENTIAL_SCHEMA_VERSION;
-    DifferentialRecord { raw, mode: mode.into(), hardware_identity: hardware.into(), pair_id: pair_id.into(), output_equivalence_sha256, equivalence_status, cold_precondition: cold_precondition.into() }
+    DifferentialRecord { raw, mode: mode.into(), hardware_identity: hardware.into(), pair_id: pair_id.into(), output_equivalence_sha256, equivalence_status, cold_precondition: state.receipt.clone(), original_fixture_tree_sha256: state.original_fixture_hash.clone(), mutation_sha256: state.mutation_sha256.clone(), mutation_receipt: state.mutation_receipt.clone() }
 }
 fn write_differential_record(file: &mut File, record: &DifferentialRecord) -> Result<(), String> { serde_json::to_writer(&mut *file, record).map_err(|e| e.to_string())?; file.write_all(b"\n").map_err(|e| e.to_string()) }
 
@@ -573,7 +595,8 @@ fn merge_differential(input: &Path, out: &Path) -> Result<(), String> {
     for row in rows { if !seen.insert((row.pair_id.clone(), row.raw.tool.clone())) { return Err(format!("duplicate differential pair tuple: ({}, {})", row.pair_id, row.raw.tool)); } pairs.entry(row.pair_id.clone()).or_default().push(row); }
     fs::create_dir_all(out).map_err(|e| e.to_string())?; let mut merged = File::create(out.join("merged.jsonl")).map_err(|e| e.to_string())?; let mut factors = Vec::new();
     for (pair_id, pair) in pairs { for row in &pair { write_differential_record(&mut merged, row)?; } factors.push(differential_factor(&pair_id, &pair)); }
-    serde_json::to_writer_pretty(File::create(out.join("summary.json")).map_err(|e| e.to_string())?, &json!({"schema_version": DIFFERENTIAL_SCHEMA_VERSION, "factors": factors})).map_err(|e| e.to_string())
+    let samples: Vec<f64> = factors.iter().filter_map(|factor| factor["factor"].as_f64()).collect(); let statistics = if samples.is_empty() { Value::Null } else { let mut sorted = samples.clone(); sorted.sort_by(f64::total_cmp); json!({"sample_count": sorted.len(), "median_factor": sorted[sorted.len() / 2], "factor_range": {"min": sorted[0], "max": sorted[sorted.len() - 1]}}) };
+    serde_json::to_writer_pretty(File::create(out.join("summary.json")).map_err(|e| e.to_string())?, &json!({"schema_version": DIFFERENTIAL_SCHEMA_VERSION, "factors": factors, "statistics": statistics})).map_err(|e| e.to_string())
 }
 
 fn decode_differential(raw: &str) -> Result<DifferentialRecord, String> {
@@ -581,8 +604,8 @@ fn decode_differential(raw: &str) -> Result<DifferentialRecord, String> {
     let schema = value.get("schema_version").and_then(Value::as_u64).ok_or_else(|| "missing differential schema version".to_string())?;
     if schema != DIFFERENTIAL_SCHEMA_VERSION as u64 { return Err(format!("unsupported differential schema version: {schema}")); }
     let row: DifferentialRecord = serde_json::from_value(value).map_err(|e| e.to_string())?;
-    if row.mode != "cold" { return Err(format!("unsupported differential mode: {}", row.mode)); }
-    for value in [&row.mode, &row.hardware_identity, &row.pair_id, &row.output_equivalence_sha256, &row.equivalence_status, &row.cold_precondition, &row.raw.spec_sha256, &row.raw.host_os, &row.raw.host_arch, &row.raw.host_kernel] { if value.trim().is_empty() { return Err("empty required differential field".into()); } }
+    if !["cold", "warm", "invalidate"].contains(&row.mode.as_str()) { return Err(format!("unsupported differential mode: {}", row.mode)); }
+    for value in [&row.mode, &row.hardware_identity, &row.pair_id, &row.output_equivalence_sha256, &row.equivalence_status, &row.cold_precondition, &row.original_fixture_tree_sha256, &row.mutation_sha256, &row.mutation_receipt, &row.raw.spec_sha256, &row.raw.host_os, &row.raw.host_arch, &row.raw.host_kernel] { if value.trim().is_empty() { return Err("empty required differential field".into()); } }
     for value in [&row.raw.fixture_tree_sha256, &row.raw.source_commit, &row.raw.docker_client_version, &row.raw.docker_server_version, &row.raw.docker_api_version, &row.raw.lightr_version, &row.raw.lightr_sha256] { if value.as_deref().unwrap_or("").trim().is_empty() { return Err("empty required differential evidence field".into()); } }
     Ok(row)
 }
@@ -593,9 +616,9 @@ fn differential_factor(pair_id: &str, pair: &[DifferentialRecord]) -> Value {
     let docker = pair.iter().find(|row| row.raw.tool == "docker"); let lightr = pair.iter().find(|row| row.raw.tool == "lightr");
     let (Some(docker), Some(lightr)) = (docker, lightr) else { return reason("missing_paired_tool"); };
     if docker.raw.outcome != "passed" || lightr.raw.outcome != "passed" { return reason("unsuccessful_pair"); }
-    if docker.raw.fixture_tree_sha256 != lightr.raw.fixture_tree_sha256 || docker.hardware_identity != lightr.hardware_identity { return reason("incomparable_pair"); }
+    if docker.mode != lightr.mode || docker.raw.fixture_tree_sha256 != lightr.raw.fixture_tree_sha256 || docker.original_fixture_tree_sha256 != lightr.original_fixture_tree_sha256 || docker.mutation_sha256 != lightr.mutation_sha256 || docker.mutation_receipt != lightr.mutation_receipt || docker.hardware_identity != lightr.hardware_identity { return reason("incomparable_pair"); }
     if docker.equivalence_status != "comparable" || lightr.equivalence_status != "comparable" { return reason("no_shared_assertions"); }
-    if docker.cold_precondition != lightr.cold_precondition { return reason("cold_precondition_mismatch"); }
+    if docker.cold_precondition != lightr.cold_precondition { return reason("mode_precondition_mismatch"); }
     if docker.raw.docker_client_version.as_deref() != Some(DOCKER_VERSION) || docker.raw.docker_server_version.as_deref() != Some(DOCKER_VERSION) || lightr.raw.docker_client_version.as_deref() != Some(DOCKER_VERSION) || lightr.raw.docker_server_version.as_deref() != Some(DOCKER_VERSION) { return reason("unsupported_docker_version"); }
     if docker.output_equivalence_sha256 != lightr.output_equivalence_sha256 { return reason("output_mismatch"); }
     if lightr.raw.elapsed_ms == 0 { return reason("zero_lightr_elapsed"); }
@@ -623,25 +646,30 @@ mod tests {
     fn differential(tool: &str, elapsed: u128, output: &str) -> DifferentialRecord {
         let mut raw = skip_record(&scenario("pair", Availability::Supported), "spec");
         raw.schema_version = DIFFERENTIAL_SCHEMA_VERSION; raw.tool = tool.into(); raw.outcome = "passed".into(); raw.elapsed_ms = elapsed; raw.fixture_tree_sha256 = Some("fixture".into()); raw.source_commit = Some("commit".into()); raw.docker_client_version = Some(DOCKER_VERSION.into()); raw.docker_server_version = Some(DOCKER_VERSION.into()); raw.docker_api_version = Some("1.51".into()); raw.lightr_version = Some("lightr".into()); raw.lightr_sha256 = Some("hash".into());
-        DifferentialRecord { raw, mode: "cold".into(), hardware_identity: "actual-hardware".into(), pair_id: "pair:0".into(), output_equivalence_sha256: output.into(), equivalence_status: "comparable".into(), cold_precondition: "clean".into() }
+        DifferentialRecord { raw, mode: "cold".into(), hardware_identity: "actual-hardware".into(), pair_id: "pair:0".into(), output_equivalence_sha256: output.into(), equivalence_status: "comparable".into(), cold_precondition: "clean".into(), original_fixture_tree_sha256: "fixture".into(), mutation_sha256: sha256(b"none"), mutation_receipt: "none".into() }
     }
     #[test] fn wrong_docker_version_rejected() { let versions = Versions { docker_client: Some("28.3.1".into()), docker_server: Some(DOCKER_VERSION.into()), docker_api: Some("1.51".into()), lightr: Some("lightr".into()), lightr_hash: Some("hash".into()), error: None }; assert!(require_s2_versions(&versions).unwrap_err().contains("client=28.3.1")); }
-    #[test] fn warm_and_invalidate_are_rejected() { for mode in ["warm", "invalidate"] { assert_eq!(run_differential(Path::new("missing"), 0, 1, 1, Path::new("/tmp/x"), Path::new("x"), Path::new("x"), mode).unwrap_err(), format!("unsupported differential mode: {mode}; only cold is supported until S2-5B")); } }
+    #[test] fn unknown_differential_mode_is_rejected() { assert_eq!(run_differential(Path::new("missing"), 0, 1, 1, Path::new("/tmp/x"), Path::new("x"), Path::new("x"), "run").unwrap_err(), "unsupported differential mode: run; require cold, warm, or invalidate"); }
     #[test] fn differential_merge_rejects_v1() { let record = skip_record(&scenario("skip", Availability::Unsupported), "spec"); assert!(decode_differential(&serde_json::to_string(&record).unwrap()).unwrap_err().contains("unsupported differential schema version")); }
     #[test] fn output_mismatch_has_no_factor() { let factor = differential_factor("pair:0", &[differential("docker", 20, "docker"), differential("lightr", 10, "lightr")]); assert_eq!(factor["factor"], Value::Null); assert_eq!(factor["reason"], "output_mismatch"); }
     #[test] fn valid_cold_pair_has_factor() { let factor = differential_factor("pair:0", &[differential("docker", 20, "same"), differential("lightr", 10, "same")]); assert_eq!(factor["factor"], 2.0); assert_eq!(factor["reason"], Value::Null); }
     #[test] fn shared_assertions_ignore_command_stream_digests() {
         let scenario = scenario("pair", Availability::Supported); let mut docker = differential("docker", 20, "old").raw; let mut lightr = differential("lightr", 10, "old").raw;
         docker.stdout_sha256 = "docker-stdout".into(); docker.stderr_sha256 = "docker-stderr".into(); lightr.stdout_sha256 = "lightr-stdout".into(); lightr.stderr_sha256 = "lightr-stderr".into();
-        let docker = differential_record(docker, &scenario, "cold", "actual-hardware", "pair:0", "clean"); let lightr = differential_record(lightr, &scenario, "cold", "actual-hardware", "pair:0", "clean");
+        let state = ModeState { docker_command: None, fixture: PathBuf::new(), fixture_hash: "fixture".into(), original_fixture_hash: "fixture".into(), mutation_sha256: sha256(b"none"), mutation_receipt: "none".into(), receipt: "clean".into() }; let docker = differential_record(docker, &scenario, "cold", "actual-hardware", "pair:0", &state); let lightr = differential_record(lightr, &scenario, "cold", "actual-hardware", "pair:0", &state);
         assert_eq!(docker.output_equivalence_sha256, lightr.output_equivalence_sha256); assert_ne!(docker.raw.stdout_sha256, lightr.raw.stdout_sha256); assert_eq!(differential_factor("pair:0", &[docker, lightr])["factor"], 2.0);
     }
     #[test] fn missing_shared_assertions_has_no_factor() {
-        let mut scenario = scenario("pair", Availability::Supported); scenario.assertions.clear(); let docker = differential_record(differential("docker", 20, "old").raw, &scenario, "cold", "actual-hardware", "pair:0", "clean"); let lightr = differential_record(differential("lightr", 10, "old").raw, &scenario, "cold", "actual-hardware", "pair:0", "clean");
+        let mut scenario = scenario("pair", Availability::Supported); scenario.assertions.clear(); let state = ModeState { docker_command: None, fixture: PathBuf::new(), fixture_hash: "fixture".into(), original_fixture_hash: "fixture".into(), mutation_sha256: sha256(b"none"), mutation_receipt: "none".into(), receipt: "clean".into() }; let docker = differential_record(differential("docker", 20, "old").raw, &scenario, "cold", "actual-hardware", "pair:0", &state); let lightr = differential_record(differential("lightr", 10, "old").raw, &scenario, "cold", "actual-hardware", "pair:0", &state);
         let factor = differential_factor("pair:0", &[docker, lightr]); assert_eq!(factor["factor"], Value::Null); assert_eq!(factor["reason"], "no_shared_assertions");
     }
     #[test] fn cold_override_is_command_not_receipt() {
         let mut scenario = scenario("pair", Availability::Supported); scenario.docker.as_mut().unwrap().command = Some("$DOCKER build --tag lightr-scratch-copy:local $FIXTURE_DIR".into()); let (docker_command, tag) = cold_docker_command(&scenario).unwrap(); let cold = ColdPrecondition { receipt: format!("docker_image_absent:{tag};docker_no_cache;lightr_home_absent"), docker_command };
         assert_eq!(cold_docker_override(&cold), "$DOCKER build --no-cache --tag lightr-scratch-copy:local $FIXTURE_DIR"); assert_ne!(cold_docker_override(&cold), cold.receipt);
     }
+    #[cfg(unix)] fn fake_tools(root: &Path) -> (PathBuf, PathBuf, PathBuf) { use std::os::unix::fs::PermissionsExt; let state = root.join("docker-state"); let docker = root.join("docker"); fs::write(&docker, format!("#!/bin/sh\nif test \"$1\" = build; then if test -f {}; then test -f {}.inspected || exit 1; if test \"$3\" = invalidate:test; then grep -q lightr-s2-invalidate-v1 \"$4/data.txt\" || exit 1; fi; touch {}.timed; else touch {}; fi; exit 0; fi\nif test \"$1\" = image && test \"$2\" = inspect; then touch {}.inspected; test -f {}; exit; fi\nexit 1\n", shell_quote(&state.display().to_string()), shell_quote(&state.display().to_string()), shell_quote(&state.display().to_string()), shell_quote(&state.display().to_string()), shell_quote(&state.display().to_string()), shell_quote(&state.display().to_string()))).unwrap(); fs::set_permissions(&docker, fs::Permissions::from_mode(0o755)).unwrap(); let lightr = root.join("lightr"); fs::write(&lightr, "#!/bin/sh\nmkdir -p \"$LIGHTR_HOME\"\nif test -f \"$LIGHTR_HOME/setup\"; then touch \"$LIGHTR_HOME/timed\"; else touch \"$LIGHTR_HOME/setup\"; fi\n").unwrap(); fs::set_permissions(&lightr, fs::Permissions::from_mode(0o755)).unwrap(); (docker, lightr, state) }
+    #[cfg(unix)] #[test] fn invalidate_changes_consumed_input_without_touching_source() { let root = temp("invalidate-source"); let source = root.join("fixture"); fs::create_dir_all(&source).unwrap(); fs::write(source.join("Dockerfile"), "FROM scratch\nCOPY data.txt /data.txt\n").unwrap(); fs::write(source.join("data.txt"), "old\n").unwrap(); let original = tree_sha256(&source).unwrap(); let (docker, lightr, docker_state) = fake_tools(&root); let mut s = scenario("invalidate", Availability::Supported); s.docker.as_mut().unwrap().command = Some("$DOCKER build --tag invalidate:test $FIXTURE_DIR".into()); s.lightr.as_mut().unwrap().command = Some("$LIGHTR build $FIXTURE_DIR".into()); let output = root.join("out"); let state = differential_mode_state("invalidate", &s, &docker, &lightr, &source, &original, &original, &output).unwrap(); let versions = Versions { docker_client: Some(DOCKER_VERSION.into()), docker_server: Some(DOCKER_VERSION.into()), docker_api: Some("1.51".into()), lightr: Some("test".into()), lightr_hash: Some("hash".into()), error: None }; let (_, timed) = execute_record(&s, "docker", 0, Some((&state.fixture, &state.fixture_hash, "commit")), &output, &versions, "spec", &docker, &lightr, None, None); assert!(command_passed(&timed)); assert_eq!(tree_sha256(&source).unwrap(), original); assert_ne!(fs::read(state.fixture.join("data.txt")).unwrap(), fs::read(source.join("data.txt")).unwrap()); assert!(docker_state.with_extension("timed").is_file()); assert!(state.mutation_receipt.contains("source:data.txt")); }
+    #[test] fn old_marker_cannot_satisfy_invalidate_gate() { let fixture = temp("invalidate-marker"); fs::write(fixture.join("Dockerfile"), "FROM scratch\n").unwrap(); fs::write(fixture.join(".lightr-s2-invalidate"), "old\n").unwrap(); let mut s = scenario("invalidate", Availability::Supported); s.lightr.as_mut().unwrap().command = Some("$LIGHTR build $FIXTURE_DIR".into()); assert!(invalidate_input(&s, &fixture).unwrap_err().contains("no provably consumed local input")); }
+    #[test] fn mutation_mismatch_has_no_factor() { let mut docker = differential("docker", 20, "same"); let mut lightr = differential("lightr", 10, "same"); docker.mode = "invalidate".into(); lightr.mode = "invalidate".into(); docker.raw.fixture_tree_sha256 = Some("mutated".into()); lightr.raw.fixture_tree_sha256 = Some("mutated".into()); docker.mutation_sha256 = "one".into(); lightr.mutation_sha256 = "two".into(); let factor = differential_factor("pair:0", &[docker, lightr]); assert_eq!(factor["factor"], Value::Null); assert_eq!(factor["reason"], "incomparable_pair"); }
+    #[cfg(unix)] #[test] fn warm_setup_state_survives_timed_samples() { let root = temp("warm"); let fixture = root.join("fixture"); fs::create_dir_all(&fixture).unwrap(); fs::write(fixture.join("Dockerfile"), "FROM scratch\n").unwrap(); let (docker, lightr, docker_state) = fake_tools(&root); let mut s = scenario("warm", Availability::Supported); s.docker.as_mut().unwrap().command = Some("$DOCKER build --tag warm:test $FIXTURE_DIR".into()); s.lightr.as_mut().unwrap().command = Some("$LIGHTR build $FIXTURE_DIR".into()); let output = root.join("out"); let fixture_hash = tree_sha256(&fixture).unwrap(); let state = differential_mode_state("warm", &s, &docker, &lightr, &fixture, &fixture_hash, &fixture_hash, &output).unwrap(); let versions = Versions { docker_client: Some(DOCKER_VERSION.into()), docker_server: Some(DOCKER_VERSION.into()), docker_api: Some("1.51".into()), lightr: Some("test".into()), lightr_hash: Some("hash".into()), error: None }; let (_, docker_timed) = execute_record(&s, "docker", 0, Some((&state.fixture, &state.fixture_hash, "commit")), &output, &versions, "spec", &docker, &lightr, None, None); let (_, lightr_timed) = execute_record(&s, "lightr", 0, Some((&state.fixture, &state.fixture_hash, "commit")), &output, &versions, "spec", &docker, &lightr, None, None); assert!(command_passed(&docker_timed)); assert!(command_passed(&lightr_timed)); assert!(docker_state.with_extension("inspected").is_file()); assert!(docker_state.with_extension("timed").is_file()); assert!(output.join("lightr-home/timed").is_file()); }
 }
