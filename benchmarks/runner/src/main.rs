@@ -766,10 +766,41 @@ fn s3_factor(case_id: &str, round: u32, pair: &[S3Record]) -> Value {
     json!({"case_id":case_id,"round":round,"factor":docker.elapsed_ms as f64/lightr.elapsed_ms as f64,"reason":Value::Null})
 }
 fn s3_projection(assertions: &[S3Assertion]) -> Result<Vec<u8>, String> { let mut shared: Vec<_> = assertions.iter().filter(|assertion| assertion.shared).collect(); shared.sort_by(|left, right| left.id.as_bytes().cmp(right.id.as_bytes())); let mut bytes = Vec::new(); for assertion in shared { bytes.extend_from_slice(&s3_jcs(&Value::String(assertion.id.clone()))?); bytes.push(0); bytes.extend_from_slice(&s3_jcs(&assertion.expected)?); bytes.push(0); bytes.extend_from_slice(&s3_jcs(&assertion.observed)?); bytes.push(0); bytes.extend_from_slice(if assertion.passed { b"true" } else { b"false" }); bytes.push(0); } Ok(bytes) }
+struct S3NoDuplicateJson;
+
+impl<'de> Deserialize<'de> for S3NoDuplicateJson {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where D: serde::Deserializer<'de> {
+        deserializer.deserialize_any(S3NoDuplicateVisitor)
+    }
+}
+
+struct S3NoDuplicateVisitor;
+
+impl<'de> serde::de::Visitor<'de> for S3NoDuplicateVisitor {
+    type Value = S3NoDuplicateJson;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("RFC 8259 JSON without duplicate object keys")
+    }
+
+    fn visit_bool<E>(self, _: bool) -> Result<Self::Value, E> where E: serde::de::Error { Ok(S3NoDuplicateJson) }
+    fn visit_i64<E>(self, _: i64) -> Result<Self::Value, E> where E: serde::de::Error { Ok(S3NoDuplicateJson) }
+    fn visit_u64<E>(self, _: u64) -> Result<Self::Value, E> where E: serde::de::Error { Ok(S3NoDuplicateJson) }
+    fn visit_f64<E>(self, _: f64) -> Result<Self::Value, E> where E: serde::de::Error { Ok(S3NoDuplicateJson) }
+    fn visit_str<E>(self, _: &str) -> Result<Self::Value, E> where E: serde::de::Error { Ok(S3NoDuplicateJson) }
+    fn visit_none<E>(self) -> Result<Self::Value, E> where E: serde::de::Error { Ok(S3NoDuplicateJson) }
+    fn visit_unit<E>(self) -> Result<Self::Value, E> where E: serde::de::Error { Ok(S3NoDuplicateJson) }
+    fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error> where A: serde::de::SeqAccess<'de> { while sequence.next_element::<S3NoDuplicateJson>()?.is_some() {} Ok(S3NoDuplicateJson) }
+    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error> where A: serde::de::MapAccess<'de> { let mut keys = BTreeSet::new(); while let Some(key) = map.next_key::<String>()? { if !keys.insert(key) { return Err(serde::de::Error::custom("duplicate JSON key")); } map.next_value::<S3NoDuplicateJson>()?; } Ok(S3NoDuplicateJson) }
+}
+
 fn s3_no_duplicate_keys(raw: &str) -> Result<(), String> {
-    // serde_json accepts escaped object keys after duplicate-key information is lost.
-    // Reject escaped keys until they are decoded by a duplicate-preserving parser.
-    if raw.contains("\\u") { return Err("mixed S3 evidence: escaped JSON key unsupported".into()); }
+    serde_json::from_str::<S3NoDuplicateJson>(raw).map(|_| ()).map_err(|error| format!("mixed S3 evidence: {error}"))
+}
+
+#[allow(dead_code)]
+fn s3_legacy_duplicate_scanner(raw: &str) -> Result<(), String> {
     fn scan(bytes: &[u8], at: &mut usize) -> Result<(), String> { fn ws(bytes:&[u8], at:&mut usize) { while *at < bytes.len() && bytes[*at].is_ascii_whitespace() {*at+=1;} } fn string(bytes:&[u8], at:&mut usize)->Result<String,String>{ if bytes.get(*at)!=Some(&b'\"'){return Err("mixed S3 evidence: malformed JSON".into())};*at+=1;let start=*at;let mut escaped=false;while *at<bytes.len(){let byte=bytes[*at];if byte==b'\"'&&!escaped{let value=std::str::from_utf8(&bytes[start..*at]).map_err(|_|"mixed S3 evidence: invalid UTF-8")?.to_string();*at+=1;return Ok(value)};escaped=byte==b'\\'&&!escaped;if byte!=b'\\'{escaped=false};*at+=1}Err("mixed S3 evidence: malformed JSON".into())} ws(bytes,at); match bytes.get(*at) { Some(b'{')=>{*at+=1;let mut keys=BTreeSet::new();ws(bytes,at);if bytes.get(*at)==Some(&b'}'){*at+=1;return Ok(())}loop{ws(bytes,at);let key=string(bytes,at)?;if !keys.insert(key){return Err("mixed S3 evidence: duplicate JSON key".into())}ws(bytes,at);if bytes.get(*at)!=Some(&b':'){return Err("mixed S3 evidence: malformed JSON".into())};*at+=1;scan(bytes,at)?;ws(bytes,at);match bytes.get(*at){Some(b',')=>*at+=1,Some(b'}')=>{*at+=1;return Ok(())},_=>return Err("mixed S3 evidence: malformed JSON".into())}}},Some(b'[')=>{*at+=1;ws(bytes,at);if bytes.get(*at)==Some(&b']'){*at+=1;return Ok(())}loop{scan(bytes,at)?;ws(bytes,at);match bytes.get(*at){Some(b',')=>*at+=1,Some(b']')=>{*at+=1;return Ok(())},_=>return Err("mixed S3 evidence: malformed JSON".into())}}},Some(b'\"')=>{string(bytes,at).map(|_|())},Some(_)=>{while *at<bytes.len()&&!b",]} \t\r\n".contains(&bytes[*at]){*at+=1};Ok(())},None=>Err("mixed S3 evidence: malformed JSON".into())} } let mut at=0;scan(raw.as_bytes(),&mut at)?;while at<raw.len()&&raw.as_bytes()[at].is_ascii_whitespace(){at+=1};if at==raw.len(){Ok(())}else{Err("mixed S3 evidence: malformed JSON".into())} }
 
 #[cfg(test)]
@@ -845,8 +876,15 @@ mod tests {
         assert_eq!(String::from_utf8(s3_jcs(&value).unwrap()).unwrap(), "{\"😀\":2,\"\":1}");
         assert!(s3_jcs(&json!(1.5)).is_err());
     }
+    #[test] fn s3_jcs_vectors_cover_escapes_and_integer_bounds() {
+        let value = json!({"\u{e000}": "\n", "\u{1f600}": "\u{2028}"});
+        assert_eq!(String::from_utf8(s3_jcs(&value).unwrap()).unwrap(), r#"{"😀":" ","":"\n"}"#);
+        assert_eq!(s3_jcs(&json!(-9007199254740991i64)).unwrap(), b"-9007199254740991");
+        assert_eq!(s3_jcs(&json!(9007199254740991u64)).unwrap(), b"9007199254740991");
+    }
     #[test] fn s3_duplicate_escaped_key_and_projection_mismatch_rejected() {
         assert!(s3_no_duplicate_keys(r#"{"a":1,"\u0061":2}"#).is_err());
+        assert!(s3_no_duplicate_keys(r#"{"message":"quote: \" slash: \\ emoji: \uD83D\uDE00"}"#).is_ok());
         let docker = s3("docker"); let mut lightr = s3("lightr"); lightr.assertions[0].observed = json!({"exit_code": 1}); lightr.semantic_receipt_blake3 = s3_receipt(&lightr.assertions).unwrap();
         assert_eq!(s3_factor("s3-case", 0, &[docker, lightr])["reason"], "output_mismatch");
     }
