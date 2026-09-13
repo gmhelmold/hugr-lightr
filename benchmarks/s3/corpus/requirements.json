@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "baseline": "bea26dd843f5ecdc8f32cab4dd6faa8740436723",
+  "requirements": [
+    {
+      "id": "S3-REQ-ENGINE-001",
+      "clause_id": "S3-CORPUS-ENGINE-001",
+      "statement": "Baseline witness tests::from_str_roundtrip"
+    },
+    {
+      "id": "S3-REQ-STORE-001",
+      "clause_id": "S3-CORPUS-STORE-001",
+      "statement": "Baseline witness tests::default_root_honors_lightr_home"
+    }
+  ]
+}
