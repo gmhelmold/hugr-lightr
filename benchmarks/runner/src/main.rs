@@ -738,7 +738,17 @@ fn merge_s3(input: &Path, out: &Path) -> Result<(), String> {
 fn decode_s3(raw: &str) -> Result<S3Record, String> {
     s3_no_duplicate_keys(raw)?; let value: Value = serde_json::from_str(raw).map_err(|e| format!("mixed S3 evidence: malformed JSON: {e}"))?;
     let object = value.as_object().ok_or_else(|| "mixed S3 evidence: row is not JSON object".to_string())?;
-    for field in ["schema_version","s3_evidence_version","case_id","round","tool","outcome","elapsed_ms","fixture_sha256","host_identity","docker_client_version","docker_server_version","lightr_sha256","lightr_engine","command_sha256","assertions","semantic_receipt_blake3","surface_receipt"] { if !object.contains_key(field) { return Err(format!("empty required S3 field: {field}")); } }
+    const FIELDS: &[&str] = &["schema_version","s3_evidence_version","case_id","round","tool","outcome","elapsed_ms","fixture_sha256","host_identity","docker_client_version","docker_server_version","lightr_sha256","lightr_engine","command_sha256","assertions","semantic_receipt_blake3","surface_receipt"];
+    for field in FIELDS { if !object.contains_key(*field) { return Err(format!("empty required S3 field: {field}")); } }
+    if object.len() != FIELDS.len() { return Err("mixed S3 evidence: unknown S3 envelope field".into()); }
+    let assertions = object.get("assertions").and_then(Value::as_array).ok_or_else(|| "mixed S3 evidence: assertions is not an array".to_string())?;
+    const ASSERTION_FIELDS: &[&str] = &["id", "expected", "observed", "passed", "detail", "shared"];
+    for assertion in assertions {
+        let assertion = assertion.as_object().ok_or_else(|| "mixed S3 evidence: assertion is not an object".to_string())?;
+        if assertion.len() != ASSERTION_FIELDS.len() || ASSERTION_FIELDS.iter().any(|field| !assertion.contains_key(*field)) { return Err("mixed S3 evidence: unknown or missing S3 assertion field".into()); }
+        if !assertion["id"].is_string() || !assertion["passed"].is_boolean() || !assertion["detail"].is_string() || !assertion["shared"].is_boolean() { return Err("mixed S3 evidence: invalid S3 assertion field type".into()); }
+        s3_jcs(&assertion["expected"])?; s3_jcs(&assertion["observed"])?;
+    }
     let schema = object.get("schema_version").and_then(Value::as_u64).unwrap_or(u64::MAX); if schema != 3 { return Err(format!("unsupported S3 schema version: {schema}")); }
     let evidence = object.get("s3_evidence_version").and_then(Value::as_u64).unwrap_or(u64::MAX); if evidence != 1 { return Err(format!("unsupported S3 evidence version: {evidence}")); }
     let row: S3Record = serde_json::from_value(value).map_err(|e| format!("mixed S3 evidence: {e}"))?; validate_s3(&row)?; Ok(row)
@@ -798,10 +808,6 @@ impl<'de> serde::de::Visitor<'de> for S3NoDuplicateVisitor {
 fn s3_no_duplicate_keys(raw: &str) -> Result<(), String> {
     serde_json::from_str::<S3NoDuplicateJson>(raw).map(|_| ()).map_err(|error| format!("mixed S3 evidence: {error}"))
 }
-
-#[allow(dead_code)]
-fn s3_legacy_duplicate_scanner(raw: &str) -> Result<(), String> {
-    fn scan(bytes: &[u8], at: &mut usize) -> Result<(), String> { fn ws(bytes:&[u8], at:&mut usize) { while *at < bytes.len() && bytes[*at].is_ascii_whitespace() {*at+=1;} } fn string(bytes:&[u8], at:&mut usize)->Result<String,String>{ if bytes.get(*at)!=Some(&b'\"'){return Err("mixed S3 evidence: malformed JSON".into())};*at+=1;let start=*at;let mut escaped=false;while *at<bytes.len(){let byte=bytes[*at];if byte==b'\"'&&!escaped{let value=std::str::from_utf8(&bytes[start..*at]).map_err(|_|"mixed S3 evidence: invalid UTF-8")?.to_string();*at+=1;return Ok(value)};escaped=byte==b'\\'&&!escaped;if byte!=b'\\'{escaped=false};*at+=1}Err("mixed S3 evidence: malformed JSON".into())} ws(bytes,at); match bytes.get(*at) { Some(b'{')=>{*at+=1;let mut keys=BTreeSet::new();ws(bytes,at);if bytes.get(*at)==Some(&b'}'){*at+=1;return Ok(())}loop{ws(bytes,at);let key=string(bytes,at)?;if !keys.insert(key){return Err("mixed S3 evidence: duplicate JSON key".into())}ws(bytes,at);if bytes.get(*at)!=Some(&b':'){return Err("mixed S3 evidence: malformed JSON".into())};*at+=1;scan(bytes,at)?;ws(bytes,at);match bytes.get(*at){Some(b',')=>*at+=1,Some(b'}')=>{*at+=1;return Ok(())},_=>return Err("mixed S3 evidence: malformed JSON".into())}}},Some(b'[')=>{*at+=1;ws(bytes,at);if bytes.get(*at)==Some(&b']'){*at+=1;return Ok(())}loop{scan(bytes,at)?;ws(bytes,at);match bytes.get(*at){Some(b',')=>*at+=1,Some(b']')=>{*at+=1;return Ok(())},_=>return Err("mixed S3 evidence: malformed JSON".into())}}},Some(b'\"')=>{string(bytes,at).map(|_|())},Some(_)=>{while *at<bytes.len()&&!b",]} \t\r\n".contains(&bytes[*at]){*at+=1};Ok(())},None=>Err("mixed S3 evidence: malformed JSON".into())} } let mut at=0;scan(raw.as_bytes(),&mut at)?;while at<raw.len()&&raw.as_bytes()[at].is_ascii_whitespace(){at+=1};if at==raw.len(){Ok(())}else{Err("mixed S3 evidence: malformed JSON".into())} }
 
 #[cfg(test)]
 mod tests {
@@ -881,6 +887,11 @@ mod tests {
         assert_eq!(String::from_utf8(s3_jcs(&value).unwrap()).unwrap(), r#"{"😀":" ","":"\n"}"#);
         assert_eq!(s3_jcs(&json!(-9007199254740991i64)).unwrap(), b"-9007199254740991");
         assert_eq!(s3_jcs(&json!(9007199254740991u64)).unwrap(), b"9007199254740991");
+    }
+    #[test] fn s3_rejects_unknown_envelope_and_assertion_fields() {
+        let row = s3("docker"); let raw = serde_json::to_string(&row).unwrap();
+        assert!(decode_s3(&raw.replacen("{", "{\"extra\":true,", 1)).unwrap_err().contains("unknown S3 envelope field"));
+        assert!(decode_s3(&raw.replacen("{\"id\":\"exit\",", "{\"extra\":true,\"id\":\"exit\",", 1)).unwrap_err().contains("unknown or missing S3 assertion field"));
     }
     #[test] fn s3_duplicate_escaped_key_and_projection_mismatch_rejected() {
         assert!(s3_no_duplicate_keys(r#"{"a":1,"\u0061":2}"#).is_err());
