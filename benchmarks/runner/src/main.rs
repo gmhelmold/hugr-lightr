@@ -178,6 +178,8 @@ struct Versions {
     error: Option<String>,
 }
 
+struct ColdPrecondition { docker_command: String, receipt: String }
+
 fn main() {
     let result = match Cli::parse().command {
         Action::VerifySpec { spec } => load_spec(&spec).and_then(|(spec, _)| validate_spec(&spec)),
@@ -294,10 +296,10 @@ fn run_differential(spec_path: &Path, chunk: usize, chunks: usize, rounds: usize
         for round in round_indices(rounds) {
             let scenario_out = out.join("scenarios").join(&scenario.id).join(round.to_string());
             fs::create_dir_all(&scenario_out).map_err(|e| format!("create scenario output {}: {e}", scenario_out.display()))?;
-            let cold_docker_command = cold_precondition(scenario, docker, &scenario_out)?;
+            let cold = cold_precondition(scenario, docker, &scenario_out)?;
             let context = fixture.as_ref().ok().map(|(path, hash, commit)| (path.as_path(), hash.as_str(), commit.as_str()));
             let failure = fixture.as_ref().err().cloned();
-            let (mut docker_record, docker_result) = execute_record(scenario, "docker", round, context, &scenario_out, &versions, &spec_hash, docker, lightr, failure.as_deref(), Some(&cold_docker_command));
+            let (mut docker_record, docker_result) = execute_record(scenario, "docker", round, context, &scenario_out, &versions, &spec_hash, docker, lightr, failure.as_deref(), Some(cold_docker_override(&cold)));
             let (mut lightr_record, lightr_result) = execute_record(scenario, "lightr", round, context, &scenario_out, &versions, &spec_hash, docker, lightr, failure.as_deref(), None);
             if let Some((fixture_dir, _, _)) = context {
                 apply_assertions(&mut docker_record, scenario, "docker", &docker_result, docker, lightr, fixture_dir, &scenario_out);
@@ -305,8 +307,8 @@ fn run_differential(spec_path: &Path, chunk: usize, chunks: usize, rounds: usize
             }
             failed |= docker_record.outcome != "passed" || lightr_record.outcome != "passed";
             let pair_id = format!("{}:{round}", scenario.id);
-            write_differential_record(&mut records, &differential_record(docker_record, scenario, mode, &hardware, &pair_id, &cold_docker_command))?;
-            write_differential_record(&mut records, &differential_record(lightr_record, scenario, mode, &hardware, &pair_id, &cold_docker_command))?;
+            write_differential_record(&mut records, &differential_record(docker_record, scenario, mode, &hardware, &pair_id, &cold.receipt))?;
+            write_differential_record(&mut records, &differential_record(lightr_record, scenario, mode, &hardware, &pair_id, &cold.receipt))?;
         }
     }
     if failed { Err("one or more selected supported scenarios failed".into()) } else { Ok(()) }
@@ -335,24 +337,30 @@ fn hardware_identity() -> Result<String, String> {
     Ok(identity)
 }
 
-fn cold_precondition(scenario: &Scenario, docker: &Path, output: &Path) -> Result<String, String> {
+fn cold_docker_command(scenario: &Scenario) -> Result<(String, String), String> {
     let command = scenario.docker.as_ref().and_then(|value| value.command.as_deref()).ok_or_else(|| format!("cold unsupported for {}: missing Docker command", scenario.id))?;
     let words: Vec<_> = command.split_whitespace().collect();
-    let tag = words.windows(2).find(|pair| (pair[0] == "--tag" || pair[0] == "-t") && !pair[1].starts_with('-')).map(|pair| pair[1]).ok_or_else(|| format!("cold unsupported for {}: require Docker --tag", scenario.id))?;
-    if words.first() != Some(&"$DOCKER") || words.get(1) != Some(&"build") || words.last() != Some(&"$FIXTURE_DIR") || words.iter().any(|word| *word == "--no-cache") { return Err(format!("cold unsupported for {}: require `$DOCKER build --tag TAG $FIXTURE_DIR`", scenario.id)); }
-    let inspect = run_command(Command::new(docker).args(["image", "inspect", tag]), Duration::from_secs(TIMEOUT_SECS));
+    if words.len() != 5 || words[0] != "$DOCKER" || words[1] != "build" || words[2] != "--tag" || words[4] != "$FIXTURE_DIR" || words[3].is_empty() || !words[3].bytes().all(|byte| byte.is_ascii_alphanumeric() || b"._:/-".contains(&byte)) { return Err(format!("cold unsupported for {}: require `$DOCKER build --tag SAFE_TAG $FIXTURE_DIR`", scenario.id)); }
+    Ok((format!("$DOCKER build --no-cache --tag {} $FIXTURE_DIR", words[3]), words[3].into()))
+}
+
+fn cold_precondition(scenario: &Scenario, docker: &Path, output: &Path) -> Result<ColdPrecondition, String> {
+    let (docker_command, tag) = cold_docker_command(scenario)?;
+    let inspect = run_command(Command::new(docker).args(["image", "inspect", &tag]), Duration::from_secs(TIMEOUT_SECS));
     if inspect.status.as_ref().is_some_and(|status| status.success()) {
-        let remove = run_command(Command::new(docker).args(["image", "rm", "--force", tag]), Duration::from_secs(TIMEOUT_SECS));
+        let remove = run_command(Command::new(docker).args(["image", "rm", "--force", &tag]), Duration::from_secs(TIMEOUT_SECS));
         if !remove.status.as_ref().is_some_and(|status| status.success()) { return Err(format!("cold unsupported for {}: exact Docker image cleanup failed for {tag}", scenario.id)); }
     } else if inspect.error.is_some() || inspect.timed_out || inspect.status.as_ref().and_then(|status| status.code()) != Some(1) {
         return Err(format!("cold unsupported for {}: exact Docker image state unavailable for {tag}", scenario.id));
     }
-    let verified = run_command(Command::new(docker).args(["image", "inspect", tag]), Duration::from_secs(TIMEOUT_SECS));
+    let verified = run_command(Command::new(docker).args(["image", "inspect", &tag]), Duration::from_secs(TIMEOUT_SECS));
     if verified.error.is_some() || verified.timed_out || verified.status.as_ref().and_then(|status| status.code()) != Some(1) { return Err(format!("cold unsupported for {}: exact Docker image cleanup unverified for {tag}", scenario.id)); }
     let home = output.join("lightr-home"); if home.exists() { fs::remove_dir_all(&home).map_err(|e| format!("cold unsupported for {}: clear Lightr state: {e}", scenario.id))?; }
     if home.exists() { return Err(format!("cold unsupported for {}: Lightr state cleanup unverified", scenario.id)); }
-    Ok(format!("docker_image_absent:{tag};docker_no_cache;lightr_home_absent"))
+    Ok(ColdPrecondition { docker_command, receipt: format!("docker_image_absent:{tag};docker_no_cache;lightr_home_absent") })
 }
+
+fn cold_docker_override(cold: &ColdPrecondition) -> &str { &cold.docker_command }
 
 fn differential_record(raw: RawRecord, scenario: &Scenario, mode: &str, hardware: &str, pair_id: &str, cold_precondition: &str) -> DifferentialRecord {
     let shared: Vec<_> = scenario.assertions.iter().filter(|assertion| assertion.scope == "docker_and_lightr").map(|assertion| format!("{}:{}:passed", assertion.kind, serde_json::to_string(&assertion.expected).unwrap_or_default())).collect();
@@ -631,5 +639,9 @@ mod tests {
     #[test] fn missing_shared_assertions_has_no_factor() {
         let mut scenario = scenario("pair", Availability::Supported); scenario.assertions.clear(); let docker = differential_record(differential("docker", 20, "old").raw, &scenario, "cold", "actual-hardware", "pair:0", "clean"); let lightr = differential_record(differential("lightr", 10, "old").raw, &scenario, "cold", "actual-hardware", "pair:0", "clean");
         let factor = differential_factor("pair:0", &[docker, lightr]); assert_eq!(factor["factor"], Value::Null); assert_eq!(factor["reason"], "no_shared_assertions");
+    }
+    #[test] fn cold_override_is_command_not_receipt() {
+        let mut scenario = scenario("pair", Availability::Supported); scenario.docker.as_mut().unwrap().command = Some("$DOCKER build --tag lightr-scratch-copy:local $FIXTURE_DIR".into()); let (docker_command, tag) = cold_docker_command(&scenario).unwrap(); let cold = ColdPrecondition { receipt: format!("docker_image_absent:{tag};docker_no_cache;lightr_home_absent"), docker_command };
+        assert_eq!(cold_docker_override(&cold), "$DOCKER build --no-cache --tag lightr-scratch-copy:local $FIXTURE_DIR"); assert_ne!(cold_docker_override(&cold), cold.receipt);
     }
 }

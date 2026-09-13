@@ -102,8 +102,10 @@ name observed values. Each v2 row retains every v1 field and adds non-empty
 Equivalence digest hashes only ordered shared `docker_and_lightr` assertion
 kind, declared expected value, and normalized passing result; command streams
 never enter it. No shared assertion produces `no_shared_assertions` and no
-factor. Before each cold pair, runner removes only declared Docker build tag,
-verifies it absent, forces Docker `--no-cache`, and clears/verifies private
+factor. Cold accepts only `$DOCKER build --tag SAFE_TAG $FIXTURE_DIR`; runner
+constructs separate `$DOCKER build --no-cache --tag SAFE_TAG $FIXTURE_DIR`
+command and audit receipt. Before each cold pair, it removes only declared
+Docker build tag, verifies it absent, and clears/verifies private
 `LIGHTR_HOME`; unsupported Docker command shapes reject cold before recording.
 
 `merge` accepts v1 only. `merge-differential` accepts v2 only and rejects v1,
