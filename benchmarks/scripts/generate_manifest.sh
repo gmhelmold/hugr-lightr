@@ -5,6 +5,7 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 output="$root/benchmarks/MANIFEST.sha256"
 
 allowlist=(
+  ".github/workflows/benchmark.yml"
   "benchmarks/benchmark-spec.yaml"
   "benchmarks/RUNNER-CONTRACT.md"
   "benchmarks/fixtures/scratch-copy/Dockerfile"
@@ -21,6 +22,11 @@ allowlist=(
   "benchmarks/reporter/report.py"
   "benchmarks/reporter/tests/fixtures/raw.jsonl"
   "benchmarks/reporter/tests/test_reporter.py"
+  "benchmarks/ci/docker"
+  "benchmarks/ci/install_docker.sh"
+  "benchmarks/ci/paths.txt"
+  "benchmarks/ci/test_validate_paths.sh"
+  "benchmarks/ci/validate_paths.sh"
   "benchmarks/scripts/00_verify_environment.sh"
   "benchmarks/scripts/01_clone_repos.sh"
   "benchmarks/scripts/02_extract_dockerfiles.sh"
