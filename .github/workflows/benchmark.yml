@@ -136,7 +136,6 @@ jobs:
         with:
           pattern: benchmark-raw-chunk-*
           path: benchmarks/work/results/full
-          merge-multiple: true
       - name: Merge and validate full evidence
         env:
           RAW_DIR: ${{ github.workspace }}/benchmarks/work/results/full
