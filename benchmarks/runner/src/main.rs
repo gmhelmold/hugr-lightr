@@ -14,6 +14,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 const TIMEOUT_SECS: u64 = 300;
 const SCHEMA_VERSION: u32 = 1;
 const DIFFERENTIAL_SCHEMA_VERSION: u32 = 2;
+const S3_SCHEMA_VERSION: u32 = 3;
+const S3_EVIDENCE_VERSION: u32 = 1;
 const DOCKER_VERSION: &str = "28.3.2";
 
 #[derive(Parser)]
@@ -42,6 +44,12 @@ enum Action {
         #[arg(long)] lightr: PathBuf, #[arg(long)] mode: String,
     },
     MergeDifferential { #[arg(long)] input: PathBuf, #[arg(long)] out: PathBuf },
+    RunS3 {
+        #[arg(long)] spec: PathBuf, #[arg(long)] chunk: usize, #[arg(long)] chunks: usize,
+        #[arg(long)] rounds: usize, #[arg(long)] out: PathBuf, #[arg(long)] docker: PathBuf,
+        #[arg(long)] lightr: PathBuf,
+    },
+    MergeS3 { #[arg(long)] input: PathBuf, #[arg(long)] out: PathBuf },
 }
 
 #[derive(Debug, Deserialize)]
@@ -191,6 +199,8 @@ fn main() {
         Action::Merge { input, out } => merge(&input, &out),
         Action::RunDifferential { spec, chunk, chunks, rounds, out, docker, lightr, mode } => run_differential(&spec, chunk, chunks, rounds, &out, &docker, &lightr, &mode),
         Action::MergeDifferential { input, out } => merge_differential(&input, &out),
+        Action::RunS3 { spec, chunk, chunks, rounds, out, docker, lightr } => run_s3(&spec, chunk, chunks, rounds, &out, &docker, &lightr),
+        Action::MergeS3 { input, out } => merge_s3(&input, &out),
     };
     if let Err(error) = result {
         eprintln!("bench-runner: {error}");
@@ -625,6 +635,115 @@ fn differential_factor(pair_id: &str, pair: &[DifferentialRecord]) -> Value {
     json!({"pair_id": pair_id, "factor": docker.raw.elapsed_ms as f64 / lightr.raw.elapsed_ms as f64, "reason": Value::Null})
 }
 
+#[derive(Debug, Deserialize)]
+struct S3Spec { scenarios: Vec<S3Scenario> }
+#[derive(Debug, Deserialize)]
+struct S3Scenario {
+    case_id: String, fixture: PathBuf, docker: String, lightr: String,
+    assertions: Vec<S3PlannedAssertion>,
+    #[serde(default)] legacy_overlap: Option<String>,
+}
+#[derive(Debug, Deserialize)]
+struct S3PlannedAssertion { id: String, expected: Value, #[serde(default)] shared: bool }
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct S3Assertion { id: String, expected: Value, observed: Value, passed: bool, detail: String, shared: bool }
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct S3Record {
+    schema_version: u32, s3_evidence_version: u32, case_id: String, round: u32, tool: String,
+    outcome: String, elapsed_ms: u128, fixture_sha256: String, host_identity: String,
+    docker_client_version: String, docker_server_version: String, lightr_sha256: String,
+    lightr_engine: Option<String>, command_sha256: String, assertions: Vec<S3Assertion>,
+    semantic_receipt_blake3: String, surface_receipt: Value,
+}
+
+fn run_s3(spec_path: &Path, chunk: usize, chunks: usize, rounds: usize, out: &Path, docker: &Path, lightr: &Path) -> Result<(), String> {
+    if chunks == 0 || chunk >= chunks || rounds == 0 { return Err("require chunks > 0, chunk < chunks, and rounds > 0".into()); }
+    let spec: S3Spec = serde_yaml::from_slice(&fs::read(spec_path).map_err(|e| format!("read S3 spec {}: {e}", spec_path.display()))?).map_err(|e| format!("parse S3 spec {}: {e}", spec_path.display()))?;
+    let mut ids = BTreeSet::new();
+    for scenario in &spec.scenarios {
+        if !s3_case_id(&scenario.case_id) { return Err(format!("invalid S3 case id: {}", scenario.case_id)); }
+        if !ids.insert(&scenario.case_id) { return Err(format!("duplicate S3 case id: {}", scenario.case_id)); }
+        if scenario.legacy_overlap.as_deref().unwrap_or("none") != "none" { return Err(format!("S3 legacy overlap: {}", scenario.case_id)); }
+    }
+    let versions = probe_versions(docker, lightr); require_s2_versions(&versions)?;
+    let host = hardware_identity()?;
+    fs::create_dir_all(out).map_err(|e| e.to_string())?;
+    let mut file = File::create(out.join("records.s3.jsonl")).map_err(|e| e.to_string())?;
+    for scenario in spec.scenarios.iter().enumerate().filter(|(index, _)| index % chunks == chunk).map(|(_, scenario)| scenario) {
+        let fixture = if scenario.fixture.is_absolute() { scenario.fixture.clone() } else { spec_path.parent().unwrap_or(Path::new(".")).join(&scenario.fixture) };
+        let fixture_sha256 = tree_sha256(&fixture)?;
+        for round in 0..rounds as u32 {
+            for (tool, command, engine) in [("docker", &scenario.docker, None), ("lightr", &scenario.lightr, Some("native".into()))] {
+                let started = unix_ms(); let result = run_shell(&expand(command, docker, lightr, &fixture, out)?, Duration::from_secs(TIMEOUT_SECS), Some(&out.join("lightr-home")));
+                let outcome = if result.timed_out { "timed_out" } else if command_passed(&result) { "passed" } else { "failed" };
+                let observed = json!({"exit_code": result.status.as_ref().and_then(|status| status.code()).unwrap_or(-1)});
+                let assertions: Vec<S3Assertion> = scenario.assertions.iter().map(|assertion| S3Assertion { id: assertion.id.clone(), expected: assertion.expected.clone(), observed: observed.clone(), passed: assertion.expected == observed, detail: if assertion.expected == observed { "matched".into() } else { "mismatch".into() }, shared: assertion.shared }).collect();
+                let receipt = s3_receipt(&assertions)?;
+                let record = S3Record { schema_version: S3_SCHEMA_VERSION, s3_evidence_version: S3_EVIDENCE_VERSION, case_id: scenario.case_id.clone(), round, tool: tool.into(), outcome: if assertions.iter().all(|assertion| assertion.passed) { outcome.into() } else { "failed".into() }, elapsed_ms: unix_ms().saturating_sub(started), fixture_sha256: fixture_sha256.clone(), host_identity: host.clone(), docker_client_version: DOCKER_VERSION.into(), docker_server_version: DOCKER_VERSION.into(), lightr_sha256: versions.lightr_hash.clone().unwrap(), lightr_engine: engine, command_sha256: sha256(command.as_bytes()), assertions, semantic_receipt_blake3: receipt, surface_receipt: json!({"case_id": scenario.case_id, "round": round, "fixture_sha256": fixture_sha256}) };
+                write_s3_record(&mut file, &record)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn s3_case_id(value: &str) -> bool { !value.is_empty() && value.len() <= 128 && (value.as_bytes()[0].is_ascii_lowercase() || value.as_bytes()[0].is_ascii_digit()) && value.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._-".contains(&byte)) }
+fn s3_hex(value: &str) -> bool { value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)) }
+fn s3_jcs(value: &Value) -> Result<Vec<u8>, String> {
+    fn valid(value: &Value) -> bool { match value { Value::Null | Value::Bool(_) | Value::String(_) => true, Value::Number(number) => number.as_i64().is_some_and(|n| (-9007199254740991..=9007199254740991).contains(&n)) || number.as_u64().is_some_and(|n| n <= 9007199254740991), Value::Array(values) => values.iter().all(valid), Value::Object(values) => values.values().all(valid) } }
+    if !valid(value) { return Err("invalid S3 JCS value".into()); }
+    serde_json::to_vec(value).map_err(|e| e.to_string())
+}
+fn s3_receipt(assertions: &[S3Assertion]) -> Result<String, String> {
+    let mut shared: Vec<_> = assertions.iter().filter(|assertion| assertion.shared).collect(); shared.sort_by(|left, right| left.id.as_bytes().cmp(right.id.as_bytes()));
+    let mut preimage = b"S3R1\0".to_vec();
+    for assertion in shared { for bytes in [s3_jcs(&Value::String(assertion.id.clone()))?, s3_jcs(&assertion.expected)?, s3_jcs(&assertion.observed)?, if assertion.passed { b"true".to_vec() } else { b"false".to_vec() }] { preimage.extend_from_slice(&(bytes.len() as u32).to_be_bytes()); preimage.extend_from_slice(&bytes); } }
+    Ok(blake3::hash(&preimage).to_hex().to_string())
+}
+fn write_s3_record(file: &mut File, record: &S3Record) -> Result<(), String> { serde_json::to_writer(&mut *file, record).map_err(|e| e.to_string())?; file.write_all(b"\n").map_err(|e| e.to_string()) }
+
+fn merge_s3(input: &Path, out: &Path) -> Result<(), String> {
+    let mut paths = Vec::new(); collect_jsonl(input, &mut paths)?; paths.sort(); let mut rows = Vec::new();
+    for path in paths { let bytes = fs::read(&path).map_err(|e| e.to_string())?; let contents = std::str::from_utf8(&bytes).map_err(|_| "mixed S3 evidence: invalid UTF-8".to_string())?; for (line, raw) in contents.split('\n').enumerate() { if raw.is_empty() && line + 1 == contents.split('\n').count() { continue; } if raw.trim().is_empty() { return Err("mixed S3 evidence: blank line".into()); } rows.push(decode_s3(raw)?); } }
+    if rows.is_empty() { return Err("mixed S3 evidence: empty evidence".into()); }
+    let mut seen = BTreeSet::new(); for row in &rows { if !seen.insert((row.case_id.clone(), row.round, row.tool.clone())) { return Err(format!("duplicate S3 tuple: ({}, {}, {})", row.case_id, row.round, row.tool)); } }
+    let mut pairs: BTreeMap<(String, u32), Vec<S3Record>> = BTreeMap::new(); for row in rows { pairs.entry((row.case_id.clone(), row.round)).or_default().push(row); }
+    fs::create_dir_all(out).map_err(|e| e.to_string())?; let mut merged = File::create(out.join("merged.s3.jsonl")).map_err(|e| e.to_string())?; let mut factors = Vec::new();
+    for ((case_id, round), pair) in pairs { for row in &pair { write_s3_record(&mut merged, row)?; } factors.push(s3_factor(&case_id, round, &pair)); }
+    let samples: Vec<f64> = factors.iter().filter_map(|factor| factor["factor"].as_f64()).collect(); let statistics = if samples.is_empty() { Value::Null } else { let mut sorted = samples; sorted.sort_by(f64::total_cmp); json!({"sample_count": sorted.len(), "median_factor": sorted[sorted.len() / 2], "factor_range":{"min":sorted[0],"max":sorted[sorted.len()-1]}}) };
+    serde_json::to_writer(File::create(out.join("summary.s3.json")).map_err(|e| e.to_string())?, &json!({"schema_version":3,"s3_evidence_version":1,"factors":factors,"statistics":statistics})).map_err(|e| e.to_string())
+}
+fn decode_s3(raw: &str) -> Result<S3Record, String> {
+    s3_no_duplicate_keys(raw)?; let value: Value = serde_json::from_str(raw).map_err(|e| format!("mixed S3 evidence: malformed JSON: {e}"))?;
+    let object = value.as_object().ok_or_else(|| "mixed S3 evidence: row is not JSON object".to_string())?;
+    for field in ["schema_version","s3_evidence_version","case_id","round","tool","outcome","elapsed_ms","fixture_sha256","host_identity","docker_client_version","docker_server_version","lightr_sha256","lightr_engine","command_sha256","assertions","semantic_receipt_blake3","surface_receipt"] { if !object.contains_key(field) { return Err(format!("empty required S3 field: {field}")); } }
+    let schema = object.get("schema_version").and_then(Value::as_u64).unwrap_or(u64::MAX); if schema != 3 { return Err(format!("unsupported S3 schema version: {schema}")); }
+    let evidence = object.get("s3_evidence_version").and_then(Value::as_u64).unwrap_or(u64::MAX); if evidence != 1 { return Err(format!("unsupported S3 evidence version: {evidence}")); }
+    let row: S3Record = serde_json::from_value(value).map_err(|e| format!("mixed S3 evidence: {e}"))?; validate_s3(&row)?; Ok(row)
+}
+fn validate_s3(row: &S3Record) -> Result<(), String> {
+    for (field, value) in [("case_id", &row.case_id), ("tool", &row.tool), ("outcome", &row.outcome), ("fixture_sha256", &row.fixture_sha256), ("host_identity", &row.host_identity), ("docker_client_version", &row.docker_client_version), ("docker_server_version", &row.docker_server_version), ("lightr_sha256", &row.lightr_sha256), ("command_sha256", &row.command_sha256), ("semantic_receipt_blake3", &row.semantic_receipt_blake3)] { if value.trim().is_empty() { return Err(format!("empty required S3 field: {field}")); } }
+    if !s3_case_id(&row.case_id) || !["docker", "lightr"].contains(&row.tool.as_str()) || !["passed","failed","timed_out","skipped"].contains(&row.outcome.as_str()) || !s3_hex(&row.fixture_sha256) || !s3_hex(&row.lightr_sha256) || !s3_hex(&row.command_sha256) || !s3_hex(&row.semantic_receipt_blake3) { return Err("mixed S3 evidence: invalid S3 grammar".into()); }
+    if !["native","ns","vz","fc"].contains(&row.lightr_engine.as_deref().unwrap_or("")) && row.lightr_engine.is_some() { return Err("mixed S3 evidence: invalid S3 engine".into()); }
+    if row.assertions.is_empty() || !row.surface_receipt.is_object() || row.surface_receipt.as_object().is_some_and(|value| value.is_empty()) { return Err("mixed S3 evidence: missing semantic receipt".into()); }
+    let mut ids = BTreeSet::new(); for assertion in &row.assertions { if assertion.id.is_empty() || !ids.insert(&assertion.id) { return Err("mixed S3 evidence: invalid assertion id".into()); } s3_jcs(&assertion.expected)?; s3_jcs(&assertion.observed)?; }
+    s3_jcs(&row.surface_receipt)?; if s3_receipt(&row.assertions)? != row.semantic_receipt_blake3 { return Err("mixed S3 evidence: semantic receipt mismatch".into()); } Ok(())
+}
+fn s3_factor(case_id: &str, round: u32, pair: &[S3Record]) -> Value {
+    let result = |reason: &str| json!({"case_id":case_id,"round":round,"factor":Value::Null,"reason":reason});
+    if pair.len() != 2 || pair.iter().filter(|row| row.tool == "docker").count() != 1 || pair.iter().filter(|row| row.tool == "lightr").count() != 1 { return result("incomplete_pair"); }
+    let docker = pair.iter().find(|row| row.tool == "docker").unwrap(); let lightr = pair.iter().find(|row| row.tool == "lightr").unwrap();
+    if docker.docker_client_version != DOCKER_VERSION || docker.docker_server_version != DOCKER_VERSION || lightr.docker_client_version != DOCKER_VERSION || lightr.docker_server_version != DOCKER_VERSION { return result("unsupported_version"); }
+    if docker.outcome != "passed" || lightr.outcome != "passed" { return result("unsuccessful_pair"); }
+    if docker.fixture_sha256 != lightr.fixture_sha256 || docker.host_identity != lightr.host_identity || docker.lightr_engine.is_some() || lightr.lightr_engine.is_none() || s3_jcs(&docker.surface_receipt).ok() != s3_jcs(&lightr.surface_receipt).ok() { return result("incomparable_pair"); }
+    if !docker.assertions.iter().any(|assertion| assertion.shared) || !lightr.assertions.iter().any(|assertion| assertion.shared) { return result("no_shared_assertions"); }
+    if docker.semantic_receipt_blake3 != lightr.semantic_receipt_blake3 { return result("output_mismatch"); }
+    if lightr.elapsed_ms == 0 { return result("zero_lightr_elapsed"); }
+    json!({"case_id":case_id,"round":round,"factor":docker.elapsed_ms as f64/lightr.elapsed_ms as f64,"reason":Value::Null})
+}
+fn s3_no_duplicate_keys(raw: &str) -> Result<(), String> {
+    fn scan(bytes: &[u8], at: &mut usize) -> Result<(), String> { fn ws(bytes:&[u8], at:&mut usize) { while *at < bytes.len() && bytes[*at].is_ascii_whitespace() {*at+=1;} } fn string(bytes:&[u8], at:&mut usize)->Result<String,String>{ if bytes.get(*at)!=Some(&b'\"'){return Err("mixed S3 evidence: malformed JSON".into())};*at+=1;let start=*at;let mut escaped=false;while *at<bytes.len(){let byte=bytes[*at];if byte==b'\"'&&!escaped{let value=std::str::from_utf8(&bytes[start..*at]).map_err(|_|"mixed S3 evidence: invalid UTF-8")?.to_string();*at+=1;return Ok(value)};escaped=byte==b'\\'&&!escaped;if byte!=b'\\'{escaped=false};*at+=1}Err("mixed S3 evidence: malformed JSON".into())} ws(bytes,at); match bytes.get(*at) { Some(b'{')=>{*at+=1;let mut keys=BTreeSet::new();ws(bytes,at);if bytes.get(*at)==Some(&b'}'){*at+=1;return Ok(())}loop{ws(bytes,at);let key=string(bytes,at)?;if !keys.insert(key){return Err("mixed S3 evidence: duplicate JSON key".into())}ws(bytes,at);if bytes.get(*at)!=Some(&b':'){return Err("mixed S3 evidence: malformed JSON".into())};*at+=1;scan(bytes,at)?;ws(bytes,at);match bytes.get(*at){Some(b',')=>*at+=1,Some(b'}')=>{*at+=1;return Ok(())},_=>return Err("mixed S3 evidence: malformed JSON".into())}}},Some(b'[')=>{*at+=1;ws(bytes,at);if bytes.get(*at)==Some(&b']'){*at+=1;return Ok(())}loop{scan(bytes,at)?;ws(bytes,at);match bytes.get(*at){Some(b',')=>*at+=1,Some(b']')=>{*at+=1;return Ok(())},_=>return Err("mixed S3 evidence: malformed JSON".into())}}},Some(b'\"')=>{string(bytes,at).map(|_|())},Some(_)=>{while *at<bytes.len()&&!b",]} \t\r\n".contains(&bytes[*at]){*at+=1};Ok(())},None=>Err("mixed S3 evidence: malformed JSON".into())} } let mut at=0;scan(raw.as_bytes(),&mut at)?;while at<raw.len()&&raw.as_bytes()[at].is_ascii_whitespace(){at+=1};if at==raw.len(){Ok(())}else{Err("mixed S3 evidence: malformed JSON".into())} }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -672,4 +791,17 @@ mod tests {
     #[test] fn old_marker_cannot_satisfy_invalidate_gate() { let fixture = temp("invalidate-marker"); fs::write(fixture.join("Dockerfile"), "FROM scratch\n").unwrap(); fs::write(fixture.join(".lightr-s2-invalidate"), "old\n").unwrap(); let mut s = scenario("invalidate", Availability::Supported); s.lightr.as_mut().unwrap().command = Some("$LIGHTR build $FIXTURE_DIR".into()); assert!(invalidate_input(&s, &fixture).unwrap_err().contains("no provably consumed local input")); }
     #[test] fn mutation_mismatch_has_no_factor() { let mut docker = differential("docker", 20, "same"); let mut lightr = differential("lightr", 10, "same"); docker.mode = "invalidate".into(); lightr.mode = "invalidate".into(); docker.raw.fixture_tree_sha256 = Some("mutated".into()); lightr.raw.fixture_tree_sha256 = Some("mutated".into()); docker.mutation_sha256 = "one".into(); lightr.mutation_sha256 = "two".into(); let factor = differential_factor("pair:0", &[docker, lightr]); assert_eq!(factor["factor"], Value::Null); assert_eq!(factor["reason"], "incomparable_pair"); }
     #[cfg(unix)] #[test] fn warm_setup_state_survives_timed_samples() { let root = temp("warm"); let fixture = root.join("fixture"); fs::create_dir_all(&fixture).unwrap(); fs::write(fixture.join("Dockerfile"), "FROM scratch\n").unwrap(); let (docker, lightr, docker_state) = fake_tools(&root); let mut s = scenario("warm", Availability::Supported); s.docker.as_mut().unwrap().command = Some("$DOCKER build --tag warm:test $FIXTURE_DIR".into()); s.lightr.as_mut().unwrap().command = Some("$LIGHTR build $FIXTURE_DIR".into()); let output = root.join("out"); let fixture_hash = tree_sha256(&fixture).unwrap(); let state = differential_mode_state("warm", &s, &docker, &lightr, &fixture, &fixture_hash, &fixture_hash, &output).unwrap(); let versions = Versions { docker_client: Some(DOCKER_VERSION.into()), docker_server: Some(DOCKER_VERSION.into()), docker_api: Some("1.51".into()), lightr: Some("test".into()), lightr_hash: Some("hash".into()), error: None }; let (_, docker_timed) = execute_record(&s, "docker", 0, Some((&state.fixture, &state.fixture_hash, "commit")), &output, &versions, "spec", &docker, &lightr, None, None); let (_, lightr_timed) = execute_record(&s, "lightr", 0, Some((&state.fixture, &state.fixture_hash, "commit")), &output, &versions, "spec", &docker, &lightr, None, None); assert!(command_passed(&docker_timed)); assert!(command_passed(&lightr_timed)); assert!(docker_state.with_extension("inspected").is_file()); assert!(docker_state.with_extension("timed").is_file()); assert!(output.join("lightr-home/timed").is_file()); }
+    fn s3(tool: &str) -> S3Record { let assertions = vec![S3Assertion { id: "exit".into(), expected: json!({"exit_code":0}), observed: json!({"exit_code":0}), passed: true, detail: "local".into(), shared: true }]; S3Record { schema_version: 3, s3_evidence_version: 1, case_id: "s3-case".into(), round: 0, tool: tool.into(), outcome: "passed".into(), elapsed_ms: if tool == "docker" { 20 } else { 10 }, fixture_sha256: "a".repeat(64), host_identity: "host".into(), docker_client_version: DOCKER_VERSION.into(), docker_server_version: DOCKER_VERSION.into(), lightr_sha256: "b".repeat(64), lightr_engine: (tool == "lightr").then(|| "native".into()), command_sha256: "c".repeat(64), semantic_receipt_blake3: s3_receipt(&assertions).unwrap(), assertions, surface_receipt: json!({"surface":"same"}) } }
+    #[test] fn s3_receipt_mutation_cannot_pass() { let mut row = s3("docker"); row.assertions[0].observed = json!({"exit_code":1}); assert!(validate_s3(&row).unwrap_err().contains("semantic receipt mismatch")); }
+    #[test] fn s3_pairing_precedence_is_frozen() { let docker = s3("docker"); let lightr = s3("lightr"); assert_eq!(s3_factor("s3-case", 0, &[docker.clone(), lightr.clone()])["factor"], 2.0);
+        let mut row = docker.clone(); assert_eq!(s3_factor("s3-case", 0, &[row.clone()])["reason"], "incomplete_pair"); row.docker_client_version = "old".into(); assert_eq!(s3_factor("s3-case", 0, &[row, lightr.clone()])["reason"], "unsupported_version");
+        let mut row = docker.clone(); row.outcome = "failed".into(); assert_eq!(s3_factor("s3-case", 0, &[row, lightr.clone()])["reason"], "unsuccessful_pair");
+        let mut row = docker.clone(); row.host_identity = "other".into(); assert_eq!(s3_factor("s3-case", 0, &[row, lightr.clone()])["reason"], "incomparable_pair");
+        let mut row = docker.clone(); row.assertions[0].shared = false; assert_eq!(s3_factor("s3-case", 0, &[row, lightr.clone()])["reason"], "no_shared_assertions");
+        let mut row = docker.clone(); row.semantic_receipt_blake3 = "d".repeat(64); assert_eq!(s3_factor("s3-case", 0, &[row, lightr.clone()])["reason"], "output_mismatch");
+        let mut row = lightr; row.elapsed_ms = 0; assert_eq!(s3_factor("s3-case", 0, &[docker, row])["reason"], "zero_lightr_elapsed"); }
+    #[test] fn s3_decode_rejects_schema_and_jcs_violations() { let row = s3("docker"); let raw = serde_json::to_string(&row).unwrap(); assert!(decode_s3(&raw.replace("\"schema_version\":3", "\"schema_version\":1")).unwrap_err().contains("unsupported S3 schema version: 1")); assert!(decode_s3(&raw.replace("\"s3_evidence_version\":1", "\"s3_evidence_version\":2")).unwrap_err().contains("unsupported S3 evidence version: 2")); assert!(decode_s3(&raw.replace("\"expected\":{\"exit_code\":0}", "\"expected\":1.5")).is_err()); assert!(decode_s3(&raw.replace("\"expected\":{\"exit_code\":0}", "\"expected\":9007199254740992")).is_err()); }
+    #[test] fn s3_decode_rejects_blank_unknown_duplicate_missing_and_mixed() { let row = s3("docker"); let raw = serde_json::to_string(&row).unwrap(); assert!(decode_s3(&format!("{{\"schema_version\":3,{}", &raw[1..])).unwrap_err().contains("duplicate JSON key")); assert!(decode_s3(&raw.replace("\"case_id\":\"s3-case\",", "")).unwrap_err().contains("empty required S3 field: case_id")); assert!(decode_s3(&raw.replace("}", ",\"extra\":true}")).is_err()); let root = temp("s3-mixed"); fs::write(root.join("rows.jsonl"), format!("{raw}\n\n")).unwrap(); assert!(merge_s3(&root, &root.join("out")).unwrap_err().contains("blank line")); }
+    #[test] fn legacy_decoders_reject_s3_envelopes() { let row = s3("docker"); let raw = serde_json::to_string(&row).unwrap(); assert!(decode_raw(&raw).is_err()); assert_eq!(decode_differential(&raw).unwrap_err(), "unsupported differential schema version: 3"); }
+    #[test] fn s3_positive_fixture_is_receipt_valid() { let rows: Vec<_> = include_str!("../../s3/fixtures/positive/pair.s3.jsonl").lines().map(|line| decode_s3(line).unwrap()).collect(); assert_eq!(s3_factor("s3-case", 0, &rows)["factor"], 2.0); }
 }
