@@ -13,7 +13,7 @@
 
 use lightr_build::{
     build_target,
-    buildkit::{parse_cache_from, parse_secret, parse_ssh},
+    buildkit::{parse_secret, parse_ssh},
     parse_dockerfile, step_reads_clock_or_net, BuildReport, Instr,
 };
 use lightr_core::validate_ref_name;
@@ -169,7 +169,9 @@ pub fn run(
 }
 
 /// BuildKit stub wire (WP-01, C-04-NEW). Frozen `run()` interface preserved.
-/// Secret/SSH blocked → exit 2; `--cache-from` parsed but not yet wired to build_target.
+/// Unsupported BuildKit inputs fail before any build work.
+const CACHE_FROM_UNSUPPORTED: &str = "lightr: build: --cache-from is not yet supported";
+
 #[allow(clippy::too_many_arguments)]
 pub fn run_buildkit_stubs(
     context: &str,
@@ -184,18 +186,19 @@ pub fn run_buildkit_stubs(
     json: bool,
     explain: bool,
 ) -> i32 {
-    // Ambiguity: frozen interface `run()` accepts no buildkit params.
-    // Minimal stub: secret/ssh → 2; cache-from → no-op (passes through); others → frozen run.
+    // Source identity and action-key semantics are not implemented yet.
+    if !cache_from.is_empty() {
+        eprintln!("{CACHE_FROM_UNSUPPORTED}");
+        return 2;
+    }
+
+    // Frozen `run()` interface accepts no BuildKit parameters.
     for s in secret {
         let parsed = parse_secret(s);
         let _ = parsed; // stub: parsed but not consumed
     }
     for s in ssh {
         let parsed = parse_ssh(s);
-        let _ = parsed;
-    }
-    for s in cache_from {
-        let parsed = parse_cache_from(s);
         let _ = parsed;
     }
     if !secret.is_empty() || !ssh.is_empty() {
@@ -249,5 +252,28 @@ mod tests {
     fn build_empty_ref_exits_2() {
         let code = super::run("/some/ctx", None, "", "native", &[], false, false, None);
         assert_eq!(code, 2, "empty ref must exit 2");
+    }
+
+    #[test]
+    fn build_cache_from_is_unsupported_before_build() {
+        let code = super::run_buildkit_stubs(
+            "/path/that/does/not/exist",
+            None,
+            "my-ref",
+            "native",
+            &[],
+            None,
+            &["example.invalid/cache:latest".to_string()],
+            &[],
+            &[],
+            false,
+            false,
+        );
+
+        assert_eq!(code, 2, "--cache-from must fail before a build starts");
+        assert_eq!(
+            super::CACHE_FROM_UNSUPPORTED,
+            "lightr: build: --cache-from is not yet supported"
+        );
     }
 }
