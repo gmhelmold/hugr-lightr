@@ -44,6 +44,15 @@ fn from_trailing_garbage_errors() {
     assert!(parse_dockerfile("FROM img extra").is_err());
 }
 
+#[test]
+fn from_unknown_flag_errors_before_parse() {
+    let err = parse_dockerfile("FROM --bogus alpine").unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "invalid manifest: FROM: unknown flag --bogus"
+    );
+}
+
 // ---- COPY / ADD flags ------------------------------------------------------
 
 #[test]
@@ -93,6 +102,28 @@ fn add_with_chown() {
 #[test]
 fn copy_requires_src_dest() {
     assert!(parse_dockerfile("COPY onlyone").is_err());
+}
+
+#[test]
+fn copy_and_add_unknown_flags_error_before_parse() {
+    let copy = parse_dockerfile("COPY --bogus=value src dest").unwrap_err();
+    assert_eq!(
+        copy.to_string(),
+        "invalid manifest: COPY: unknown flag --bogus"
+    );
+
+    let add = parse_dockerfile("ADD --bogus=value src dest").unwrap_err();
+    assert_eq!(
+        add.to_string(),
+        "invalid manifest: ADD: unknown flag --bogus"
+    );
+}
+
+#[test]
+fn supported_from_copy_and_add_flags_still_parse() {
+    assert!(parse_dockerfile("FROM --platform=linux/amd64 alpine").is_ok());
+    assert!(parse_dockerfile("COPY --from=build --chown=1:1 --chmod=755 src dest").is_ok());
+    assert!(parse_dockerfile("ADD --chown=1:1 --chmod=755 src dest").is_ok());
 }
 
 // ---- ARG -------------------------------------------------------------------

@@ -22,7 +22,7 @@ pub use ast::{BuildStep, CmdForm, Directives, Healthcheck, HealthcheckOpts, Inst
 
 use instr::{
     cmd_argv, cmd_form, non_empty, parse_add, parse_arg, parse_copy, parse_from, parse_healthcheck,
-    parse_kv_pairs, parse_onbuild, parse_paths, parse_shell,
+    parse_kv_pairs, parse_onbuild, parse_paths, parse_run, parse_shell,
 };
 use lightr_core::{LightrError, Result};
 
@@ -159,10 +159,7 @@ fn parse_instruction(line: &str) -> Result<Instr> {
     }
     match upper.as_str() {
         "FROM" => parse_from(rest),
-        "RUN" => Ok(Instr::Run {
-            argv: cmd_argv(rest),
-            form: cmd_form(rest),
-        }),
+        "RUN" => parse_run(rest),
         "CMD" => Ok(Instr::Cmd {
             argv: cmd_argv(rest),
             form: cmd_form(rest),
