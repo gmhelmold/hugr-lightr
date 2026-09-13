@@ -116,12 +116,15 @@ untimed Docker and Lightr setup, verifies Docker image exists and private
 Lightr setup and timed sample share one home; runner never creates a fresh home
 between them. Receipt is `docker_image_present:TAG;lightr_home_preserved`.
 
-Invalidate starts from verified warm setup. Runner copies materialized fixture
-context into its scenario output, writes deterministic `.lightr-s2-invalidate`,
-verifies copied tree differs while source fixture tree remains unchanged, then
-runs both timed commands against copied mutated context. Both rows record
-mutated tree SHA-256, original tree SHA-256, mutation SHA-256, and receipt.
-Warm/invalidate reject non-strict Docker command grammar before timed command.
+Invalidate starts from verified warm setup. Runner accepts only fixture
+`Dockerfile` with `COPY data.txt ...`, declared Lightr command containing
+`$FIXTURE_DIR`, and existing local `data.txt`; other inputs fail explicit
+`invalidate unsupported`. Runner copies materialized fixture context, mutates
+copied `data.txt`, verifies source tree unchanged and copied tree differs, then
+runs both timed commands against copied context. Receipt names `data.txt` and
+old/new SHA-256 values, never source bytes. Both rows record mutated and
+original tree SHA-256 plus mutation receipt. Warm/invalidate reject non-strict
+Docker command grammar before timed command.
 
 `merge` accepts v1 only. `merge-differential` accepts v2 only and rejects v1,
 mixed/malformed rows, empty required fields, duplicate `(pair_id, tool)` tuples,
@@ -139,6 +142,7 @@ invalid chunk args, missing local fixture commit, failed command, timeout,
 typed skip, and duplicate raw tuple rejection. Mutation probe: remove
 duplicate-ID validation; duplicate-ID test must fail before restore.
 S2 tests prove warm setup preserves Docker image and Lightr home through timed
-sample, invalidate leaves source fixture untouched while paired mutated trees
-match, and mutation evidence mismatch emits no factor. Mutation probe: remove
-fixture mutation write; invalidate fixture test fails before restore.
+sample, invalidate mutates copied `data.txt` while source stays unchanged, old
+marker paths fail gate, and mutation evidence mismatch emits no factor. Mutation
+probe: remove copied `data.txt` mutation; invalidate fixture test fails before
+restore.
