@@ -639,7 +639,7 @@ fn differential_factor(pair_id: &str, pair: &[DifferentialRecord]) -> Value {
 struct S3Spec { scenarios: Vec<S3Scenario> }
 #[derive(Debug, Deserialize)]
 struct S3Scenario {
-    case_id: String, fixture: PathBuf, docker: String, lightr: String,
+    case_id: String, fixture: PathBuf, docker: Vec<String>, lightr: Vec<String>, lightr_engine: String,
     assertions: Vec<S3PlannedAssertion>,
     #[serde(default)] legacy_overlap: Option<String>,
 }
@@ -673,13 +673,18 @@ fn run_s3(spec_path: &Path, chunk: usize, chunks: usize, rounds: usize, out: &Pa
         let fixture = if scenario.fixture.is_absolute() { scenario.fixture.clone() } else { spec_path.parent().unwrap_or(Path::new(".")).join(&scenario.fixture) };
         let fixture_sha256 = tree_sha256(&fixture)?;
         for round in 0..rounds as u32 {
-            for (tool, command, engine) in [("docker", &scenario.docker, None), ("lightr", &scenario.lightr, Some("native".into()))] {
-                let started = unix_ms(); let result = run_shell(&expand(command, docker, lightr, &fixture, out)?, Duration::from_secs(TIMEOUT_SECS), Some(&out.join("lightr-home")));
+            if !["native", "ns", "vz", "fc"].contains(&scenario.lightr_engine.as_str()) { return Err(format!("mixed S3 evidence: invalid S3 engine for {}", scenario.case_id)); }
+            for (tool, argv, engine) in [("docker", &scenario.docker, None), ("lightr", &scenario.lightr, Some(scenario.lightr_engine.clone()))] {
+                let argv = s3_argv(argv, docker, lightr, &fixture, &format!("{}-{round}", scenario.case_id))?;
+                s3_validate_argv(tool, &argv, &format!("{}-{round}", scenario.case_id))?;
+                let started = unix_ms();
+                let mut command = Command::new(&argv[0]); command.args(&argv[1..]); command.env("LIGHTR_HOME", out.join("lightr-home"));
+                let result = run_command(&mut command, Duration::from_secs(TIMEOUT_SECS));
                 let outcome = if result.timed_out { "timed_out" } else if command_passed(&result) { "passed" } else { "failed" };
                 let observed = json!({"exit_code": result.status.as_ref().and_then(|status| status.code()).unwrap_or(-1)});
                 let assertions: Vec<S3Assertion> = scenario.assertions.iter().map(|assertion| S3Assertion { id: assertion.id.clone(), expected: assertion.expected.clone(), observed: observed.clone(), passed: assertion.expected == observed, detail: if assertion.expected == observed { "matched".into() } else { "mismatch".into() }, shared: assertion.shared }).collect();
                 let receipt = s3_receipt(&assertions)?;
-                let record = S3Record { schema_version: S3_SCHEMA_VERSION, s3_evidence_version: S3_EVIDENCE_VERSION, case_id: scenario.case_id.clone(), round, tool: tool.into(), outcome: if assertions.iter().all(|assertion| assertion.passed) { outcome.into() } else { "failed".into() }, elapsed_ms: unix_ms().saturating_sub(started), fixture_sha256: fixture_sha256.clone(), host_identity: host.clone(), docker_client_version: DOCKER_VERSION.into(), docker_server_version: DOCKER_VERSION.into(), lightr_sha256: versions.lightr_hash.clone().unwrap(), lightr_engine: engine, command_sha256: sha256(command.as_bytes()), assertions, semantic_receipt_blake3: receipt, surface_receipt: json!({"case_id": scenario.case_id, "round": round, "fixture_sha256": fixture_sha256}) };
+                let record = S3Record { schema_version: S3_SCHEMA_VERSION, s3_evidence_version: S3_EVIDENCE_VERSION, case_id: scenario.case_id.clone(), round, tool: tool.into(), outcome: if assertions.iter().all(|assertion| assertion.passed) { outcome.into() } else { "failed".into() }, elapsed_ms: unix_ms().saturating_sub(started), fixture_sha256: fixture_sha256.clone(), host_identity: host.clone(), docker_client_version: versions.docker_client.clone().unwrap(), docker_server_version: versions.docker_server.clone().unwrap(), lightr_sha256: versions.lightr_hash.clone().unwrap(), lightr_engine: engine, command_sha256: sha256(&s3_argv_bytes(&argv)), assertions, semantic_receipt_blake3: receipt, surface_receipt: json!({"case_id": scenario.case_id, "round": round, "fixture_sha256": fixture_sha256}) };
                 write_s3_record(&mut file, &record)?;
             }
         }
@@ -687,12 +692,29 @@ fn run_s3(spec_path: &Path, chunk: usize, chunks: usize, rounds: usize, out: &Pa
     Ok(())
 }
 
+fn s3_argv(values: &[String], docker: &Path, lightr: &Path, fixture: &Path, namespace: &str) -> Result<Vec<String>, String> {
+    if values.is_empty() { return Err("empty required S3 field: argv".into()); }
+    values.iter().map(|value| {
+        let mut output = value.clone();
+        for (token, replacement) in [("${DOCKER}", docker.display().to_string()), ("${LIGHTR}", lightr.display().to_string()), ("${FIXTURE_DIR}", fixture.display().to_string()), ("${S3_NAMESPACE}", namespace.to_string())] { output = output.replace(token, &replacement); }
+        if output.contains("${") { return Err("mixed S3 evidence: unknown argv placeholder".into()); }
+        Ok(output)
+    }).collect()
+}
+
+fn s3_argv_bytes(argv: &[String]) -> Vec<u8> { let mut bytes = Vec::new(); for arg in argv { bytes.extend_from_slice(&(arg.len() as u32).to_be_bytes()); bytes.extend_from_slice(arg.as_bytes()); } bytes }
+fn s3_validate_argv(tool: &str, argv: &[String], namespace: &str) -> Result<(), String> {
+    if argv.iter().any(|arg| arg.contains("; ") || arg.contains("&&") || arg.contains('|')) { return Err("mixed S3 evidence: shell syntax in argv".into()); }
+    for window in argv.windows(2) { if ["--name", "--project-name", "--tag"].contains(&window[0].as_str()) && !window[1].contains(namespace) { return Err("mixed S3 evidence: un-namespaced resource declaration".into()); } }
+    if tool == "lightr" && argv.iter().any(|arg| arg == "compose") && !argv.iter().any(|arg| arg == "--eager") { return Err("mixed S3 evidence: comparable compose requires --eager".into()); }
+    Ok(())
+}
+
 fn s3_case_id(value: &str) -> bool { !value.is_empty() && value.len() <= 128 && (value.as_bytes()[0].is_ascii_lowercase() || value.as_bytes()[0].is_ascii_digit()) && value.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._-".contains(&byte)) }
 fn s3_hex(value: &str) -> bool { value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)) }
 fn s3_jcs(value: &Value) -> Result<Vec<u8>, String> {
-    fn valid(value: &Value) -> bool { match value { Value::Null | Value::Bool(_) | Value::String(_) => true, Value::Number(number) => number.as_i64().is_some_and(|n| (-9007199254740991..=9007199254740991).contains(&n)) || number.as_u64().is_some_and(|n| n <= 9007199254740991), Value::Array(values) => values.iter().all(valid), Value::Object(values) => values.values().all(valid) } }
-    if !valid(value) { return Err("invalid S3 JCS value".into()); }
-    serde_json::to_vec(value).map_err(|e| e.to_string())
+    fn write(value: &Value, output: &mut Vec<u8>) -> Result<(), String> { match value { Value::Null => output.extend_from_slice(b"null"), Value::Bool(true) => output.extend_from_slice(b"true"), Value::Bool(false) => output.extend_from_slice(b"false"), Value::String(value) => output.extend_from_slice(serde_json::to_string(value).map_err(|e| e.to_string())?.as_bytes()), Value::Number(value) => { let number = value.as_i64().or_else(|| value.as_u64().and_then(|n| i64::try_from(n).ok())).filter(|n| (-9007199254740991..=9007199254740991).contains(n)).ok_or_else(|| "invalid S3 JCS value".to_string())?; output.extend_from_slice(number.to_string().as_bytes()); }, Value::Array(values) => { output.push(b'['); for (index, value) in values.iter().enumerate() { if index != 0 { output.push(b','); } write(value, output)?; } output.push(b']'); }, Value::Object(values) => { output.push(b'{'); let mut entries: Vec<_> = values.iter().collect(); entries.sort_by(|(left, _), (right, _)| left.encode_utf16().cmp(right.encode_utf16())); for (index, (key, value)) in entries.into_iter().enumerate() { if index != 0 { output.push(b','); } output.extend_from_slice(serde_json::to_string(key).map_err(|e| e.to_string())?.as_bytes()); output.push(b':'); write(value, output)?; } output.push(b'}'); } }; Ok(()) }
+    let mut output = Vec::new(); write(value, &mut output)?; Ok(output)
 }
 fn s3_receipt(assertions: &[S3Assertion]) -> Result<String, String> {
     let mut shared: Vec<_> = assertions.iter().filter(|assertion| assertion.shared).collect(); shared.sort_by(|left, right| left.id.as_bytes().cmp(right.id.as_bytes()));
@@ -736,12 +758,18 @@ fn s3_factor(case_id: &str, round: u32, pair: &[S3Record]) -> Value {
     if docker.docker_client_version != DOCKER_VERSION || docker.docker_server_version != DOCKER_VERSION || lightr.docker_client_version != DOCKER_VERSION || lightr.docker_server_version != DOCKER_VERSION { return result("unsupported_version"); }
     if docker.outcome != "passed" || lightr.outcome != "passed" { return result("unsuccessful_pair"); }
     if docker.fixture_sha256 != lightr.fixture_sha256 || docker.host_identity != lightr.host_identity || docker.lightr_engine.is_some() || lightr.lightr_engine.is_none() || s3_jcs(&docker.surface_receipt).ok() != s3_jcs(&lightr.surface_receipt).ok() { return result("incomparable_pair"); }
-    if !docker.assertions.iter().any(|assertion| assertion.shared) || !lightr.assertions.iter().any(|assertion| assertion.shared) { return result("no_shared_assertions"); }
+    let docker_shared = match s3_projection(&docker.assertions) { Ok(value) => value, Err(_) => return result("incomparable_pair") }; let lightr_shared = match s3_projection(&lightr.assertions) { Ok(value) => value, Err(_) => return result("incomparable_pair") };
+    if docker_shared.is_empty() || lightr_shared.is_empty() { return result("no_shared_assertions"); }
+    if docker_shared != lightr_shared { return result("output_mismatch"); }
     if docker.semantic_receipt_blake3 != lightr.semantic_receipt_blake3 { return result("output_mismatch"); }
     if lightr.elapsed_ms == 0 { return result("zero_lightr_elapsed"); }
     json!({"case_id":case_id,"round":round,"factor":docker.elapsed_ms as f64/lightr.elapsed_ms as f64,"reason":Value::Null})
 }
+fn s3_projection(assertions: &[S3Assertion]) -> Result<Vec<u8>, String> { let mut shared: Vec<_> = assertions.iter().filter(|assertion| assertion.shared).collect(); shared.sort_by(|left, right| left.id.as_bytes().cmp(right.id.as_bytes())); let mut bytes = Vec::new(); for assertion in shared { bytes.extend_from_slice(&s3_jcs(&Value::String(assertion.id.clone()))?); bytes.push(0); bytes.extend_from_slice(&s3_jcs(&assertion.expected)?); bytes.push(0); bytes.extend_from_slice(&s3_jcs(&assertion.observed)?); bytes.push(0); bytes.extend_from_slice(if assertion.passed { b"true" } else { b"false" }); bytes.push(0); } Ok(bytes) }
 fn s3_no_duplicate_keys(raw: &str) -> Result<(), String> {
+    // serde_json accepts escaped object keys after duplicate-key information is lost.
+    // Reject escaped keys until they are decoded by a duplicate-preserving parser.
+    if raw.contains("\\u") { return Err("mixed S3 evidence: escaped JSON key unsupported".into()); }
     fn scan(bytes: &[u8], at: &mut usize) -> Result<(), String> { fn ws(bytes:&[u8], at:&mut usize) { while *at < bytes.len() && bytes[*at].is_ascii_whitespace() {*at+=1;} } fn string(bytes:&[u8], at:&mut usize)->Result<String,String>{ if bytes.get(*at)!=Some(&b'\"'){return Err("mixed S3 evidence: malformed JSON".into())};*at+=1;let start=*at;let mut escaped=false;while *at<bytes.len(){let byte=bytes[*at];if byte==b'\"'&&!escaped{let value=std::str::from_utf8(&bytes[start..*at]).map_err(|_|"mixed S3 evidence: invalid UTF-8")?.to_string();*at+=1;return Ok(value)};escaped=byte==b'\\'&&!escaped;if byte!=b'\\'{escaped=false};*at+=1}Err("mixed S3 evidence: malformed JSON".into())} ws(bytes,at); match bytes.get(*at) { Some(b'{')=>{*at+=1;let mut keys=BTreeSet::new();ws(bytes,at);if bytes.get(*at)==Some(&b'}'){*at+=1;return Ok(())}loop{ws(bytes,at);let key=string(bytes,at)?;if !keys.insert(key){return Err("mixed S3 evidence: duplicate JSON key".into())}ws(bytes,at);if bytes.get(*at)!=Some(&b':'){return Err("mixed S3 evidence: malformed JSON".into())};*at+=1;scan(bytes,at)?;ws(bytes,at);match bytes.get(*at){Some(b',')=>*at+=1,Some(b'}')=>{*at+=1;return Ok(())},_=>return Err("mixed S3 evidence: malformed JSON".into())}}},Some(b'[')=>{*at+=1;ws(bytes,at);if bytes.get(*at)==Some(&b']'){*at+=1;return Ok(())}loop{scan(bytes,at)?;ws(bytes,at);match bytes.get(*at){Some(b',')=>*at+=1,Some(b']')=>{*at+=1;return Ok(())},_=>return Err("mixed S3 evidence: malformed JSON".into())}}},Some(b'\"')=>{string(bytes,at).map(|_|())},Some(_)=>{while *at<bytes.len()&&!b",]} \t\r\n".contains(&bytes[*at]){*at+=1};Ok(())},None=>Err("mixed S3 evidence: malformed JSON".into())} } let mut at=0;scan(raw.as_bytes(),&mut at)?;while at<raw.len()&&raw.as_bytes()[at].is_ascii_whitespace(){at+=1};if at==raw.len(){Ok(())}else{Err("mixed S3 evidence: malformed JSON".into())} }
 
 #[cfg(test)]
@@ -804,4 +832,22 @@ mod tests {
     #[test] fn s3_decode_rejects_blank_unknown_duplicate_missing_and_mixed() { let row = s3("docker"); let raw = serde_json::to_string(&row).unwrap(); assert!(decode_s3(&format!("{{\"schema_version\":3,{}", &raw[1..])).unwrap_err().contains("duplicate JSON key")); assert!(decode_s3(&raw.replace("\"case_id\":\"s3-case\",", "")).unwrap_err().contains("empty required S3 field: case_id")); assert!(decode_s3(&raw.replace("}", ",\"extra\":true}")).is_err()); let root = temp("s3-mixed"); fs::write(root.join("rows.jsonl"), format!("{raw}\n\n")).unwrap(); assert!(merge_s3(&root, &root.join("out")).unwrap_err().contains("blank line")); }
     #[test] fn legacy_decoders_reject_s3_envelopes() { let row = s3("docker"); let raw = serde_json::to_string(&row).unwrap(); assert!(decode_raw(&raw).is_err()); assert_eq!(decode_differential(&raw).unwrap_err(), "unsupported differential schema version: 3"); }
     #[test] fn s3_positive_fixture_is_receipt_valid() { let rows: Vec<_> = include_str!("../../s3/fixtures/positive/pair.s3.jsonl").lines().map(|line| decode_s3(line).unwrap()).collect(); assert_eq!(s3_factor("s3-case", 0, &rows)["factor"], 2.0); }
+    #[test] fn s3_argv_is_token_only_and_namespaced() {
+        let fixture = Path::new("/fixture");
+        let argv = s3_argv(&["${DOCKER}".into(), "build".into(), "--tag".into(), "${S3_NAMESPACE}".into(), "${FIXTURE_DIR}".into()], Path::new("/docker"), Path::new("/lightr"), fixture, "case-0").unwrap();
+        assert_eq!(argv, vec!["/docker", "build", "--tag", "case-0", "/fixture"]);
+        assert!(s3_argv(&["${UNKNOWN}".into()], Path::new("/docker"), Path::new("/lightr"), fixture, "case-0").is_err());
+        assert!(s3_validate_argv("docker", &["docker".into(), "--name".into(), "fixed".into()], "case-0").is_err());
+        assert!(s3_validate_argv("lightr", &["lightr".into(), "compose".into()], "case-0").is_err());
+    }
+    #[test] fn s3_jcs_uses_utf16_key_order_and_rejects_fractions() {
+        let value = json!({"\u{e000}": 1, "\u{1f600}": 2});
+        assert_eq!(String::from_utf8(s3_jcs(&value).unwrap()).unwrap(), "{\"😀\":2,\"\":1}");
+        assert!(s3_jcs(&json!(1.5)).is_err());
+    }
+    #[test] fn s3_duplicate_escaped_key_and_projection_mismatch_rejected() {
+        assert!(s3_no_duplicate_keys(r#"{"a":1,"\u0061":2}"#).is_err());
+        let docker = s3("docker"); let mut lightr = s3("lightr"); lightr.assertions[0].observed = json!({"exit_code": 1}); lightr.semantic_receipt_blake3 = s3_receipt(&lightr.assertions).unwrap();
+        assert_eq!(s3_factor("s3-case", 0, &[docker, lightr])["reason"], "output_mismatch");
+    }
 }
