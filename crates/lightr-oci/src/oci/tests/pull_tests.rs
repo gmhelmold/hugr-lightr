@@ -60,9 +60,9 @@ fn test_arch_selection_picks_host() {
     }
 }
 
-/// Missing host arch → falls back to amd64.
+/// Missing host arch must fail closed; S2 does not emulate another architecture.
 #[test]
-fn test_arch_selection_fallback_to_amd64() {
+fn test_arch_selection_rejects_non_host_arch() {
     fn make_desc(os: &str, arch: &str) -> OciDescriptor {
         OciDescriptor {
             digest: format!("sha256:{os}-{arch}"),
@@ -75,22 +75,17 @@ fn test_arch_selection_fallback_to_amd64() {
         }
     }
 
-    // Only amd64 (no arm64); on an arm64 host this tests the fallback.
-    let manifests = vec![make_desc("linux", "amd64"), make_desc("windows", "amd64")];
+    let non_host = if host_arch() == "amd64" {
+        "arm64"
+    } else {
+        "amd64"
+    };
+    let manifests = vec![make_desc("linux", non_host), make_desc("windows", "amd64")];
 
-    let chosen = pick_from_manifest_list(&manifests).unwrap();
-    let arch = chosen
-        .platform
-        .as_ref()
-        .map(|p| p.architecture.as_str())
-        .unwrap_or("");
-    let os = chosen
-        .platform
-        .as_ref()
-        .map(|p| p.os.as_str())
-        .unwrap_or("");
-    assert_eq!(os, "linux");
-    assert_eq!(arch, "amd64");
+    let err = pick_from_manifest_list(&manifests).unwrap_err();
+    assert!(matches!(err, LightrError::InvalidManifest(_)));
+    assert!(err.to_string().contains(&format!("linux/{}", host_arch())));
+    assert!(err.to_string().contains(&format!("linux/{non_host}")));
 }
 
 /// No linux entries → error naming available arches.
@@ -117,7 +112,7 @@ fn test_arch_selection_no_linux_entry_errors() {
     );
     if let LightrError::InvalidManifest(msg) = err {
         assert!(
-            msg.contains("no linux entry"),
+            msg.contains(&format!("no linux/{} entry", host_arch())),
             "error must name the problem; got: {msg}"
         );
         // Must list available arches.

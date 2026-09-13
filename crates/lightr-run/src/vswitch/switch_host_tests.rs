@@ -9,6 +9,7 @@
 
 use super::*;
 use crate::network::NetworkRegistry;
+use std::io;
 use std::sync::atomic::{AtomicU64, Ordering as O};
 use std::time::Duration;
 
@@ -105,8 +106,10 @@ fn attach_forward_dhcp_dns_then_refcount_self_stop() {
     let gb = attach(&home, &id, &b).expect("attach b");
     let ga = UnixDatagram::from(ga);
     let gb = UnixDatagram::from(gb);
-    ga.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
-    gb.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+    // Darwin can return EINVAL from a timed AF_UNIX datagram socket on send.
+    // Nonblocking reads preserve same deadline without mutating socket timeout.
+    ga.set_nonblocking(true).unwrap();
+    gb.set_nonblocking(true).unwrap();
     // Give the accept loop a beat to add both members.
     std::thread::sleep(Duration::from_millis(200));
 
@@ -115,13 +118,13 @@ fn attach_forward_dhcp_dns_then_refcount_self_stop() {
     let frame = build_eth(b.mac.0, a.mac.0, 0x88b5, payload);
     ga.send(&frame).unwrap();
     let mut buf = vec![0u8; 64 * 1024];
-    let n = gb.recv(&mut buf).expect("B receives A's frame");
+    let n = recv_with_deadline(&gb, &mut buf).expect("B receives A's frame");
     assert_eq!(&buf[..n], &frame[..], "B got a different frame than A sent");
 
     // PROOF 2: DHCP DISCOVER → OFFER carrying A's registry IP.
     let disc = build_dhcp_discover(a.mac.0);
     ga.send(&disc).unwrap();
-    let n = ga.recv(&mut buf).expect("DHCP OFFER");
+    let n = recv_with_deadline(&ga, &mut buf).expect("DHCP OFFER");
     assert_eq!(
         decode_dhcp_yiaddr(&buf[..n]),
         Some(a.ip),
@@ -131,7 +134,7 @@ fn attach_forward_dhcp_dns_then_refcount_self_stop() {
     // PROOF 3: DNS A-query for "b" → B's registry IP (curl-by-name).
     let q = build_dns_query(a.mac.0, a.ip, "b");
     ga.send(&q).unwrap();
-    let n = ga.recv(&mut buf).expect("DNS answer");
+    let n = recv_with_deadline(&ga, &mut buf).expect("DNS answer");
     assert_eq!(
         decode_dns_first_a(&buf[..n]),
         Some(b.ip),
@@ -155,6 +158,28 @@ fn attach_forward_dhcp_dns_then_refcount_self_stop() {
     assert!(!ctl.exists(), "ctl.sock leaked after self-stop");
 
     let _ = std::fs::remove_dir_all(&home);
+}
+
+fn recv_with_deadline(sock: &UnixDatagram, buf: &mut [u8]) -> io::Result<usize> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        match sock.recv(buf) {
+            Ok(n) => return Ok(n),
+            Err(e)
+                if e.kind() == io::ErrorKind::WouldBlock
+                    && std::time::Instant::now() < deadline =>
+            {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "switch response timed out",
+                ));
+            }
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 /// `detach` is idempotent and never errors on an absent member / empty network.

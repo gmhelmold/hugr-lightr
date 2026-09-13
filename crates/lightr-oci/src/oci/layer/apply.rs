@@ -66,7 +66,7 @@ pub(super) enum PendingEntry {
 ///
 /// Samples `deadline` every 256 entries; returns
 /// `(dirs, whiteouts, pending, whited_out_paths)`.
-/// Increments the shared `entry_count` and `skipped` counters.
+/// Increments shared `entry_count`.
 /// The four buckets produced by [`collect_ops`]: dirs to create, whiteouts to
 /// apply, pending file/symlink/hardlink entries, and the set of whited-out paths.
 type CollectedOps = (
@@ -81,7 +81,6 @@ pub(super) fn collect_ops<R: Read>(
     tempdir: &Path,
     deadline: Instant,
     entry_count: &mut u64,
-    skipped: &mut u64,
     timeout_secs: u64,
 ) -> Result<CollectedOps> {
     let mut dirs: Vec<PathBuf> = Vec::new();
@@ -105,10 +104,12 @@ pub(super) fn collect_ops<R: Read>(
         let mut entry = entry_result.map_err(LightrError::Io)?;
         let entry_path = entry.path().map_err(LightrError::Io)?.into_owned();
 
-        // Path safety: reject `..` or absolute entries
+        // Archive traversal invalidates whole import; never publish a partial tree.
         if !path_is_safe(&entry_path) {
-            *skipped += 1;
-            continue;
+            return Err(LightrError::InvalidManifest(format!(
+                "unsafe layer path: {}",
+                entry_path.display()
+            )));
         }
 
         // Strip a leading `.` component (common in OCI layers)
@@ -192,6 +193,12 @@ pub(super) fn collect_ops<R: Read>(
                     .map_err(LightrError::Io)?
                     .map(|p| p.into_owned())
                     .unwrap_or_else(|| PathBuf::from(""));
+                if !path_is_safe(&link_target) {
+                    return Err(LightrError::InvalidManifest(format!(
+                        "unsafe layer symlink target: {}",
+                        link_target.display()
+                    )));
+                }
                 pending.push(PendingEntry::Symlink { dest, link_target });
             }
             EntryType::Link => {
@@ -239,6 +246,7 @@ pub(super) fn apply_ops(
 ) -> Result<()> {
     // ── Apply directories first ───────────────────────────────────────────
     for dir_path in dirs {
+        reject_symlink_components(tempdir, dir_path)?;
         fs::create_dir_all(dir_path).map_err(LightrError::Io)?;
     }
 
@@ -247,6 +255,7 @@ pub(super) fn apply_ops(
         match &wo.name {
             // Regular whiteout: `.wh.<name>` — remove `<name>`
             Some(name) => {
+                reject_symlink_components(tempdir, &wo.parent)?;
                 let target = wo.parent.join(name);
                 if target.is_dir() {
                     let _ = fs::remove_dir_all(&target);
@@ -257,6 +266,7 @@ pub(super) fn apply_ops(
             // Opaque whiteout: clear the dir's existing contents (keep dir).
             // FIX 4: create the dir if it is absent, THEN clear it.
             None => {
+                reject_symlink_components(tempdir, &wo.parent)?;
                 fs::create_dir_all(&wo.parent).map_err(LightrError::Io)?;
                 for child in fs::read_dir(&wo.parent).map_err(LightrError::Io)?.flatten() {
                     let cp = child.path();
@@ -285,8 +295,10 @@ pub(super) fn apply_ops(
                     continue;
                 }
                 if let Some(p) = dest.parent() {
+                    reject_symlink_components(tempdir, p)?;
                     fs::create_dir_all(p).map_err(LightrError::Io)?;
                 }
+                remove_symlink(dest)?;
                 fs::write(dest, data).map_err(LightrError::Io)?;
                 #[cfg(unix)]
                 {
@@ -311,6 +323,7 @@ pub(super) fn apply_ops(
                     continue;
                 }
                 if let Some(p) = dest.parent() {
+                    reject_symlink_components(tempdir, p)?;
                     fs::create_dir_all(p).map_err(LightrError::Io)?;
                 }
                 let _ = fs::remove_file(dest);
@@ -356,6 +369,7 @@ pub(super) fn apply_ops(
                 continue;
             }
             let src = tempdir.join(declared_target);
+            reject_symlink_components(tempdir, &src)?;
             if !src.exists() {
                 return Err(LightrError::InvalidManifest(format!(
                     "hardlink target not found: {}",
@@ -363,11 +377,57 @@ pub(super) fn apply_ops(
                 )));
             }
             if let Some(p) = dest.parent() {
+                reject_symlink_components(tempdir, p)?;
                 fs::create_dir_all(p).map_err(LightrError::Io)?;
             }
+            remove_symlink(dest)?;
             fs::copy(&src, dest).map_err(LightrError::Io)?;
         }
     }
 
     Ok(())
+}
+
+/// Reject a write path with an existing symlink in any component under `tempdir`.
+fn reject_symlink_components(tempdir: &Path, path: &Path) -> Result<()> {
+    let relative = path.strip_prefix(tempdir).map_err(|_| {
+        LightrError::InvalidManifest(format!("layer path outside tempdir: {}", path.display()))
+    })?;
+    let mut current = tempdir.to_path_buf();
+    for component in relative.components() {
+        match component {
+            Component::Normal(part) => current.push(part),
+            Component::CurDir => continue,
+            _ => {
+                return Err(LightrError::InvalidManifest(format!(
+                    "unsafe layer path: {}",
+                    path.display()
+                )));
+            }
+        }
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(LightrError::InvalidManifest(format!(
+                    "layer path traverses symlink: {}",
+                    current.display()
+                )));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(LightrError::Io(error)),
+        }
+    }
+    Ok(())
+}
+
+/// Replace a leaf symlink rather than following it during a file write.
+fn remove_symlink(path: &Path) -> Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            fs::remove_file(path).map_err(LightrError::Io)
+        }
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(LightrError::Io(error)),
+    }
 }

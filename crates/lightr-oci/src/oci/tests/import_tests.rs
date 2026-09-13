@@ -77,9 +77,9 @@ fn test_import_idempotent() {
     );
 }
 
-/// A19 partial: path-escape entries are skipped, nothing written outside tempdir.
+/// Malicious layer traversal rejects the whole import and publishes no ref.
 #[test]
-fn test_path_escape_skipped() {
+fn test_path_escape_rejects_import_without_ref() {
     let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
     let tmp = TempDir::new().unwrap();
     let (_home, store) = tmp_store_and_home();
@@ -140,19 +140,71 @@ fn test_path_escape_skipped() {
 
     let layout_dir = make_layout(tmp.path(), &[layer_bytes]);
 
-    let report = import_layout(&layout_dir, &store, "escape-test").unwrap();
+    let result = import_layout(&layout_dir, &store, "escape-test");
+    assert!(
+        matches!(&result, Err(lightr_core::LightrError::InvalidManifest(msg)) if msg.contains("unsafe layer path")),
+        "traversal must reject import, got: {:?}",
+        result.as_ref().err()
+    );
+    assert!(
+        store.ref_get("escape-test").unwrap().is_none(),
+        "rejected import must not publish ref"
+    );
+}
 
-    // The import should succeed
-    assert_eq!(report.layers, 1);
+/// Malicious outer docker-save entries reject before archive selection or import.
+#[test]
+fn test_docker_save_outer_path_escape_rejects_import_without_ref() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let tmp = TempDir::new().unwrap();
+    let (_home, store) = tmp_store_and_home();
 
-    // evil file must NOT exist outside the snapshot (it was skipped)
-    // We can't easily check the tempdir after the fact, but we can verify
-    // the hydrated tree only has the safe file.
-    let hydrate_dir = tmp.path().join("hydrated-escape");
-    fs::create_dir_all(&hydrate_dir).unwrap();
-    lightr_index::hydrate(&hydrate_dir, &store, "escape-test").unwrap();
-    assert!(hydrate_dir.join("safe.txt").exists(), "safe.txt must exist");
-    // ../evil cannot land in the hydrate_dir since it was skipped
+    fn tar_block(name: &[u8], content: &[u8]) -> Vec<u8> {
+        let mut block = [0u8; 512];
+        let name_len = name.len().min(99);
+        block[..name_len].copy_from_slice(&name[..name_len]);
+        block[100..107].copy_from_slice(b"0000644");
+        block[108..115].copy_from_slice(b"0000000");
+        block[116..123].copy_from_slice(b"0000000");
+        let size = format!("{:011o}", content.len());
+        block[124..135].copy_from_slice(size.as_bytes());
+        block[136..147].copy_from_slice(b"00000000000");
+        block[148..156].copy_from_slice(b"        ");
+        block[156] = b'0';
+        let checksum: u32 = block.iter().map(|&byte| byte as u32).sum();
+        let checksum = format!("{:06o}\0 ", checksum);
+        block[148..156].copy_from_slice(checksum.as_bytes());
+
+        let mut entry = block.to_vec();
+        entry.extend_from_slice(content);
+        entry.extend(vec![0; (512 - content.len() % 512) % 512]);
+        entry
+    }
+
+    let layer = make_layer(&[("safe", b"safe", 0o644)]);
+    let manifest = serde_json::to_vec(&serde_json::json!([{
+        "Config": "config.json",
+        "Layers": ["layer/layer.tar"]
+    }]))
+    .unwrap();
+    let mut archive = tar_block(b"manifest.json", &manifest);
+    archive.extend(tar_block(b"layer/layer.tar", &layer));
+    archive.extend(tar_block(b"../ignored", b"ignored"));
+    archive.extend([0; 1024]);
+
+    let path = tmp.path().join("malicious-docker-save.tar");
+    fs::write(&path, archive).unwrap();
+    let result = import_layout(&path, &store, "outer-escape");
+
+    assert!(
+        matches!(&result, Err(lightr_core::LightrError::InvalidManifest(msg)) if msg.contains("unsafe docker save path")),
+        "outer traversal must reject import, got: {:?}",
+        result.as_ref().err()
+    );
+    assert!(
+        store.ref_get("outer-escape").unwrap().is_none(),
+        "rejected outer archive must not publish ref"
+    );
 }
 
 /// docker save-style tar roundtrip.
@@ -198,6 +250,16 @@ fn test_docker_save_tar_roundtrip() {
             mh.set_entry_type(tar::EntryType::Regular);
             mh.set_cksum();
             tar.append(&mh, manifest_json.as_slice()).unwrap();
+
+            // Legacy docker-save config is required before ref publication.
+            let config = br#"{"architecture":"amd64","os":"linux"}"#;
+            let mut ch = tar::Header::new_gnu();
+            ch.set_path("config.json").unwrap();
+            ch.set_mode(0o644);
+            ch.set_size(config.len() as u64);
+            ch.set_entry_type(tar::EntryType::Regular);
+            ch.set_cksum();
+            tar.append(&ch, &config[..]).unwrap();
 
             // layer0/layer.tar
             let mut lh = tar::Header::new_gnu();
@@ -296,4 +358,68 @@ fn test_docker_save_modern_rejects_sha_mismatch() {
         res.is_err(),
         "a blobs/sha256 digest mismatch must be rejected (fail-closed)"
     );
+}
+
+fn docker_save_with_config(config_path: &str, config: Option<&[u8]>) -> Vec<u8> {
+    let layer = make_layer(&[("x", b"x", 0o644)]);
+    let manifest = serde_json::to_vec(&serde_json::json!([{
+        "Config": config_path,
+        "Layers": ["layer.tar"]
+    }]))
+    .unwrap();
+    let mut bytes = Vec::new();
+    let mut tar = tar::Builder::new(&mut bytes);
+    for (path, data) in [
+        ("manifest.json", manifest.as_slice()),
+        ("layer.tar", layer.as_slice()),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_path(path).unwrap();
+        header.set_size(data.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append(&header, data).unwrap();
+    }
+    if let Some(data) = config {
+        let mut header = tar::Header::new_gnu();
+        header.set_path(config_path).unwrap();
+        header.set_size(data.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append(&header, data).unwrap();
+    }
+    tar.finish().unwrap();
+    drop(tar);
+    bytes
+}
+
+/// Docker-save config is mandatory: unsafe, missing, malformed, and mismatched
+/// legacy digest paths reject before a ref can be published.
+#[test]
+fn test_docker_save_config_rejections_publish_no_ref() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let valid = br#"{"architecture":"amd64","os":"linux"}"#;
+    let bad_digest = format!("{}.json", "0".repeat(64));
+    for (case, config_path, config) in [
+        ("unsafe", "../config.json", None),
+        ("missing", "missing.json", None),
+        ("malformed", "config.json", Some(&b"[]"[..])),
+        ("mismatch", bad_digest.as_str(), Some(&valid[..])),
+    ] {
+        let tmp = TempDir::new().unwrap();
+        let (_home, store) = tmp_store_and_home();
+        let tar_path = tmp.path().join(format!("{case}.tar"));
+        fs::write(&tar_path, docker_save_with_config(config_path, config)).unwrap();
+        let name = format!("docker-config-{case}");
+        let result = import_layout(&tar_path, &store, &name);
+        assert!(
+            matches!(
+                result,
+                Err(lightr_core::LightrError::InvalidManifest(_))
+                    | Err(lightr_core::LightrError::Integrity { .. })
+            ),
+            "{case} config must reject"
+        );
+        assert!(store.ref_get(&name).unwrap().is_none());
+    }
 }

@@ -2,7 +2,7 @@
 
 use super::{make_layer, make_layout, tmp_store_and_home, ENV_LOCK};
 use crate::oci::import::import_layout;
-use crate::oci::util::{path_is_safe, sha256_hex_of, verify_sha256};
+use crate::oci::util::{host_arch, path_is_safe, sha256_hex_of, verify_sha256};
 use lightr_core::LightrError;
 use std::{fs, path::Path};
 use tempfile::TempDir;
@@ -14,6 +14,101 @@ fn test_path_is_safe() {
     assert!(!path_is_safe(Path::new("../evil")));
     assert!(!path_is_safe(Path::new("/etc/passwd")));
     assert!(!path_is_safe(Path::new("a/../../etc")));
+}
+
+fn make_symlink_layer(target: &str, write_through_link: bool) -> Vec<u8> {
+    let encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+    let mut tar = tar::Builder::new(encoder);
+
+    let content = b"target";
+    let mut file = tar::Header::new_gnu();
+    file.set_path("target").unwrap();
+    file.set_mode(0o644);
+    file.set_size(content.len() as u64);
+    file.set_entry_type(tar::EntryType::Regular);
+    file.set_cksum();
+    tar.append(&file, &content[..]).unwrap();
+
+    let mut link = tar::Header::new_gnu();
+    link.set_path("link").unwrap();
+    link.set_mode(0o777);
+    link.set_size(0);
+    link.set_entry_type(tar::EntryType::Symlink);
+    link.set_link_name(target).unwrap();
+    link.set_cksum();
+    tar.append(&link, &b""[..]).unwrap();
+
+    if write_through_link {
+        let payload = b"must not follow symlink";
+        let mut file = tar::Header::new_gnu();
+        file.set_path("link/payload").unwrap();
+        file.set_mode(0o644);
+        file.set_size(payload.len() as u64);
+        file.set_entry_type(tar::EntryType::Regular);
+        file.set_cksum();
+        tar.append(&file, &payload[..]).unwrap();
+    }
+
+    tar.into_inner().unwrap().finish().unwrap()
+}
+
+#[test]
+fn test_symlink_target_traversal_rejects_import_without_ref() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    for (suffix, target) in [("absolute", "/etc/passwd"), ("parent", "../escape")] {
+        let tmp = TempDir::new().unwrap();
+        let (_home, store) = tmp_store_and_home();
+        let layout_dir = make_layout(tmp.path(), &[make_symlink_layer(target, false)]);
+        let name = format!("symlink-{suffix}");
+        let result = import_layout(&layout_dir, &store, &name);
+
+        assert!(
+            matches!(&result, Err(LightrError::InvalidManifest(msg)) if msg.contains("unsafe layer symlink target")),
+            "{suffix} symlink target must reject import, got: {:?}",
+            result.as_ref().err()
+        );
+        assert!(
+            store.ref_get(&name).unwrap().is_none(),
+            "rejected symlink target must not publish ref"
+        );
+    }
+}
+
+#[test]
+fn test_write_through_symlink_component_rejects_import_without_ref() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let tmp = TempDir::new().unwrap();
+    let (_home, store) = tmp_store_and_home();
+    let layout_dir = make_layout(tmp.path(), &[make_symlink_layer("target", true)]);
+    let result = import_layout(&layout_dir, &store, "symlink-component");
+
+    assert!(
+        matches!(&result, Err(LightrError::InvalidManifest(msg)) if msg.contains("layer path traverses symlink")),
+        "write through symlink component must reject import, got: {:?}",
+        result.as_ref().err()
+    );
+    assert!(
+        store.ref_get("symlink-component").unwrap().is_none(),
+        "rejected symlink-component import must not publish ref"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_relative_symlink_imports() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let tmp = TempDir::new().unwrap();
+    let (_home, store) = tmp_store_and_home();
+    let layout_dir = make_layout(tmp.path(), &[make_symlink_layer("target", false)]);
+    import_layout(&layout_dir, &store, "relative-symlink").unwrap();
+
+    let hydrate_dir = tmp.path().join("hydrated-relative-symlink");
+    fs::create_dir_all(&hydrate_dir).unwrap();
+    lightr_index::hydrate(&hydrate_dir, &store, "relative-symlink").unwrap();
+    assert_eq!(
+        fs::read_link(hydrate_dir.join("link")).unwrap(),
+        Path::new("target")
+    );
 }
 
 // ── FIX 1: sha256 integrity tests ─────────────────────────────────────────
@@ -66,6 +161,113 @@ fn test_verify_sha256_helper() {
     let bad_hex = "0".repeat(64);
     let err = verify_sha256(data, &bad_hex).unwrap_err();
     assert!(matches!(err, LightrError::Integrity { .. }));
+}
+
+fn rewrite_layout_manifest(layout: &Path, manifest: serde_json::Value) {
+    let bytes = serde_json::to_vec(&manifest).unwrap();
+    let hex = sha256_hex_of(&bytes);
+    fs::write(layout.join("blobs/sha256").join(&hex), bytes).unwrap();
+    fs::write(
+        layout.join("index.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "schemaVersion": 2,
+            "manifests": [{
+                "digest": format!("sha256:{hex}"),
+                "platform": {"os": "linux", "architecture": host_arch()}
+            }]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+}
+
+/// Config is required and validated before snapshot. Every rejection leaves no ref.
+#[test]
+fn test_oci_config_rejections_publish_no_ref() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    for case in ["missing", "malformed", "unsupported", "mismatch"] {
+        let tmp = TempDir::new().unwrap();
+        let (_home, store) = tmp_store_and_home();
+        let layout = make_layout(tmp.path(), &[make_layer(&[("x", b"x", 0o644)])]);
+        let blobs = layout.join("blobs/sha256");
+        let index: serde_json::Value =
+            serde_json::from_slice(&fs::read(layout.join("index.json")).unwrap()).unwrap();
+        let manifest_hex = index["manifests"][0]["digest"]
+            .as_str()
+            .unwrap()
+            .strip_prefix("sha256:")
+            .unwrap();
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(blobs.join(manifest_hex)).unwrap()).unwrap();
+        let old_hex = manifest["config"]["digest"]
+            .as_str()
+            .unwrap()
+            .strip_prefix("sha256:")
+            .unwrap()
+            .to_string();
+
+        match case {
+            "missing" => fs::remove_file(blobs.join(old_hex)).unwrap(),
+            "malformed" => {
+                let bytes = b"[]";
+                let hex = sha256_hex_of(bytes);
+                fs::write(blobs.join(&hex), bytes).unwrap();
+                manifest["config"]["digest"] = serde_json::json!(format!("sha256:{hex}"));
+                manifest["config"]["size"] = serde_json::json!(bytes.len());
+                rewrite_layout_manifest(&layout, manifest);
+            }
+            "unsupported" => {
+                manifest["config"]["digest"] = serde_json::json!("sha512:deadbeef");
+                rewrite_layout_manifest(&layout, manifest);
+            }
+            "mismatch" => fs::write(blobs.join(old_hex), b"{\"os\":\"linux\"}").unwrap(),
+            _ => unreachable!(),
+        }
+
+        let name = format!("config-{case}");
+        let result = import_layout(&layout, &store, &name);
+        assert!(
+            matches!(
+                result,
+                Err(LightrError::InvalidManifest(_)) | Err(LightrError::Integrity { .. })
+            ),
+            "{case} config must fail"
+        );
+        assert!(
+            store.ref_get(&name).unwrap().is_none(),
+            "{case} config published ref"
+        );
+    }
+}
+
+/// Index selection accepts only native Linux descriptor, never first descriptor.
+#[test]
+fn test_oci_layout_rejects_non_host_platform_without_ref() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let tmp = TempDir::new().unwrap();
+    let (_home, store) = tmp_store_and_home();
+    let layout = make_layout(tmp.path(), &[make_layer(&[("x", b"x", 0o644)])]);
+    let index: serde_json::Value =
+        serde_json::from_slice(&fs::read(layout.join("index.json")).unwrap()).unwrap();
+    let digest = index["manifests"][0]["digest"].clone();
+    let other = if host_arch() == "amd64" {
+        "arm64"
+    } else {
+        "amd64"
+    };
+    fs::write(
+        layout.join("index.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "schemaVersion": 2,
+            "manifests": [{"digest": digest, "platform": {"os": "linux", "architecture": other}}]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let result = import_layout(&layout, &store, "wrong-platform");
+    assert!(matches!(result, Err(LightrError::InvalidManifest(_))));
+    assert!(store.ref_get("wrong-platform").unwrap().is_none());
 }
 
 // ── FIX 3/4: whiteout ordering tests ─────────────────────────────────────
