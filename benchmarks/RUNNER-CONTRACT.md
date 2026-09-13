@@ -9,6 +9,8 @@ modified.
 ```text
 bench-runner verify-spec --spec PATH
 bench-runner run --spec PATH --chunk N --chunks N --rounds N \
+  --out DIR --docker PATH --lightr PATH
+bench-runner run-differential --spec PATH --chunk N --chunks N --rounds N \
   --mode cold|warm|invalidate --out DIR \
   --docker PATH --lightr PATH
 bench-runner merge --input DIR --out DIR
@@ -20,9 +22,9 @@ fixture/commands/assertions/source evidence. It permits no executable commands
 for a non-supported scenario.
 
 `run` selects source-list order where `index % chunks == chunk`; `chunks > 0`,
-`chunk < chunks`, `rounds > 0`, and explicit `--mode` are required for S2
-differential evidence. Legacy S1 callers without `--mode` retain their existing
-private-per-round state semantics and are recorded as `cold`. Each
+`run` is frozen S1 behavior: no warmup, pairing, equivalence, factor, mode, or
+hardware requirement; it emits schema v1 records. `run-differential` is S2:
+`chunk < chunks`, `rounds > 0`, and explicit `--mode` are required. Each
 supported scenario first runs one unrecorded warmup pair, then records exactly
 the supplied paired rounds. It creates
 `<out>/records.jsonl`, never prints synthetic success. Any selected supported
@@ -102,7 +104,8 @@ and OS-native model probe. macOS probes `sysctl hw.model` then CPU brand; Linux
 probes DMI product name then `/proc/cpuinfo` model name. No hardcoded identity:
 if all probes fail, `run` fails before writing records.
 
-`merge` reads JSONL recursively, rejects malformed rows and duplicate
+S1 `merge` accepts only schema v1; S2 `merge` accepts only schema v2. Mixed
+schemas fail closed. `merge` reads JSONL recursively, rejects malformed rows and duplicate
 `(scenario_id, tool, mode, pair_id)` tuples, writes `merged.jsonl` plus
 `summary.json`. For every supported scenario it rejects zero, unpaired, failed,
 incomparable, or inconsistent fixture/spec/version/hardware/mode evidence.

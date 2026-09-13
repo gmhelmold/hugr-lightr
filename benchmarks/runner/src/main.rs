@@ -36,8 +36,24 @@ enum Action {
         chunks: usize,
         #[arg(long)]
         rounds: usize,
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        docker: PathBuf,
+        #[arg(long)]
+        lightr: PathBuf,
+    },
+    RunDifferential {
+        #[arg(long)]
+        spec: PathBuf,
+        #[arg(long)]
+        chunk: usize,
+        #[arg(long)]
+        chunks: usize,
+        #[arg(long)]
+        rounds: usize,
         #[arg(long, value_enum)]
-        mode: Option<Mode>,
+        mode: Mode,
         #[arg(long)]
         out: PathBuf,
         #[arg(long)]
@@ -179,6 +195,69 @@ struct RawRecord {
     assertions: Vec<AssertionResult>,
 }
 
+#[derive(Serialize, Deserialize)]
+struct LegacyRawRecord {
+    schema_version: u32,
+    scenario_id: String,
+    availability: Availability,
+    tool: String,
+    round: usize,
+    outcome: String,
+    started_at_unix_ms: u128,
+    ended_at_unix_ms: u128,
+    elapsed_ms: u128,
+    timeout_secs: u64,
+    exit_code: Option<i32>,
+    command_sha256: String,
+    stdout_sha256: String,
+    stderr_sha256: String,
+    spec_sha256: String,
+    fixture_tree_sha256: Option<String>,
+    source_commit: Option<String>,
+    docker_client_version: Option<String>,
+    docker_server_version: Option<String>,
+    docker_api_version: Option<String>,
+    lightr_version: Option<String>,
+    lightr_sha256: Option<String>,
+    host_os: String,
+    host_arch: String,
+    host_kernel: String,
+    assertions: Vec<AssertionResult>,
+}
+
+impl From<&RawRecord> for LegacyRawRecord {
+    fn from(row: &RawRecord) -> Self {
+        Self {
+            schema_version: 1,
+            scenario_id: row.scenario_id.clone(),
+            availability: row.availability,
+            tool: row.tool.clone(),
+            round: row.round,
+            outcome: row.outcome.clone(),
+            started_at_unix_ms: row.started_at_unix_ms,
+            ended_at_unix_ms: row.ended_at_unix_ms,
+            elapsed_ms: row.elapsed_ms,
+            timeout_secs: row.timeout_secs,
+            exit_code: row.exit_code,
+            command_sha256: row.command_sha256.clone(),
+            stdout_sha256: row.stdout_sha256.clone(),
+            stderr_sha256: row.stderr_sha256.clone(),
+            spec_sha256: row.spec_sha256.clone(),
+            fixture_tree_sha256: row.fixture_tree_sha256.clone(),
+            source_commit: row.source_commit.clone(),
+            docker_client_version: row.docker_client_version.clone(),
+            docker_server_version: row.docker_server_version.clone(),
+            docker_api_version: row.docker_api_version.clone(),
+            lightr_version: row.lightr_version.clone(),
+            lightr_sha256: row.lightr_sha256.clone(),
+            host_os: row.host_os.clone(),
+            host_arch: row.host_arch.clone(),
+            host_kernel: row.host_kernel.clone(),
+            assertions: row.assertions.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct AssertionResult {
     kind: String,
@@ -213,7 +292,6 @@ fn main() {
             chunk,
             chunks,
             rounds,
-            mode,
             out,
             docker,
             lightr,
@@ -222,10 +300,23 @@ fn main() {
             chunk,
             chunks,
             rounds,
-            mode.unwrap_or(Mode::Cold),
+            Mode::Cold,
+            false,
             &out,
             &docker,
             &lightr,
+        ),
+        Action::RunDifferential {
+            spec,
+            chunk,
+            chunks,
+            rounds,
+            mode,
+            out,
+            docker,
+            lightr,
+        } => run(
+            &spec, chunk, chunks, rounds, mode, true, &out, &docker, &lightr,
         ),
         Action::Merge { input, out } => merge(&input, &out),
     };
@@ -381,6 +472,7 @@ fn run(
     chunks: usize,
     rounds: usize,
     mode: Mode,
+    differential: bool,
     out: &Path,
     docker: &Path,
     lightr: &Path,
@@ -392,15 +484,21 @@ fn run(
     fs::create_dir_all(out).map_err(|e| e.to_string())?;
     let mut records = File::create(out.join("records.jsonl")).map_err(|e| e.to_string())?;
     let spec_hash = sha256(&bytes);
-    let hardware_id = hardware_id()?;
+    let hardware_id = if differential {
+        hardware_id()?
+    } else {
+        "legacy".into()
+    };
     let selected: Vec<_> = select_scenarios(&spec.scenarios, chunk, chunks);
     let mut failed = false;
     for scenario in selected {
         if scenario.availability != Availability::Supported {
-            write_record(
-                &mut records,
-                &skip_record(scenario, &spec_hash, mode, &hardware_id),
-            )?;
+            let record = skip_record(scenario, &spec_hash, mode, &hardware_id);
+            if differential {
+                write_record(&mut records, &record)?;
+            } else {
+                write_legacy_record(&mut records, &record)?;
+            }
             continue;
         }
         let project = scenario.fixture.as_ref().and_then(|f| {
@@ -411,38 +509,39 @@ fn run(
         });
         let fixture = materialize_fixture(spec_path, scenario, project, out);
         let versions = probe_versions(docker, lightr);
-        // Warmup establishes mode state but contributes no timing evidence.
         let warmup_out = out.join("scenarios").join(&scenario.id).join("warmup");
-        fs::create_dir_all(&warmup_out).map_err(|e| e.to_string())?;
-        if let Ok((fixture_dir, _, _)) = &fixture {
-            let _ = execute_record(
-                scenario,
-                "docker",
-                0,
-                mode,
-                Some((fixture_dir, "", "")),
-                &warmup_out,
-                &versions,
-                &spec_hash,
-                docker,
-                lightr,
-                versions.error.as_deref(),
-                &hardware_id,
-            );
-            let _ = execute_record(
-                scenario,
-                "lightr",
-                0,
-                mode,
-                Some((fixture_dir, "", "")),
-                &warmup_out,
-                &versions,
-                &spec_hash,
-                docker,
-                lightr,
-                versions.error.as_deref(),
-                &hardware_id,
-            );
+        if differential {
+            if let Ok((fixture_dir, _, _)) = &fixture {
+                fs::create_dir_all(&warmup_out).map_err(|e| e.to_string())?;
+                let _ = execute_record(
+                    scenario,
+                    "docker",
+                    0,
+                    mode,
+                    Some((fixture_dir, "", "")),
+                    &warmup_out,
+                    &versions,
+                    &spec_hash,
+                    docker,
+                    lightr,
+                    versions.error.as_deref(),
+                    &hardware_id,
+                );
+                let _ = execute_record(
+                    scenario,
+                    "lightr",
+                    0,
+                    mode,
+                    Some((fixture_dir, "", "")),
+                    &warmup_out,
+                    &versions,
+                    &spec_hash,
+                    docker,
+                    lightr,
+                    versions.error.as_deref(),
+                    &hardware_id,
+                );
+            }
         }
         for round in round_indices(rounds) {
             let scenario_out = out
@@ -515,10 +614,17 @@ fn run(
                     &scenario_out,
                 );
             }
-            bind_pair_evidence(scenario, &mut docker_record, &mut lightr_record);
+            if differential {
+                bind_pair_evidence(scenario, &mut docker_record, &mut lightr_record);
+            }
             failed |= docker_record.outcome != "passed" || lightr_record.outcome != "passed";
-            write_record(&mut records, &docker_record)?;
-            write_record(&mut records, &lightr_record)?;
+            if differential {
+                write_record(&mut records, &docker_record)?;
+                write_record(&mut records, &lightr_record)?;
+            } else {
+                write_legacy_record(&mut records, &docker_record)?;
+                write_legacy_record(&mut records, &lightr_record)?;
+            }
         }
     }
     if failed {
@@ -1181,6 +1287,10 @@ fn write_record(file: &mut File, record: &RawRecord) -> Result<(), String> {
     serde_json::to_writer(&mut *file, record).map_err(|e| e.to_string())?;
     file.write_all(b"\n").map_err(|e| e.to_string())
 }
+fn write_legacy_record(file: &mut File, record: &RawRecord) -> Result<(), String> {
+    serde_json::to_writer(&mut *file, &LegacyRawRecord::from(record)).map_err(|e| e.to_string())?;
+    file.write_all(b"\n").map_err(|e| e.to_string())
+}
 fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -1277,19 +1387,62 @@ fn merge(input: &Path, out: &Path) -> Result<(), String> {
     collect_jsonl(input, &mut paths)?;
     paths.sort();
     let mut rows = Vec::new();
+    let mut legacy_rows = Vec::new();
     for path in paths {
         let contents = fs::read_to_string(&path).map_err(|e| e.to_string())?;
         for (line, raw) in contents.lines().enumerate() {
             if raw.trim().is_empty() {
                 continue;
             }
-            rows.push(
-                decode_raw(raw)
-                    .map_err(|e| format!("malformed JSONL {}:{}: {e}", path.display(), line + 1))?,
-            );
+            let value: Value = serde_json::from_str(raw)
+                .map_err(|e| format!("malformed JSONL {}:{}: {e}", path.display(), line + 1))?;
+            match value.get("schema_version").and_then(Value::as_u64) {
+                Some(1) => legacy_rows.push(serde_json::from_value(value).map_err(|e| {
+                    format!("malformed JSONL {}:{}: {e}", path.display(), line + 1)
+                })?),
+                Some(version) if version == SCHEMA_VERSION as u64 => {
+                    rows.push(decode_raw(raw).map_err(|e| {
+                        format!("malformed JSONL {}:{}: {e}", path.display(), line + 1)
+                    })?)
+                }
+                _ => {
+                    return Err(format!(
+                        "malformed JSONL {}:{}: unsupported schema",
+                        path.display(),
+                        line + 1
+                    ))
+                }
+            }
         }
     }
+    if !rows.is_empty() && !legacy_rows.is_empty() {
+        return Err("mixed raw schema versions".into());
+    }
+    if !legacy_rows.is_empty() {
+        return merge_legacy_rows(legacy_rows, out);
+    }
     merge_rows(rows, out)
+}
+fn merge_legacy_rows(rows: Vec<LegacyRawRecord>, out: &Path) -> Result<(), String> {
+    let mut seen = BTreeSet::new();
+    for row in &rows {
+        if !seen.insert((row.scenario_id.clone(), row.tool.clone(), row.round)) {
+            return Err("duplicate legacy raw tuple".into());
+        }
+    }
+    fs::create_dir_all(out).map_err(|e| e.to_string())?;
+    let mut merged = File::create(out.join("merged.jsonl")).map_err(|e| e.to_string())?;
+    let mut counts = BTreeMap::new();
+    for row in &rows {
+        *counts.entry(row.outcome.clone()).or_insert(0usize) += 1;
+        serde_json::to_writer(&mut merged, row).map_err(|e| e.to_string())?;
+        merged.write_all(b"\n").map_err(|e| e.to_string())?;
+    }
+    serde_json::to_writer_pretty(
+        File::create(out.join("summary.json")).map_err(|e| e.to_string())?,
+        &json!({"schema_version": 1, "counts": counts}),
+    )
+    .map_err(|e| e.to_string())
 }
 fn collect_jsonl(path: &Path, paths: &mut Vec<PathBuf>) -> Result<(), String> {
     for entry in fs::read_dir(path).map_err(|e| e.to_string())? {
@@ -1686,6 +1839,7 @@ mod tests {
             0,
             1,
             Mode::Cold,
+            false,
             Path::new("/tmp/x"),
             Path::new("x"),
             Path::new("x")
@@ -1697,6 +1851,7 @@ mod tests {
             1,
             1,
             Mode::Cold,
+            false,
             Path::new("/tmp/x"),
             Path::new("x"),
             Path::new("x")
@@ -1708,6 +1863,7 @@ mod tests {
             1,
             0,
             Mode::Cold,
+            false,
             Path::new("/tmp/x"),
             Path::new("x"),
             Path::new("x")
@@ -1903,5 +2059,37 @@ mod tests {
             };
             assert!(merge_rows(vec![docker, lightr], &root).is_err(), "{field}");
         }
+    }
+    #[test]
+    fn legacy_rows_preserve_tool_scoped_assertion_behavior() {
+        let (docker, lightr) = paired_records();
+        let docker: LegacyRawRecord = (&docker).into();
+        let lightr: LegacyRawRecord = (&lightr).into();
+        assert_eq!(docker.schema_version, 1);
+        assert_eq!(docker.outcome, "passed");
+        assert_eq!(lightr.outcome, "passed");
+        assert!(serde_json::to_value(&docker).unwrap().get("mode").is_none());
+    }
+    #[test]
+    fn differential_mode_is_mandatory() {
+        assert!(Cli::try_parse_from([
+            "bench-runner",
+            "run-differential",
+            "--spec",
+            "x",
+            "--chunk",
+            "0",
+            "--chunks",
+            "1",
+            "--rounds",
+            "1",
+            "--out",
+            "x",
+            "--docker",
+            "x",
+            "--lightr",
+            "x"
+        ])
+        .is_err());
     }
 }
