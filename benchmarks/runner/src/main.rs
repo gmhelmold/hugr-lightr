@@ -148,6 +148,8 @@ struct DifferentialRecord {
     hardware_identity: String,
     pair_id: String,
     output_equivalence_sha256: String,
+    equivalence_status: String,
+    cold_precondition: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -260,8 +262,8 @@ fn run(spec_path: &Path, chunk: usize, chunks: usize, rounds: usize, out: &Path,
                 Err(_) => None,
             };
             let failure = fixture.as_ref().err().cloned().or_else(|| versions.error.clone());
-            let (mut docker_record, docker_result) = execute_record(scenario, "docker", round, context, &scenario_out, &versions, &spec_hash, docker, lightr, failure.as_deref());
-            let (mut lightr_record, lightr_result) = execute_record(scenario, "lightr", round, context, &scenario_out, &versions, &spec_hash, docker, lightr, failure.as_deref());
+            let (mut docker_record, docker_result) = execute_record(scenario, "docker", round, context, &scenario_out, &versions, &spec_hash, docker, lightr, failure.as_deref(), None);
+            let (mut lightr_record, lightr_result) = execute_record(scenario, "lightr", round, context, &scenario_out, &versions, &spec_hash, docker, lightr, failure.as_deref(), None);
             if let Some((fixture_dir, _, _)) = context {
                 apply_assertions(&mut docker_record, scenario, "docker", &docker_result, docker, lightr, fixture_dir, &scenario_out);
                 apply_assertions(&mut lightr_record, scenario, "lightr", &lightr_result, docker, lightr, fixture_dir, &scenario_out);
@@ -292,18 +294,19 @@ fn run_differential(spec_path: &Path, chunk: usize, chunks: usize, rounds: usize
         for round in round_indices(rounds) {
             let scenario_out = out.join("scenarios").join(&scenario.id).join(round.to_string());
             fs::create_dir_all(&scenario_out).map_err(|e| format!("create scenario output {}: {e}", scenario_out.display()))?;
+            let cold_docker_command = cold_precondition(scenario, docker, &scenario_out)?;
             let context = fixture.as_ref().ok().map(|(path, hash, commit)| (path.as_path(), hash.as_str(), commit.as_str()));
             let failure = fixture.as_ref().err().cloned();
-            let (mut docker_record, docker_result) = execute_record(scenario, "docker", round, context, &scenario_out, &versions, &spec_hash, docker, lightr, failure.as_deref());
-            let (mut lightr_record, lightr_result) = execute_record(scenario, "lightr", round, context, &scenario_out, &versions, &spec_hash, docker, lightr, failure.as_deref());
+            let (mut docker_record, docker_result) = execute_record(scenario, "docker", round, context, &scenario_out, &versions, &spec_hash, docker, lightr, failure.as_deref(), Some(&cold_docker_command));
+            let (mut lightr_record, lightr_result) = execute_record(scenario, "lightr", round, context, &scenario_out, &versions, &spec_hash, docker, lightr, failure.as_deref(), None);
             if let Some((fixture_dir, _, _)) = context {
                 apply_assertions(&mut docker_record, scenario, "docker", &docker_result, docker, lightr, fixture_dir, &scenario_out);
                 apply_assertions(&mut lightr_record, scenario, "lightr", &lightr_result, docker, lightr, fixture_dir, &scenario_out);
             }
             failed |= docker_record.outcome != "passed" || lightr_record.outcome != "passed";
             let pair_id = format!("{}:{round}", scenario.id);
-            write_differential_record(&mut records, &differential_record(docker_record, mode, &hardware, &pair_id, &docker_result))?;
-            write_differential_record(&mut records, &differential_record(lightr_record, mode, &hardware, &pair_id, &lightr_result))?;
+            write_differential_record(&mut records, &differential_record(docker_record, scenario, mode, &hardware, &pair_id, &cold_docker_command))?;
+            write_differential_record(&mut records, &differential_record(lightr_record, scenario, mode, &hardware, &pair_id, &cold_docker_command))?;
         }
     }
     if failed { Err("one or more selected supported scenarios failed".into()) } else { Ok(()) }
@@ -332,16 +335,36 @@ fn hardware_identity() -> Result<String, String> {
     Ok(identity)
 }
 
-fn differential_record(raw: RawRecord, mode: &str, hardware: &str, pair_id: &str, result: &CommandResult) -> DifferentialRecord {
-    let mut output = result.status.as_ref().and_then(|status| status.code()).unwrap_or(-1).to_string().into_bytes(); output.extend_from_slice(&result.stdout); output.extend_from_slice(&result.stderr);
+fn cold_precondition(scenario: &Scenario, docker: &Path, output: &Path) -> Result<String, String> {
+    let command = scenario.docker.as_ref().and_then(|value| value.command.as_deref()).ok_or_else(|| format!("cold unsupported for {}: missing Docker command", scenario.id))?;
+    let words: Vec<_> = command.split_whitespace().collect();
+    let tag = words.windows(2).find(|pair| (pair[0] == "--tag" || pair[0] == "-t") && !pair[1].starts_with('-')).map(|pair| pair[1]).ok_or_else(|| format!("cold unsupported for {}: require Docker --tag", scenario.id))?;
+    if words.first() != Some(&"$DOCKER") || words.get(1) != Some(&"build") || words.last() != Some(&"$FIXTURE_DIR") || words.iter().any(|word| *word == "--no-cache") { return Err(format!("cold unsupported for {}: require `$DOCKER build --tag TAG $FIXTURE_DIR`", scenario.id)); }
+    let inspect = run_command(Command::new(docker).args(["image", "inspect", tag]), Duration::from_secs(TIMEOUT_SECS));
+    if inspect.status.as_ref().is_some_and(|status| status.success()) {
+        let remove = run_command(Command::new(docker).args(["image", "rm", "--force", tag]), Duration::from_secs(TIMEOUT_SECS));
+        if !remove.status.as_ref().is_some_and(|status| status.success()) { return Err(format!("cold unsupported for {}: exact Docker image cleanup failed for {tag}", scenario.id)); }
+    } else if inspect.error.is_some() || inspect.timed_out || inspect.status.as_ref().and_then(|status| status.code()) != Some(1) {
+        return Err(format!("cold unsupported for {}: exact Docker image state unavailable for {tag}", scenario.id));
+    }
+    let verified = run_command(Command::new(docker).args(["image", "inspect", tag]), Duration::from_secs(TIMEOUT_SECS));
+    if verified.error.is_some() || verified.timed_out || verified.status.as_ref().and_then(|status| status.code()) != Some(1) { return Err(format!("cold unsupported for {}: exact Docker image cleanup unverified for {tag}", scenario.id)); }
+    let home = output.join("lightr-home"); if home.exists() { fs::remove_dir_all(&home).map_err(|e| format!("cold unsupported for {}: clear Lightr state: {e}", scenario.id))?; }
+    if home.exists() { return Err(format!("cold unsupported for {}: Lightr state cleanup unverified", scenario.id)); }
+    Ok(format!("docker_image_absent:{tag};docker_no_cache;lightr_home_absent"))
+}
+
+fn differential_record(raw: RawRecord, scenario: &Scenario, mode: &str, hardware: &str, pair_id: &str, cold_precondition: &str) -> DifferentialRecord {
+    let shared: Vec<_> = scenario.assertions.iter().filter(|assertion| assertion.scope == "docker_and_lightr").map(|assertion| format!("{}:{}:passed", assertion.kind, serde_json::to_string(&assertion.expected).unwrap_or_default())).collect();
+    let (output_equivalence_sha256, equivalence_status) = if shared.is_empty() { (sha256(b"[]"), "no_shared_assertions".into()) } else { (sha256(shared.join("\n").as_bytes()), "comparable".into()) };
     let mut raw = raw; raw.schema_version = DIFFERENTIAL_SCHEMA_VERSION;
-    DifferentialRecord { raw, mode: mode.into(), hardware_identity: hardware.into(), pair_id: pair_id.into(), output_equivalence_sha256: sha256(&output) }
+    DifferentialRecord { raw, mode: mode.into(), hardware_identity: hardware.into(), pair_id: pair_id.into(), output_equivalence_sha256, equivalence_status, cold_precondition: cold_precondition.into() }
 }
 fn write_differential_record(file: &mut File, record: &DifferentialRecord) -> Result<(), String> { serde_json::to_writer(&mut *file, record).map_err(|e| e.to_string())?; file.write_all(b"\n").map_err(|e| e.to_string()) }
 
-fn execute_record(s: &Scenario, tool: &str, round: usize, fixture: Option<(&Path, &str, &str)>, output_dir: &Path, versions: &Versions, spec_hash: &str, docker: &Path, lightr: &Path, preflight_error: Option<&str>) -> (RawRecord, CommandResult) {
+fn execute_record(s: &Scenario, tool: &str, round: usize, fixture: Option<(&Path, &str, &str)>, output_dir: &Path, versions: &Versions, spec_hash: &str, docker: &Path, lightr: &Path, preflight_error: Option<&str>, command_override: Option<&str>) -> (RawRecord, CommandResult) {
     let now = unix_ms();
-    let command = if tool == "docker" { s.docker.as_ref().and_then(|v| v.command.as_deref()) } else { s.lightr.as_ref().and_then(|v| v.command.as_deref()) }.unwrap_or("");
+    let command = command_override.unwrap_or_else(|| if tool == "docker" { s.docker.as_ref().and_then(|v| v.command.as_deref()) } else { s.lightr.as_ref().and_then(|v| v.command.as_deref()) }.unwrap_or(""));
     let (result, expanded) = if let Some(error) = preflight_error {
         (failed_result(error, now), Err(error.to_string()))
     } else if let Some((fixture_dir, _, _)) = fixture {
@@ -551,7 +574,7 @@ fn decode_differential(raw: &str) -> Result<DifferentialRecord, String> {
     if schema != DIFFERENTIAL_SCHEMA_VERSION as u64 { return Err(format!("unsupported differential schema version: {schema}")); }
     let row: DifferentialRecord = serde_json::from_value(value).map_err(|e| e.to_string())?;
     if row.mode != "cold" { return Err(format!("unsupported differential mode: {}", row.mode)); }
-    for value in [&row.mode, &row.hardware_identity, &row.pair_id, &row.output_equivalence_sha256, &row.raw.spec_sha256, &row.raw.host_os, &row.raw.host_arch, &row.raw.host_kernel] { if value.trim().is_empty() { return Err("empty required differential field".into()); } }
+    for value in [&row.mode, &row.hardware_identity, &row.pair_id, &row.output_equivalence_sha256, &row.equivalence_status, &row.cold_precondition, &row.raw.spec_sha256, &row.raw.host_os, &row.raw.host_arch, &row.raw.host_kernel] { if value.trim().is_empty() { return Err("empty required differential field".into()); } }
     for value in [&row.raw.fixture_tree_sha256, &row.raw.source_commit, &row.raw.docker_client_version, &row.raw.docker_server_version, &row.raw.docker_api_version, &row.raw.lightr_version, &row.raw.lightr_sha256] { if value.as_deref().unwrap_or("").trim().is_empty() { return Err("empty required differential evidence field".into()); } }
     Ok(row)
 }
@@ -563,6 +586,8 @@ fn differential_factor(pair_id: &str, pair: &[DifferentialRecord]) -> Value {
     let (Some(docker), Some(lightr)) = (docker, lightr) else { return reason("missing_paired_tool"); };
     if docker.raw.outcome != "passed" || lightr.raw.outcome != "passed" { return reason("unsuccessful_pair"); }
     if docker.raw.fixture_tree_sha256 != lightr.raw.fixture_tree_sha256 || docker.hardware_identity != lightr.hardware_identity { return reason("incomparable_pair"); }
+    if docker.equivalence_status != "comparable" || lightr.equivalence_status != "comparable" { return reason("no_shared_assertions"); }
+    if docker.cold_precondition != lightr.cold_precondition { return reason("cold_precondition_mismatch"); }
     if docker.raw.docker_client_version.as_deref() != Some(DOCKER_VERSION) || docker.raw.docker_server_version.as_deref() != Some(DOCKER_VERSION) || lightr.raw.docker_client_version.as_deref() != Some(DOCKER_VERSION) || lightr.raw.docker_server_version.as_deref() != Some(DOCKER_VERSION) { return reason("unsupported_docker_version"); }
     if docker.output_equivalence_sha256 != lightr.output_equivalence_sha256 { return reason("output_mismatch"); }
     if lightr.raw.elapsed_ms == 0 { return reason("zero_lightr_elapsed"); }
@@ -590,11 +615,21 @@ mod tests {
     fn differential(tool: &str, elapsed: u128, output: &str) -> DifferentialRecord {
         let mut raw = skip_record(&scenario("pair", Availability::Supported), "spec");
         raw.schema_version = DIFFERENTIAL_SCHEMA_VERSION; raw.tool = tool.into(); raw.outcome = "passed".into(); raw.elapsed_ms = elapsed; raw.fixture_tree_sha256 = Some("fixture".into()); raw.source_commit = Some("commit".into()); raw.docker_client_version = Some(DOCKER_VERSION.into()); raw.docker_server_version = Some(DOCKER_VERSION.into()); raw.docker_api_version = Some("1.51".into()); raw.lightr_version = Some("lightr".into()); raw.lightr_sha256 = Some("hash".into());
-        DifferentialRecord { raw, mode: "cold".into(), hardware_identity: "actual-hardware".into(), pair_id: "pair:0".into(), output_equivalence_sha256: output.into() }
+        DifferentialRecord { raw, mode: "cold".into(), hardware_identity: "actual-hardware".into(), pair_id: "pair:0".into(), output_equivalence_sha256: output.into(), equivalence_status: "comparable".into(), cold_precondition: "clean".into() }
     }
     #[test] fn wrong_docker_version_rejected() { let versions = Versions { docker_client: Some("28.3.1".into()), docker_server: Some(DOCKER_VERSION.into()), docker_api: Some("1.51".into()), lightr: Some("lightr".into()), lightr_hash: Some("hash".into()), error: None }; assert!(require_s2_versions(&versions).unwrap_err().contains("client=28.3.1")); }
     #[test] fn warm_and_invalidate_are_rejected() { for mode in ["warm", "invalidate"] { assert_eq!(run_differential(Path::new("missing"), 0, 1, 1, Path::new("/tmp/x"), Path::new("x"), Path::new("x"), mode).unwrap_err(), format!("unsupported differential mode: {mode}; only cold is supported until S2-5B")); } }
     #[test] fn differential_merge_rejects_v1() { let record = skip_record(&scenario("skip", Availability::Unsupported), "spec"); assert!(decode_differential(&serde_json::to_string(&record).unwrap()).unwrap_err().contains("unsupported differential schema version")); }
     #[test] fn output_mismatch_has_no_factor() { let factor = differential_factor("pair:0", &[differential("docker", 20, "docker"), differential("lightr", 10, "lightr")]); assert_eq!(factor["factor"], Value::Null); assert_eq!(factor["reason"], "output_mismatch"); }
     #[test] fn valid_cold_pair_has_factor() { let factor = differential_factor("pair:0", &[differential("docker", 20, "same"), differential("lightr", 10, "same")]); assert_eq!(factor["factor"], 2.0); assert_eq!(factor["reason"], Value::Null); }
+    #[test] fn shared_assertions_ignore_command_stream_digests() {
+        let scenario = scenario("pair", Availability::Supported); let mut docker = differential("docker", 20, "old").raw; let mut lightr = differential("lightr", 10, "old").raw;
+        docker.stdout_sha256 = "docker-stdout".into(); docker.stderr_sha256 = "docker-stderr".into(); lightr.stdout_sha256 = "lightr-stdout".into(); lightr.stderr_sha256 = "lightr-stderr".into();
+        let docker = differential_record(docker, &scenario, "cold", "actual-hardware", "pair:0", "clean"); let lightr = differential_record(lightr, &scenario, "cold", "actual-hardware", "pair:0", "clean");
+        assert_eq!(docker.output_equivalence_sha256, lightr.output_equivalence_sha256); assert_ne!(docker.raw.stdout_sha256, lightr.raw.stdout_sha256); assert_eq!(differential_factor("pair:0", &[docker, lightr])["factor"], 2.0);
+    }
+    #[test] fn missing_shared_assertions_has_no_factor() {
+        let mut scenario = scenario("pair", Availability::Supported); scenario.assertions.clear(); let docker = differential_record(differential("docker", 20, "old").raw, &scenario, "cold", "actual-hardware", "pair:0", "clean"); let lightr = differential_record(differential("lightr", 10, "old").raw, &scenario, "cold", "actual-hardware", "pair:0", "clean");
+        let factor = differential_factor("pair:0", &[docker, lightr]); assert_eq!(factor["factor"], Value::Null); assert_eq!(factor["reason"], "no_shared_assertions");
+    }
 }

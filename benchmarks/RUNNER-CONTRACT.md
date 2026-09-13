@@ -98,7 +98,13 @@ It reports counts only; no derived statistical claim.
 writing any v2 row, Docker client and server must both equal `28.3.2`; failures
 name observed values. Each v2 row retains every v1 field and adds non-empty
 `mode`, `hardware_identity` (OS-native probe, no fallback), `pair_id`, and
-`output_equivalence_sha256`.
+`output_equivalence_sha256`, `equivalence_status`, and `cold_precondition`.
+Equivalence digest hashes only ordered shared `docker_and_lightr` assertion
+kind, declared expected value, and normalized passing result; command streams
+never enter it. No shared assertion produces `no_shared_assertions` and no
+factor. Before each cold pair, runner removes only declared Docker build tag,
+verifies it absent, forces Docker `--no-cache`, and clears/verifies private
+`LIGHTR_HOME`; unsupported Docker command shapes reject cold before recording.
 
 `merge` accepts v1 only. `merge-differential` accepts v2 only and rejects v1,
 mixed/malformed rows, empty required fields, duplicate `(pair_id, tool)` tuples,
