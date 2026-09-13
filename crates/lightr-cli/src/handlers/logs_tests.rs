@@ -11,7 +11,10 @@
 
 use std::fs;
 
-use super::{bytes_after, parse_since, select_tail, since_excludes_all};
+use super::{
+    bytes_after, follow_stop_reason, parse_since, select_tail, since_excludes_all, stream_paths,
+    timestamp_note, FollowStop,
+};
 use super::{run as logs_run, LogOpts};
 use crate::test_lock::ENV_LOCK;
 use lightr_run::LogStream;
@@ -62,6 +65,23 @@ fn tail_empty_input() {
     assert_eq!(select_tail(b"", None), b"");
 }
 
+#[test]
+fn stdout_and_stderr_select_only_requested_streams() {
+    let tmp = tempfile::tempdir().unwrap();
+    assert_eq!(
+        stream_paths(tmp.path(), &LogStream::Stdout),
+        vec![tmp.path().join("stdout.log")]
+    );
+    assert_eq!(
+        stream_paths(tmp.path(), &LogStream::Stderr),
+        vec![tmp.path().join("stderr.log")]
+    );
+    assert_eq!(
+        stream_paths(tmp.path(), &LogStream::Both),
+        vec![tmp.path().join("stdout.log"), tmp.path().join("stderr.log")]
+    );
+}
+
 // ── bytes_after (the --follow append core) ──────────────────────────────────
 
 #[test]
@@ -107,6 +127,19 @@ fn follow_offset_past_eof_clamps() {
     assert_eq!(off, 3);
 }
 
+#[test]
+fn bounded_follow_stops_after_drain_or_poll_cap() {
+    assert_eq!(
+        follow_stop_reason(true, false, 0),
+        Some(FollowStop::Drained)
+    );
+    assert_eq!(follow_stop_reason(true, true, 0), None);
+    assert_eq!(
+        follow_stop_reason(false, false, super::FOLLOW_MAX_POLLS),
+        Some(FollowStop::PollCap)
+    );
+}
+
 // ── --since honest semantics ────────────────────────────────────────────────
 
 #[test]
@@ -115,6 +148,19 @@ fn parse_since_unix_seconds() {
     assert_eq!(parse_since("  42 "), Some(42));
     assert_eq!(parse_since("not-a-ts"), None);
     assert_eq!(parse_since("2026-06-19T00:00:00Z"), None); // lenient include
+}
+
+#[test]
+fn timestamp_disclosure_is_explicitly_mtime_only() {
+    let note = timestamp_note(false, "1717600000");
+    assert!(note.contains("no per-line timestamps"));
+    assert!(note.contains("last-modified time (1717600000)"));
+    assert!(note.contains("-t reports"));
+
+    let since = timestamp_note(true, "1717600000");
+    assert!(since.contains("no per-line timestamps"));
+    assert!(since.contains("--since compares"));
+    assert!(since.contains("last-modified time (1717600000)"));
 }
 
 #[test]

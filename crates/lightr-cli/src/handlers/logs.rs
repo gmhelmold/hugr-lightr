@@ -164,6 +164,22 @@ fn select_tail(data: &[u8], tail: Option<usize>) -> &[u8] {
 const FOLLOW_MAX_POLLS: u32 = 3000; // ~10 minutes ceiling
 const FOLLOW_POLL_MS: u64 = 200;
 
+#[derive(Debug, PartialEq, Eq)]
+enum FollowStop {
+    Drained,
+    PollCap,
+}
+
+fn follow_stop_reason(terminal: bool, had_new: bool, polls: u32) -> Option<FollowStop> {
+    if terminal && !had_new {
+        Some(FollowStop::Drained)
+    } else if polls >= FOLLOW_MAX_POLLS {
+        Some(FollowStop::PollCap)
+    } else {
+        None
+    }
+}
+
 /// Stream appends to `paths`, stopping when the run has exited and the streams
 /// are drained, or when the poll cap is reached. Bounded — no infinite spin.
 fn follow_bounded(id: &str, home: &Path, paths: &[std::path::PathBuf]) -> i32 {
@@ -189,15 +205,15 @@ fn follow_bounded(id: &str, home: &Path, paths: &[std::path::PathBuf]) -> i32 {
             run_status(home, id),
             Ok(RunStatus::Exited(_)) | Ok(RunStatus::Unknown) | Err(_)
         );
-        if terminal && !had_new {
-            return 0;
-        }
-
         polls += 1;
-        if polls >= FOLLOW_MAX_POLLS {
-            // Bounded stop — honest, not a silent hang.
-            eprintln!("lightr: logs --follow stopped at poll cap ({FOLLOW_MAX_POLLS})");
-            return 0;
+        match follow_stop_reason(terminal, had_new, polls) {
+            Some(FollowStop::Drained) => return 0,
+            Some(FollowStop::PollCap) => {
+                // Bounded stop — honest, not a silent hang.
+                eprintln!("lightr: logs --follow stopped at poll cap ({FOLLOW_MAX_POLLS})");
+                return 0;
+            }
+            None => {}
         }
         std::thread::sleep(std::time::Duration::from_millis(FOLLOW_POLL_MS));
     }
@@ -241,16 +257,20 @@ fn emit_timestamp_note(run_dir: &Path, stream: &LogStream, since: Option<&str>) 
     let when = mtime
         .map(format_systemtime)
         .unwrap_or_else(|| "unknown".to_string());
-    if since.is_some() {
-        eprintln!(
+    eprintln!("{}", timestamp_note(since.is_some(), &when));
+}
+
+fn timestamp_note(since: bool, when: &str) -> String {
+    if since {
+        format!(
             "lightr: logs has no per-line timestamps; --since compares against \
              the log file's last-modified time ({when})"
-        );
+        )
     } else {
-        eprintln!(
+        format!(
             "lightr: logs has no per-line timestamps; -t reports the log file's \
              last-modified time ({when})"
-        );
+        )
     }
 }
 
