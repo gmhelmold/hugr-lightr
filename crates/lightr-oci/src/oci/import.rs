@@ -3,7 +3,7 @@
 use super::layer::{apply_and_snapshot, LayerBlob};
 use super::model::{DockerSaveItem, ImportReport, OciIndex, OciManifest};
 use super::retain::{retain_image_manifest, RetainBlob};
-use super::util::{platform_of_config, sha256_hex, verify_sha256};
+use super::util::{path_is_safe, platform_of_config, sha256_hex, verify_sha256};
 use flate2::read::GzDecoder;
 use lightr_core::{LightrError, Result};
 use lightr_store::Store;
@@ -205,6 +205,12 @@ pub(super) fn import_docker_save_tar(
         for entry_result in archive.entries().map_err(LightrError::Io)? {
             let mut entry = entry_result.map_err(LightrError::Io)?;
             let entry_path = entry.path().map_err(LightrError::Io)?.into_owned();
+            if !path_is_safe(&entry_path) {
+                return Err(LightrError::InvalidManifest(format!(
+                    "unsafe docker save path: {}",
+                    entry_path.display()
+                )));
+            }
             let path_str = entry_path.to_string_lossy().into_owned();
 
             if path_str == "manifest.json" || path_str == "./manifest.json" {

@@ -16,6 +16,101 @@ fn test_path_is_safe() {
     assert!(!path_is_safe(Path::new("a/../../etc")));
 }
 
+fn make_symlink_layer(target: &str, write_through_link: bool) -> Vec<u8> {
+    let encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+    let mut tar = tar::Builder::new(encoder);
+
+    let content = b"target";
+    let mut file = tar::Header::new_gnu();
+    file.set_path("target").unwrap();
+    file.set_mode(0o644);
+    file.set_size(content.len() as u64);
+    file.set_entry_type(tar::EntryType::Regular);
+    file.set_cksum();
+    tar.append(&file, &content[..]).unwrap();
+
+    let mut link = tar::Header::new_gnu();
+    link.set_path("link").unwrap();
+    link.set_mode(0o777);
+    link.set_size(0);
+    link.set_entry_type(tar::EntryType::Symlink);
+    link.set_link_name(target).unwrap();
+    link.set_cksum();
+    tar.append(&link, &b""[..]).unwrap();
+
+    if write_through_link {
+        let payload = b"must not follow symlink";
+        let mut file = tar::Header::new_gnu();
+        file.set_path("link/payload").unwrap();
+        file.set_mode(0o644);
+        file.set_size(payload.len() as u64);
+        file.set_entry_type(tar::EntryType::Regular);
+        file.set_cksum();
+        tar.append(&file, &payload[..]).unwrap();
+    }
+
+    tar.into_inner().unwrap().finish().unwrap()
+}
+
+#[test]
+fn test_symlink_target_traversal_rejects_import_without_ref() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    for (suffix, target) in [("absolute", "/etc/passwd"), ("parent", "../escape")] {
+        let tmp = TempDir::new().unwrap();
+        let (_home, store) = tmp_store_and_home();
+        let layout_dir = make_layout(tmp.path(), &[make_symlink_layer(target, false)]);
+        let name = format!("symlink-{suffix}");
+        let result = import_layout(&layout_dir, &store, &name);
+
+        assert!(
+            matches!(&result, Err(LightrError::InvalidManifest(msg)) if msg.contains("unsafe layer symlink target")),
+            "{suffix} symlink target must reject import, got: {:?}",
+            result.as_ref().err()
+        );
+        assert!(
+            store.ref_get(&name).unwrap().is_none(),
+            "rejected symlink target must not publish ref"
+        );
+    }
+}
+
+#[test]
+fn test_write_through_symlink_component_rejects_import_without_ref() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let tmp = TempDir::new().unwrap();
+    let (_home, store) = tmp_store_and_home();
+    let layout_dir = make_layout(tmp.path(), &[make_symlink_layer("target", true)]);
+    let result = import_layout(&layout_dir, &store, "symlink-component");
+
+    assert!(
+        matches!(&result, Err(LightrError::InvalidManifest(msg)) if msg.contains("layer path traverses symlink")),
+        "write through symlink component must reject import, got: {:?}",
+        result.as_ref().err()
+    );
+    assert!(
+        store.ref_get("symlink-component").unwrap().is_none(),
+        "rejected symlink-component import must not publish ref"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_relative_symlink_imports() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let tmp = TempDir::new().unwrap();
+    let (_home, store) = tmp_store_and_home();
+    let layout_dir = make_layout(tmp.path(), &[make_symlink_layer("target", false)]);
+    import_layout(&layout_dir, &store, "relative-symlink").unwrap();
+
+    let hydrate_dir = tmp.path().join("hydrated-relative-symlink");
+    fs::create_dir_all(&hydrate_dir).unwrap();
+    lightr_index::hydrate(&hydrate_dir, &store, "relative-symlink").unwrap();
+    assert_eq!(
+        fs::read_link(hydrate_dir.join("link")).unwrap(),
+        Path::new("target")
+    );
+}
+
 // ── FIX 1: sha256 integrity tests ─────────────────────────────────────────
 
 /// Corrupt a layer blob after writing the layout → import must fail with
