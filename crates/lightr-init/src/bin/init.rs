@@ -15,8 +15,8 @@ fn main() -> std::process::ExitCode {
 mod linux {
     use lightr_init::{
         run_init, ExitSink, GuestOps, InitSpec, SuspendGate, CMD_FILE, EXIT_FILE, IP_FILE,
-        ROOTFS_DEST, ROOTFS_TAG, STDERR_FILE, STDOUT_FILE, SUSPEND_GATE_FILE,
-        SUSPEND_READY_FILE, SUSPEND_RELEASE_FILE,
+        ROOTFS_DEST, ROOTFS_TAG, STDERR_FILE, STDOUT_FILE, SUSPEND_GATE_FILE, SUSPEND_READY_FILE,
+        SUSPEND_RELEASE_FILE,
     };
     use std::ffi::CString;
     use std::io::{self, Write};

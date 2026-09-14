@@ -218,7 +218,10 @@ fn suspend_gate_releases_before_workload_spawn() {
     ops.spec.suspend_gate = true;
     let mut sink = VecSink::default();
     run_init(&mut ops, &mut sink).expect("gated init succeeds");
-    assert_eq!(ops.steps, vec!["mount", "read", "enter", "release", "spawn"]);
+    assert_eq!(
+        ops.steps,
+        vec!["mount", "read", "enter", "release", "spawn"]
+    );
     assert!(ops.released, "gate release must precede workload spawn");
 }
 
