@@ -49,9 +49,7 @@ pub(super) fn supervise_native(
         // Validate the pre-existing registry before begin_owner can create its
         // `.lightr/` lock directory. A missing/corrupt named mount leaves no
         // owner artifact behind.
-        if let Err(error) = lightr_store::volume::inspect(store.root(), name) {
-            return Err(error);
-        }
+        lightr_store::volume::inspect(store.root(), name)?;
         match lightr_store::volume::begin_owner(store.root(), name, dir) {
             Ok(owner) => pending.push((name.clone(), owner)),
             Err(error) => {
@@ -105,13 +103,25 @@ pub(super) fn supervise_native(
         &run_cwd,
         policy,
         health_cfg,
-        store.root(),
-        volumes,
-        pending,
+        OwnerSetup {
+            root: store.root(),
+            volumes,
+            pending,
+        },
     );
     #[cfg(windows)]
     run_supervisor_loop(
-        dir, spec, &cwd, &run_cwd, policy, health_cfg, volumes, pending,
+        dir,
+        spec,
+        &cwd,
+        &run_cwd,
+        policy,
+        health_cfg,
+        OwnerSetup {
+            root: store.root(),
+            volumes,
+            pending,
+        },
     )
 }
 
@@ -152,6 +162,12 @@ fn named_volumes(spec: &SpecOnDisk) -> Vec<(String, String)> {
         .collect()
 }
 
+struct OwnerSetup<'a> {
+    root: &'a std::path::Path,
+    volumes: Vec<(String, String)>,
+    pending: Vec<(String, lightr_store::volume::VolumeOwner)>,
+}
+
 #[cfg(unix)]
 fn run_supervisor_loop(
     dir: &std::path::Path,
@@ -160,9 +176,7 @@ fn run_supervisor_loop(
     run_cwd: &std::path::Path,
     policy: RestartPolicy,
     health_cfg: Option<crate::healthcheck::Healthcheck>,
-    volume_root: &std::path::Path,
-    volumes: Vec<(String, String)>,
-    pending: Vec<(String, lightr_store::volume::VolumeOwner)>,
+    owners: OwnerSetup<'_>,
 ) -> Result<i32> {
     use std::io::{BufRead, BufReader, Write};
     use std::os::unix::net::UnixListener;
@@ -190,21 +204,23 @@ fn run_supervisor_loop(
     let mut restarts_done: u32 = 0;
 
     let final_exit = 'restart: loop {
-        let barrier = (!pending.is_empty()).then(ExecBarrier::new).transpose()?;
+        let barrier = (!owners.pending.is_empty())
+            .then(ExecBarrier::new)
+            .transpose()?;
         let (mut child, child_pid) = match spawn_child(dir, spec, run_cwd, barrier.as_ref()) {
             Ok(child) => child,
             Err(error) => {
-                for (name, owner) in pending {
+                for (name, owner) in owners.pending {
                     let _ =
-                        lightr_store::volume::abandon_pending(volume_root, &name, owner.nonce());
+                        lightr_store::volume::abandon_pending(owners.root, &name, owner.nonce());
                 }
                 return Err(error);
             }
         };
-        for ((name, target), (_, owner)) in volumes.iter().zip(&pending) {
+        for ((name, target), (_, owner)) in owners.volumes.iter().zip(&owners.pending) {
             let mount_id = format!("{name}:{target}");
             if let Err(error) = lightr_store::volume::activate_owner(
-                volume_root,
+                owners.root,
                 name,
                 dir,
                 owner.nonce(),
@@ -215,8 +231,8 @@ fn run_supervisor_loop(
                 &mount_id,
             ) {
                 kill_and_reap(&mut child, child_pid);
-                for (name, owner) in &pending {
-                    let _ = lightr_store::volume::abandon_pending(volume_root, name, owner.nonce());
+                for (name, owner) in &owners.pending {
+                    let _ = lightr_store::volume::abandon_pending(owners.root, name, owner.nonce());
                 }
                 return Err(error);
             }
@@ -225,9 +241,9 @@ fn run_supervisor_loop(
             if let Err(error) = barrier.release() {
                 kill_and_reap(&mut child, child_pid);
                 write_terminal_status(dir, 1)?;
-                for (name, _) in &volumes {
+                for (name, _) in &owners.volumes {
                     lightr_store::volume::terminal_run_owner(dir)?;
-                    lightr_store::volume::release_owner(volume_root, name, dir)?;
+                    lightr_store::volume::release_owner(owners.root, name, dir)?;
                 }
                 return Err(error);
             }
@@ -325,9 +341,9 @@ fn run_supervisor_loop(
     // is already (about to be) written, so the two are never contradictory.
     let _ = std::fs::remove_file(&sock_path);
     write_terminal_status(dir, final_exit)?;
-    for (name, _) in &volumes {
+    for (name, _) in &owners.volumes {
         lightr_store::volume::terminal_run_owner(dir)?;
-        lightr_store::volume::release_owner(volume_root, name, dir)?;
+        lightr_store::volume::release_owner(owners.root, name, dir)?;
     }
     // WP-RUNFLAGS: `--rm` auto-clean on final exit (no-op unless `rm`).
     maybe_auto_remove(dir, spec);
@@ -359,8 +375,7 @@ fn run_supervisor_loop(
     run_cwd: &std::path::Path,
     policy: RestartPolicy,
     health_cfg: Option<crate::healthcheck::Healthcheck>,
-    _volumes: Vec<(String, String)>,
-    _pending: Vec<(String, lightr_store::volume::VolumeOwner)>,
+    _owners: OwnerSetup<'_>,
 ) -> Result<i32> {
     use super::ctl::ctl_pipe_name;
     use std::sync::atomic::{AtomicBool, Ordering};

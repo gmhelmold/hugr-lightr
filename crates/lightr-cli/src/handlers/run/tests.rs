@@ -78,6 +78,46 @@ fn publish_without_detach_exits_2() {
     assert_eq!(code, 2, "-p without -d must exit 2");
 }
 
+#[test]
+fn named_volume_without_detach_stops_before_memo_path() {
+    let code = run(
+        ".",
+        &[],
+        &[],
+        &["definitely-not-a-command".to_string()],
+        false,
+        false,
+        false,
+        &[],
+        false,
+        &[],
+        "native",
+        None,
+        "host",
+        false,
+        None,
+        None,
+        &[],
+        &[],
+        &[],
+        None,
+        None,
+        None,
+        None,
+        None,
+        &HealthFlags::default(),
+        super::RawRcFlags::default(),
+        super::RawRunFlags {
+            volume: vec!["data:mounted".to_string()],
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        code, 2,
+        "named foreground mount must not reach memo execution"
+    );
+}
+
 #[cfg(not(target_os = "linux"))]
 #[test]
 fn named_volume_capability_fails_before_detached_spawn() {

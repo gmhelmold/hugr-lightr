@@ -514,10 +514,11 @@ fn find_pending_witness(home: &Path, volume: &str, nonce: &str) -> Result<RunOwn
             Ok(record) => record,
             Err(_) => continue,
         };
-        if record.volume == volume && record.owner.nonce() == nonce {
-            if matched.replace(record).is_some() {
-                return Err(ambiguous(volume));
-            }
+        if record.volume == volume
+            && record.owner.nonce() == nonce
+            && matched.replace(record).is_some()
+        {
+            return Err(ambiguous(volume));
         }
     }
     matched.ok_or_else(|| ambiguous(volume))

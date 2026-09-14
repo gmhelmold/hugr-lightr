@@ -42,6 +42,10 @@ pub(super) fn detached_only_flags_policy(runflags: &RunFlags, detach: bool) -> O
         eprintln!("lightr: --rm requires -d (a foreground run leaves no run dir to remove)");
         return Some(2);
     }
+    if !runflags.named_volumes.is_empty() && !detach {
+        eprintln!("lightr: named volumes require -d (named-volume ownership needs a detached run)");
+        return Some(2);
+    }
     None
 }
 
