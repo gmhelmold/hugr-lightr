@@ -61,8 +61,8 @@ pub fn run(id: &str, opts: &LogOpts) -> i32 {
     };
 
     // Honest disclosure: the on-disk log format has no per-line timestamps, so
-    // `--since`/`-t` cannot operate per-line. We surface a single file-level
-    // mtime and say so, rather than fabricate a clock (tense-law).
+    // `--since`/`-t` cannot operate per-line. We surface each selected stream's
+    // file mtime and say so, rather than fabricate a clock (tense-law).
     let enrich = opts.timestamps || opts.since.is_some();
 
     // Fast path: no tail, no enrichment, no follow ⇒ delegate to the frozen
@@ -74,15 +74,12 @@ pub fn run(id: &str, opts: &LogOpts) -> i32 {
         };
     }
 
+    let stream_paths = stream_paths(&run_dir, &stream);
     if enrich {
-        emit_timestamp_note(&run_dir, &stream, opts.since);
+        emit_timestamp_note(&stream_paths, opts.since);
     }
 
-    let paths = filter_paths_since(
-        stream_paths(&run_dir, &stream),
-        opts.since,
-        file_mtime_seconds,
-    );
+    let paths = filter_paths_since(stream_paths, opts.since, file_mtime_seconds);
 
     // Read each initial tail and its offset together. An append after this read
     // begins at its saved offset; an append before it is already in `data`.
@@ -257,30 +254,43 @@ fn bytes_after(path: &Path, offset: u64) -> lightr_core::Result<(Vec<u8>, u64)> 
     Ok((data[start..].to_vec(), new_off))
 }
 
-/// The single honest timestamp signal: the log file's mtime. Printed to stderr
-/// so it never corrupts the log stream on stdout.
-fn emit_timestamp_note(run_dir: &Path, stream: &LogStream, since: Option<&str>) {
-    let mtime = stream_paths(run_dir, stream)
+/// File-level timestamp signals, one per selected stream. Printed to stderr so
+/// they never corrupt log bytes on stdout.
+fn emit_timestamp_note(paths: &[std::path::PathBuf], since: Option<&str>) {
+    let streams = paths
         .iter()
-        .filter_map(|p| std::fs::metadata(p).ok())
-        .filter_map(|m| m.modified().ok())
-        .max();
-    let when = mtime
-        .map(format_systemtime)
-        .unwrap_or_else(|| "unknown".to_string());
-    eprintln!("{}", timestamp_note(since.is_some(), &when));
+        .map(|path| {
+            let name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("unknown")
+                .to_string();
+            (name, file_mtime_seconds(path))
+        })
+        .collect::<Vec<_>>();
+    eprintln!("{}", timestamp_note(since.is_some(), &streams));
 }
 
-fn timestamp_note(since: bool, when: &str) -> String {
+fn timestamp_note(since: bool, streams: &[(String, Option<u64>)]) -> String {
+    let mtimes = streams
+        .iter()
+        .map(|(path, mtime)| {
+            format!(
+                "{path}={}",
+                mtime.map_or_else(|| "unknown".to_string(), |time| time.to_string())
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
     if since {
         format!(
             "lightr: logs has no per-line timestamps; --since compares against \
-             each log file's last-modified time ({when})"
+             each selected stream's last-modified time: {mtimes}"
         )
     } else {
         format!(
             "lightr: logs has no per-line timestamps; -t reports the log file's \
-             last-modified time ({when})"
+             last-modified time: {mtimes}"
         )
     }
 }
@@ -319,14 +329,6 @@ fn file_mtime_seconds(path: &Path) -> Option<u64> {
 /// (lenient include, honest about the limitation in the stderr note above).
 fn parse_since(s: &str) -> Option<u64> {
     s.trim().parse::<u64>().ok()
-}
-
-/// Format a SystemTime as unix seconds (honest, dependency-free).
-fn format_systemtime(t: std::time::SystemTime) -> String {
-    match t.duration_since(std::time::UNIX_EPOCH) {
-        Ok(d) => format!("{}", d.as_secs()),
-        Err(_) => "pre-epoch".to_string(),
-    }
 }
 
 #[cfg(test)]

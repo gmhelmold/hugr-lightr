@@ -168,15 +168,21 @@ fn parse_since_unix_seconds() {
 
 #[test]
 fn timestamp_disclosure_is_explicitly_mtime_only() {
-    let note = timestamp_note(false, "1717600000");
+    let streams = vec![
+        ("stdout.log".to_string(), Some(1_717_600_000)),
+        ("stderr.log".to_string(), Some(1_717_600_001)),
+    ];
+    let note = timestamp_note(false, &streams);
     assert!(note.contains("no per-line timestamps"));
-    assert!(note.contains("last-modified time (1717600000)"));
+    assert!(note.contains("stdout.log=1717600000"));
+    assert!(note.contains("stderr.log=1717600001"));
     assert!(note.contains("-t reports"));
 
-    let since = timestamp_note(true, "1717600000");
+    let since = timestamp_note(true, &streams);
     assert!(since.contains("no per-line timestamps"));
     assert!(since.contains("--since compares"));
-    assert!(since.contains("last-modified time (1717600000)"));
+    assert!(since.contains("stdout.log=1717600000"));
+    assert!(since.contains("stderr.log=1717600001"));
 }
 
 #[test]
