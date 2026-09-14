@@ -14,6 +14,10 @@ use lightr_core::{LightrError, Result};
 pub struct NsEngine;
 
 impl Engine for NsEngine {
+    fn kind(&self) -> crate::engine::EngineKind {
+        crate::engine::EngineKind::Ns
+    }
+
     fn run(&self, spec: &ExecSpec) -> Result<i32> {
         let rootfs = spec
             .rootfs

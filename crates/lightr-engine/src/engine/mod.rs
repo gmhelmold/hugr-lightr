@@ -28,12 +28,64 @@ pub use probe::{pack_status, probe};
 pub use spec::{BindMount, ExecSpec, MountKind, ResolvedMount, TmpfsMount, Ulimit};
 
 use lightr_core::{LightrError, Result};
+use std::path::PathBuf;
+
+/// Snapshot artifact created before a lazy compose listener binds.
+///
+/// `instance_id` and `artifact_sha256` are durable identity: a resume must
+/// restore this exact artifact, never create a replacement workload.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SuspendedArtifact {
+    pub instance_id: String,
+    pub artifact_sha256: String,
+    pub snapshot_path: PathBuf,
+    pub state_path: PathBuf,
+    pub machine_id: String,
+    pub config_sha256: String,
+}
+
+/// Result of attempting to suspend a workload. Unsupported is data, not a
+/// cold-spawn permission; compose must surface it and bind no lazy listener.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SuspendResume {
+    Suspended(SuspendedArtifact),
+    Unsupported { engine: EngineKind, reason: String },
+}
+
+/// Restored workload identity. `pid` appears only after real snapshot restore.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResumedInstance {
+    pub instance_id: String,
+    pub artifact_sha256: String,
+    pub pid: u32,
+}
 
 // ── Engine trait ──────────────────────────────────────────────────────────────
 
 pub trait Engine {
     /// Spawn + wait; stdout/stderr inherit. Exit law: code or 128+signal.
     fn run(&self, spec: &ExecSpec) -> Result<i32>;
+
+    /// Create a restorable suspended artifact. Engines without real snapshot
+    /// support return `SuspendResume::Unsupported`; they must not emulate it by
+    /// deferring a normal spawn.
+    fn suspend(&self, _spec: &ExecSpec, _artifact_dir: &std::path::Path) -> Result<SuspendResume> {
+        Ok(SuspendResume::Unsupported {
+            engine: self.kind(),
+            reason: "engine has no real snapshot suspend/resume support".to_string(),
+        })
+    }
+
+    /// Restore an artifact created by `suspend`. Implementations must reject a
+    /// different machine, configuration, identity, or artifact digest.
+    fn resume(&self, _artifact: &SuspendedArtifact) -> Result<ResumedInstance> {
+        Err(LightrError::Unsupported(format!(
+            "engine {:?} has no real snapshot resume support",
+            self.kind()
+        )))
+    }
+
+    fn kind(&self) -> EngineKind;
 }
 
 // ── engine_for ────────────────────────────────────────────────────────────────

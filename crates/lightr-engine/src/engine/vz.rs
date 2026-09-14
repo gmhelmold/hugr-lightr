@@ -63,6 +63,10 @@ mod vz_impl {
     pub struct VzEngine;
 
     impl Engine for VzEngine {
+        fn kind(&self) -> crate::engine::EngineKind {
+            crate::engine::EngineKind::Vz
+        }
+
         /// Run the guest and return its REAL exit code.
         ///
         /// Sequence (file channel — macOS has NO host AF_VSOCK):
@@ -308,6 +312,10 @@ struct VzEngineStub;
 
 #[cfg(not(all(target_os = "macos", feature = "vz")))]
 impl Engine for VzEngineStub {
+    fn kind(&self) -> super::EngineKind {
+        super::EngineKind::Vz
+    }
+
     fn run(&self, _spec: &ExecSpec) -> lightr_core::Result<i32> {
         Err(lightr_core::LightrError::InvalidRef(
             "vz engine requires macOS + the 'vz' build feature + a linux pack".to_string(),
