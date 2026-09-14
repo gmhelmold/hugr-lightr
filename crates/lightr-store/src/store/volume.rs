@@ -86,7 +86,6 @@ impl Drop for OwnerLock {
 /// Per-run durable witness for an owner transition. `terminal` becomes true only
 /// after run status has reached its terminal durable state.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
 pub struct RunOwnerRecord {
     pub volume: String,
     #[serde(flatten)]
