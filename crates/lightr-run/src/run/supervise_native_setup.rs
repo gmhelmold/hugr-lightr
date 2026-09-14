@@ -77,8 +77,10 @@ pub(super) fn spawn_child(
     let argv = crate::run::bindmat::effective_argv(spec.entrypoint.as_deref(), &spec.command);
     #[cfg(unix)]
     let mut cmd = if let Some(barrier) = barrier {
-        let mut shim =
-            std::process::Command::new(std::env::current_exe().map_err(LightrError::Io)?);
+        let shim = std::env::var_os("LIGHTR_VOLUME_GATE_SHIM")
+            .map(std::path::PathBuf::from)
+            .unwrap_or(std::env::current_exe().map_err(LightrError::Io)?);
+        let mut shim = std::process::Command::new(shim);
         shim.arg("__volume_gate")
             .arg(barrier.read_fd().to_string())
             .arg("--")

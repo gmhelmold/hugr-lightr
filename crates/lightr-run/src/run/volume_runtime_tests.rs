@@ -15,6 +15,17 @@ fn home() -> (tempfile::TempDir, std::sync::MutexGuard<'static, ()>) {
         .unwrap_or_else(|poison| poison.into_inner());
     let home = tempfile::tempdir().unwrap();
     std::env::set_var("LIGHTR_HOME", home.path());
+    let gate = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .and_then(|path| path.parent())
+        .unwrap()
+        .join("lightr-volume-gate");
+    assert!(
+        gate.exists(),
+        "cargo must build lightr-volume-gate for runtime tests"
+    );
+    std::env::set_var("LIGHTR_VOLUME_GATE_SHIM", gate);
     (home, guard)
 }
 
