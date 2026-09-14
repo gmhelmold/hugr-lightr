@@ -150,8 +150,8 @@ struct CleanupFactory {
 impl super::super::lazy::LazyFactory for CleanupFactory {
     fn suspend(
         &self,
-        _stack_dir: &std::path::Path,
-        _svc: &ServiceSpec,
+        stack_dir: &std::path::Path,
+        svc: &ServiceSpec,
     ) -> lightr_core::Result<Box<dyn super::super::lazy::LazyOwner>> {
         let call = self.calls.fetch_add(1, Ordering::SeqCst);
         if self.fail_suspend && call == 1 {
@@ -159,6 +159,7 @@ impl super::super::lazy::LazyFactory for CleanupFactory {
                 "second suspend failed".into(),
             ));
         }
+        std::fs::create_dir_all(stack_dir.join("services").join(&svc.name).join("rootfs")).unwrap();
         Ok(Box::new(CleanupOwner(Arc::clone(&self.drops))))
     }
 }
@@ -177,6 +178,13 @@ fn write_lazy_stack(dir: &std::path::Path, services: Vec<ServiceSpec>) {
 fn unused_port() -> u16 {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.local_addr().unwrap().port()
+}
+
+fn assert_lazy_stack_removed(stack_dir: &std::path::Path) {
+    assert!(!stack_dir.exists());
+    assert!(!stack_dir.join("spec.json").exists());
+    assert!(!stack_dir.join("pid").exists());
+    assert!(!stack_dir.join("services/first/rootfs").exists());
 }
 
 #[test]
@@ -199,6 +207,7 @@ fn second_lazy_suspend_failure_cleans_first_owner_and_listener() {
     assert!(compose_supervise_with_factory(stack.path(), &factory).is_err());
     assert_eq!(drops.load(Ordering::SeqCst), 1);
     assert!(std::net::TcpListener::bind(("127.0.0.1", first_port)).is_ok());
+    assert_lazy_stack_removed(stack.path());
 }
 
 #[test]
@@ -223,6 +232,7 @@ fn second_lazy_port_bind_failure_cleans_first_owner_and_listener() {
     assert!(compose_supervise_with_factory(stack.path(), &factory).is_err());
     assert_eq!(drops.load(Ordering::SeqCst), 2);
     assert!(std::net::TcpListener::bind(("127.0.0.1", first_port)).is_ok());
+    assert_lazy_stack_removed(stack.path());
 }
 
 #[test]
