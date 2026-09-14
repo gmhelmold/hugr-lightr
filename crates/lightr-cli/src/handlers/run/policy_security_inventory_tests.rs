@@ -487,8 +487,8 @@ fn cli_parser_lowers_all_security_controls_through_production_conversions() {
                 spec.cap_drop.to_vec(),
                 spec.seccomp.map(str::to_owned),
                 spec.apparmor.map(str::to_owned),
-                spec.tmpfs.len(),
-                spec.ulimits.len(),
+                spec.tmpfs.to_vec(),
+                spec.ulimits.to_vec(),
                 spec.oom_score_adj,
                 spec.add_host.to_vec(),
                 spec.net,
@@ -516,6 +516,7 @@ fn cli_parser_lowers_all_security_controls_through_production_conversions() {
     assert!(basics.2.is_none());
     assert_eq!(basics.3.memory_bytes, Some(64 * 1024 * 1024));
     assert_eq!(basics.3.cpu_millis, Some(500));
+    assert_eq!(basics.3.pids_max, Some(16));
     assert!(basics.4.is_empty());
     assert_eq!(basics.5.as_deref(), Some("1000"));
     assert!(captured.0 && captured.1 && captured.2);
@@ -524,8 +525,11 @@ fn cli_parser_lowers_all_security_controls_through_production_conversions() {
     assert_eq!(captured.5, ["ALL"]);
     assert_eq!(captured.6.as_deref(), Some("profile.json"));
     assert_eq!(captured.7.as_deref(), Some("profile"));
-    assert_eq!(captured.8, 1);
-    assert_eq!(captured.9, 1);
+    assert_eq!(captured.8.len(), 1);
+    assert_eq!(captured.8[0].target, "/scratch");
+    assert_eq!(captured.8[0].size, None);
+    assert_eq!(captured.8[0].mode, "1777");
+    assert_eq!(captured.9, ulimits);
     assert_eq!(captured.10, Some(100));
     assert_eq!(captured.11, [("host".to_string(), "127.0.0.1".to_string())]);
     assert!(!captured.12 && captured.13.is_none() && captured.14.is_none());
