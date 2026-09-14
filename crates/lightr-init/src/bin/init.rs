@@ -128,7 +128,13 @@ mod linux {
                 .stdout(std::process::Stdio::from(stdout_file))
                 .stderr(std::process::Stdio::from(stderr_file));
 
-            let status = c.spawn()?.wait()?;
+            let mut child = c.spawn()?;
+            // Snapshot resume proof: this is after exact gate release and before
+            // waiting, so host can establish a real guest workload PID.
+            let mut pid = std::fs::File::create(lightr_init::WORKLOAD_PID_FILE)?;
+            write!(pid, "{}", child.id())?;
+            pid.sync_all()?;
+            let status = child.wait()?;
 
             // CRITICAL ORDERING: make the capture files durable on virtiofs BEFORE
             // run_init reports the exit (which the host taps via the console

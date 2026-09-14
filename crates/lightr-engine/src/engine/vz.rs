@@ -13,7 +13,7 @@ mod vz_impl {
     use lightr_core::{LightrError, Result};
     use lightr_init::{
         InitSpec, CMD_FILE, EXIT_FILE, GUEST_PATH, SUSPEND_GATE_FILE, SUSPEND_READY_FILE,
-        SUSPEND_RELEASE_FILE,
+        SUSPEND_RELEASE_FILE, WORKLOAD_PID_FILE,
     };
     use std::ffi::CString;
 
@@ -403,10 +403,15 @@ mod vz_impl {
                 session.release_token,
             )
             .map_err(LightrError::Io)?;
+            let pid = wait_for_pid(
+                &session
+                    .rootfs
+                    .join(WORKLOAD_PID_FILE.trim_start_matches('/')),
+            )?;
             Ok(ResumedInstance {
                 instance_id: artifact.instance_id.clone(),
                 artifact_sha256: artifact.artifact_sha256.clone(),
-                pid: 0,
+                pid,
             })
         }
     }
@@ -450,6 +455,27 @@ mod vz_impl {
             std::io::ErrorKind::TimedOut,
             format!("vz {operation}: timed out"),
         )))
+    }
+
+    fn wait_for_pid(path: &std::path::Path) -> Result<u32> {
+        for _ in 0..600 {
+            if let Ok(s) = std::fs::read_to_string(path) {
+                return s
+                    .trim()
+                    .parse::<u32>()
+                    .ok()
+                    .filter(|pid| *pid != 0)
+                    .ok_or_else(|| {
+                        LightrError::InvalidRef(
+                            "vz resume: missing or malformed workload PID proof".to_string(),
+                        )
+                    });
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        Err(LightrError::InvalidRef(
+            "vz resume: missing or malformed workload PID proof".to_string(),
+        ))
     }
 
     fn path_to_cstr(p: &std::path::Path) -> Result<CString> {

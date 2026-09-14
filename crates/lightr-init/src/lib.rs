@@ -68,6 +68,10 @@ pub const SUSPEND_READY_FILE: &str = "/.lightr-suspend-ready";
 /// Host release proof. PID1 accepts only the exact token from gate metadata.
 pub const SUSPEND_RELEASE_FILE: &str = "/.lightr-suspend-release";
 
+/// Guest workload PID proof. Written and fsynced only after exact gate release
+/// and successful child spawn; host must reject missing or malformed proof.
+pub const WORKLOAD_PID_FILE: &str = "/.lightr-workload-pid";
+
 /// The PATH injected into the guest command's environment. SINGLE SOURCE OF
 /// TRUTH: the vz engine puts this in the command's env (InitSpec), and the
 /// vz-memo key (lightr-cli handler) hashes the SAME value — if these drifted, a

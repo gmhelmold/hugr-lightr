@@ -19,6 +19,7 @@ pub mod spawn;
 pub mod stop;
 pub mod supervise;
 pub mod supervise_native;
+pub mod suspend;
 mod svz;
 pub mod types;
 pub mod vzmemo;

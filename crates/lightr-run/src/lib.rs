@@ -85,6 +85,7 @@ pub use run::logs::logs;
 
 // stop
 pub use run::stop::stop;
+pub use run::suspend::SuspensionOwner;
 
 // exec
 pub use run::exec::exec_in;
