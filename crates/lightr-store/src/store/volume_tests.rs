@@ -165,3 +165,30 @@ fn meta_json_escapes_label_values() {
         "escaped quote/backslash must roundtrip"
     );
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn owner_pending_active_terminal_release_is_exact() {
+    let (_d, root) = tmp_root();
+    create(&root, "owned", &[]).unwrap();
+    let run = root.join("run-1");
+    let pending = begin_owner(&root, "owned", &run).unwrap();
+    let nonce = pending.nonce().to_string();
+    let active = activate_owner(
+        &root,
+        "owned",
+        &run,
+        &nonce,
+        "run-1",
+        std::process::id() as i32,
+        "mount-1",
+    )
+    .unwrap();
+    let lock = owner_lock(&root, "owned").unwrap();
+    assert_eq!(read_owners(&root, "owned", &lock).unwrap().owners, vec![active]);
+    drop(lock);
+    assert!(remove(&root, "owned", false).is_err(), "active owner blocks rm");
+    terminal_run_owner(&run).unwrap();
+    release_owner(&root, "owned", &run).unwrap();
+    remove(&root, "owned", false).unwrap();
+}

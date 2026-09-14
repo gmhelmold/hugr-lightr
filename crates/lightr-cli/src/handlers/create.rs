@@ -202,6 +202,7 @@ pub fn run(a: RunArgs, json: bool) -> i32 {
         pids_limit: rc.pids_limit,
         shm_size: rc.shm_size,
         volumes: runflags.volumes,
+        named_volumes: runflags.named_volumes,
         tmpfs: runflags.tmpfs,
         entrypoint: runflags.entrypoint,
         name: runflags.name.clone(),

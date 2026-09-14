@@ -42,6 +42,7 @@ pub use run::types::{
 // (MountOnDisk2 / PortOnDisk are pub(super) serde-mirror types in run::types,
 // used by SpecOnDisk — not re-exported, exactly like MountOnDisk.)
 pub use run::mount::{parse_mount_long, parse_tmpfs, parse_v, MountKind, MountSpec, ResolvedMount};
+pub use run::types::NamedVolumeBind;
 
 // registry (WP-LIFE-01) — name→id registry API; consumed by the CLI-lifecycle
 // wiring WPs (LIFE-02/03 --name + verb name-resolution).

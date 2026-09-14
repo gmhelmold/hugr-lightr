@@ -318,6 +318,7 @@ pub(super) fn build_detached_spec(
         // fields. Persisted to spec.json; honored on the native supervisor
         // path. RUNTIME-ONLY (never keyed). All-default ⇒ no-op.
         volumes: runflags.volumes.clone(),
+        named_volumes: runflags.named_volumes.clone(),
         tmpfs: runflags.tmpfs.clone(),
         entrypoint: runflags.entrypoint.clone(),
         name: runflags.name.clone(),

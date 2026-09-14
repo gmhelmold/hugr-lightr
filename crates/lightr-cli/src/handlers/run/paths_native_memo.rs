@@ -149,6 +149,7 @@ pub(crate) fn run_native_memo(req: NativeRun) -> i32 {
         // RUNTIME ONLY (never keyed). Binds + tmpfs force a memo MISS in
         // `run_memoized_with`; all-default ⇒ no-op (behavior-preserving).
         volumes: runflags.volumes,
+        named_volumes: runflags.named_volumes,
         tmpfs: runflags.tmpfs,
         entrypoint: runflags.entrypoint,
         name: runflags.name.clone(),

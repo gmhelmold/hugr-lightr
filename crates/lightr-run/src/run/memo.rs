@@ -245,7 +245,9 @@ pub fn run_memoized_with(
     // addressed). Force a MISS — never replay a cached result for a bind run, and
     // never write one to the AC below. Empty (the common case) ⇒ caching is
     // byte-identical to before.
-    let non_reproducible = !spec.volumes.is_empty() || !spec.tmpfs.is_empty();
+    let non_reproducible = !spec.volumes.is_empty()
+        || !spec.named_volumes.is_empty()
+        || !spec.tmpfs.is_empty();
 
     // --- Hit path (skipped for non-reproducible bind/tmpfs runs) ---
     if !non_reproducible {
@@ -280,6 +282,7 @@ pub fn run_memoized_with(
     // into the run cwd (only on miss — and a bind/tmpfs run is always a forced
     // miss above). Empty ⇒ no-op (behaviour-preserving).
     super::bindmat::materialize_volumes(&spec.cwd, &spec.volumes)?;
+    super::bindmat::materialize_named_volumes(&spec.cwd, store.root(), &spec.named_volumes)?;
     super::bindmat::materialize_tmpfs(&spec.cwd, &spec.tmpfs)?;
 
     // F-309: hydrate secrets/configs into the run cwd (only on miss) — mode 0600

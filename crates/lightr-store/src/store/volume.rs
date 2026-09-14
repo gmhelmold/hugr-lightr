@@ -79,6 +79,18 @@ impl Drop for OwnerLock {
     }
 }
 
+/// Per-run durable witness for an owner transition. `terminal` becomes true only
+/// after run status has reached its terminal durable state.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RunOwnerRecord {
+    pub volume: String,
+    #[serde(flatten)]
+    pub owner: VolumeOwner,
+    #[serde(default)]
+    pub terminal: bool,
+}
+
 /// Metadata for one named volume — the decoded `meta.json` plus the resolved
 /// host path of the `_data/` directory.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -282,6 +294,135 @@ pub fn process_start_token(_pid: i32) -> Result<String> {
     ))
 }
 
+/// Create and durably publish one pending owner. Caller later replaces this
+/// exact nonce with active state; failed spawn removes only this nonce.
+pub fn begin_owner(root: &Path, name: &str, run_dir: &Path) -> Result<VolumeOwner> {
+    let lock = owner_lock(root, name)?;
+    let mut owners = read_owners(root, name, &lock)?;
+    let owner = VolumeOwner::Pending {
+        nonce: fresh_nonce(),
+        coordinator_pid: std::process::id() as i32,
+        coordinator_start_token: process_start_token(std::process::id() as i32)?,
+    };
+    owners.owners.push(owner.clone());
+    write_owners(root, name, &owners, &lock)?;
+    write_run_owner(run_dir, name, &owner, false)?;
+    Ok(owner)
+}
+
+/// Replace exact pending nonce with active child ownership and durably witness
+/// same transition in run directory. No PID-only replacement is possible.
+pub fn activate_owner(
+    root: &Path,
+    name: &str,
+    run_dir: &Path,
+    pending_nonce: &str,
+    run_id: &str,
+    pid: i32,
+    mount_id: &str,
+) -> Result<VolumeOwner> {
+    let lock = owner_lock(root, name)?;
+    let mut owners = read_owners(root, name, &lock)?;
+    let index = owners
+        .owners
+        .iter()
+        .position(|owner| matches!(owner, VolumeOwner::Pending { nonce, .. } if nonce == pending_nonce))
+        .ok_or_else(|| LightrError::InvalidRef(format!("volume {name}: pending owner lost")))?;
+    let owner = VolumeOwner::Active {
+        nonce: pending_nonce.to_string(),
+        run_id: run_id.to_string(),
+        pid,
+        process_start_token: process_start_token(pid)?,
+        mount_id: mount_id.to_string(),
+    };
+    owners.owners[index] = owner.clone();
+    write_owners(root, name, &owners, &lock)?;
+    write_run_owner(run_dir, name, &owner, false)?;
+    Ok(owner)
+}
+
+/// Remove exact pending nonce after spawn failure. Any other state is refusal.
+pub fn abandon_pending(root: &Path, name: &str, nonce: &str) -> Result<()> {
+    let lock = owner_lock(root, name)?;
+    let mut owners = read_owners(root, name, &lock)?;
+    let before = owners.owners.len();
+    owners.owners.retain(|owner| !matches!(owner, VolumeOwner::Pending { nonce: n, .. } if n == nonce));
+    if owners.owners.len() == before {
+        return Err(LightrError::InvalidRef(format!("volume {name}: pending owner lost")));
+    }
+    write_owners(root, name, &owners, &lock)
+}
+
+/// Mark matching run witness terminal after caller has fsynced terminal status.
+pub fn terminal_run_owner(run_dir: &Path) -> Result<()> {
+    let mut record = read_run_owner(run_dir)?;
+    record.terminal = true;
+    write_run_owner(run_dir, &record.volume.clone(), &record.owner, true)
+}
+
+/// Release exact active identity only after terminal run witness is durable.
+pub fn release_owner(root: &Path, name: &str, run_dir: &Path) -> Result<()> {
+    let record = read_run_owner(run_dir)?;
+    if record.volume != name || !record.terminal {
+        return Err(LightrError::InvalidRef(format!("volume {name}: terminal owner record required")));
+    }
+    let VolumeOwner::Active { nonce, run_id, process_start_token, .. } = &record.owner else {
+        return Err(LightrError::InvalidRef(format!("volume {name}: active owner required")));
+    };
+    let lock = owner_lock(root, name)?;
+    let mut owners = read_owners(root, name, &lock)?;
+    let before = owners.owners.len();
+    owners.owners.retain(|owner| !matches!(owner, VolumeOwner::Active {
+        nonce: n, run_id: r, process_start_token: token, ..
+    } if n == nonce && r == run_id && token == process_start_token));
+    if owners.owners.len() == before {
+        return Err(LightrError::InvalidRef(format!("volume {name}: active owner lost")));
+    }
+    write_owners(root, name, &owners, &lock)
+}
+
+fn run_owner_path(run_dir: &Path) -> PathBuf {
+    run_dir.join("volume-owner.json")
+}
+
+fn write_run_owner(run_dir: &Path, volume: &str, owner: &VolumeOwner, terminal: bool) -> Result<()> {
+    fs::create_dir_all(run_dir)?;
+    let bytes = serde_json::to_vec(&RunOwnerRecord {
+        volume: volume.to_string(),
+        owner: owner.clone(),
+        terminal,
+    })
+    .map_err(|e| LightrError::Io(std::io::Error::other(e)))?;
+    let tmp = run_dir.join("volume-owner.json.tmp");
+    let mut file = std::fs::File::create(&tmp)?;
+    use std::io::Write;
+    file.write_all(&bytes)?;
+    file.sync_all()?;
+    drop(file);
+    fs::rename(tmp, run_owner_path(run_dir))?;
+    File::open(run_dir)?.sync_all()?;
+    Ok(())
+}
+
+fn read_run_owner(run_dir: &Path) -> Result<RunOwnerRecord> {
+    serde_json::from_slice(&fs::read(run_owner_path(run_dir))?).map_err(|_| {
+        LightrError::InvalidManifest("malformed volume-owner.json".to_string())
+    })
+}
+
+fn fresh_nonce() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    lightr_core::Digest::of_bytes(
+        format!("{}:{now}:{}", std::process::id(), COUNTER.fetch_add(1, Ordering::Relaxed)).as_bytes(),
+    )
+    .to_hex()
+}
+
 // ── verbs (called from the CLI handler) ───────────────────────────────────────
 
 /// Create a named volume under `root`. Errors if the name is invalid (exit-2
@@ -354,10 +495,8 @@ pub fn inspect(root: &Path, name: &str) -> Result<VolumeInfo> {
     read_info(root, name)
 }
 
-/// Remove one volume. Missing ⇒ `RefNotFound`. `in_use` true ⇒ refused
-/// (docker: "volume is in use"). The caller passes the real ref-count; today
-/// nothing mounts named volumes, so the handler passes `false`.
-// WP-VOL-5: real refcount — wire `in_use` against running containers here.
+/// Remove one volume only while its durable active-owner snapshot is empty.
+/// `in_use` remains an additional caller-side refusal for legacy callers.
 pub fn remove(root: &Path, name: &str, in_use: bool) -> Result<()> {
     name_validate(name)?;
     let dir = volume_dir(root, name);
@@ -367,20 +506,25 @@ pub fn remove(root: &Path, name: &str, in_use: bool) -> Result<()> {
     if in_use {
         return Err(LightrError::InvalidRef(format!("volume is in use: {name}")));
     }
+    let lock = owner_lock(root, name)?;
+    let owners = read_owners(root, name, &lock)?;
+    if !owners.owners.is_empty() {
+        return Err(LightrError::InvalidRef(format!("volume is in use: {name}")));
+    }
     fs::remove_dir_all(&dir)?;
     Ok(())
 }
 
-/// Prune dangling volumes — every volume that is not in use. Returns the names
-/// removed, sorted. Today no volume is in use (WP-VOL-5 owns ref-counting), so
-/// every volume is dangling and removed.
-// WP-VOL-5: real refcount — only prune volumes whose ref-count is zero.
+/// Prune volumes with empty durable ownership snapshots. Busy or ambiguous
+/// volumes remain in place; `prune` is deliberately not a broad delete.
 pub fn prune(root: &Path) -> Result<Vec<String>> {
     let mut removed: Vec<String> = Vec::new();
     for info in list(root)? {
-        // WP-VOL-5: skip if in_use; today in_use is always false.
-        remove(root, &info.name, false)?;
-        removed.push(info.name);
+        match remove(root, &info.name, false) {
+            Ok(()) => removed.push(info.name),
+            Err(LightrError::InvalidRef(_)) => {}
+            Err(e) => return Err(e),
+        }
     }
     removed.sort();
     Ok(removed)
