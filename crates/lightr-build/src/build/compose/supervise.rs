@@ -7,6 +7,7 @@ use lightr_core::{LightrError, Result};
 use lightr_store::Store;
 use std::path::{Path, PathBuf};
 
+use super::down::cleanup_stack_services;
 use super::model::{ServiceSpec, StackSpec};
 use super::supervise_deps::{topo_order, wait_for_deps};
 use super::supervise_replicas::{instance_count, replica_run_names, sanitize_cwd_segment};
@@ -17,7 +18,7 @@ use super::up::lightr_home_pub as lightr_home;
 #[cfg(test)]
 pub(crate) use super::model::DepCondition;
 #[cfg(test)]
-pub(crate) use super::supervise_deps::{dep_condition_met, dep_run_dir};
+pub(crate) use super::supervise_deps::{dep_condition_met, dep_run_dir, wait_for_deps_until};
 
 /// Prepare a clean per-service run directory and, if the service declares an
 /// `image_ref`, hydrate that ref's filesystem into it.
@@ -41,10 +42,7 @@ pub(crate) fn prepare_service_cwd(
     // `remove_dir_all` below lets project B wipe project A's RUNNING cwd. The
     // project is sanitized to the same grammar service run-dir names use so the
     // path is always filesystem-safe.
-    let cwd = std::env::temp_dir().join(format!(
-        "lightr-svc-{}-{run_name}",
-        sanitize_cwd_segment(project)
-    ));
+    let cwd = service_cwd_path(project, run_name);
     if cwd.exists() {
         std::fs::remove_dir_all(&cwd).map_err(LightrError::Io)?;
     }
@@ -53,6 +51,16 @@ pub(crate) fn prepare_service_cwd(
         lightr_index::hydrate(&cwd, store, &svc.image_ref)?;
     }
     Ok(cwd)
+}
+
+/// Stable compose service working-directory location. `compose_down` uses this
+/// same derivation after stopping every instance so project-scoped workdirs do
+/// not outlive their stack.
+pub(crate) fn service_cwd_path(project: &str, run_name: &str) -> PathBuf {
+    std::env::temp_dir().join(format!(
+        "lightr-svc-{}-{run_name}",
+        sanitize_cwd_segment(project)
+    ))
 }
 
 /// WP-DISC: sanitize a compose service name into an env-var key prefix.
@@ -271,6 +279,12 @@ fn start_one_instance(
             for s in &mut stack_spec.services {
                 if s.name == svc.name {
                     s.run_dirs.push(run_dir.clone());
+                    // `depends_on` resolves its service target through the
+                    // legacy scalar. Keep it as the first instance so health
+                    // and completion gates observe an eager dependency.
+                    if s.run_dir.is_none() {
+                        s.run_dir = Some(run_dir.clone());
+                    }
                 }
             }
             if let Ok(new_bytes) = serde_json::to_vec_pretty(&stack_spec) {
@@ -320,13 +334,29 @@ pub fn compose_supervise(stack_dir: &Path) -> Result<()> {
     // WP-CMP-NET: project namespaces each network id (`<project>_<network>`).
     let project = spec.project.clone();
 
-    let order = topo_order(&spec.services)?;
-    for &i in &order {
-        let svc = &spec.services[i];
-        if svc.eager && !svc.command.is_empty() {
-            wait_for_deps(stack_dir, svc);
-            start_service_detached(stack_dir, svc, &peers, &project)?;
+    let eager_start = (|| -> Result<()> {
+        let order = topo_order(&spec.services)?;
+        for &i in &order {
+            let svc = &spec.services[i];
+            if svc.eager && !svc.command.is_empty() {
+                wait_for_deps(stack_dir, svc)?;
+                start_service_detached(stack_dir, svc, &peers, &project)?;
+            }
         }
+        Ok(())
+    })();
+    if let Err(error) = eager_start {
+        // An eager dependency failure can happen after earlier services started.
+        // Clean only this stack's recorded runs/workdirs before supervisor exit.
+        if let Err(cleanup_error) = cleanup_stack_services(stack_dir) {
+            return Err(LightrError::InvalidManifest(format!(
+                "{error}; eager compose cleanup failed: {cleanup_error}"
+            )));
+        }
+        if stack_dir.exists() {
+            std::fs::remove_dir_all(stack_dir).map_err(LightrError::Io)?;
+        }
+        return Err(error);
     }
 
     let mut threads: Vec<std::thread::JoinHandle<()>> = Vec::new();

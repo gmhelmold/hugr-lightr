@@ -1,0 +1,33 @@
+scenarios:
+  - case_id: compose-eager-semantic-matrix
+    fixture: fixtures/eager-stack
+    docker:
+      - ${DOCKER}
+      - compose
+      - --project-name
+      - ${S3_NAMESPACE}
+      - --file
+      - ${FIXTURE_DIR}/compose.yml
+      - --profile
+      - default
+      - up
+      - --detach
+    lightr:
+      - ${LIGHTR}
+      - compose
+      - up
+      - --file
+      - ${FIXTURE_DIR}/compose.yml
+      - --project-name
+      - ${S3_NAMESPACE}
+      - --eager
+      - --profile
+      - default
+    lightr_engine: native
+    legacy_overlap: none
+    assertions:
+      # Runner observes only command exit today. Readiness, teardown, logs,
+      # health, and dependency claims remain absent until runner executes them.
+      - id: exit-code
+        expected: {"exit_code": 0}
+        shared: true

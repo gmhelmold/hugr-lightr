@@ -3,6 +3,8 @@ use lightr_core::{LightrError, Result};
 use std::path::{Path, PathBuf};
 
 use super::model::{ServiceSpec, StackSpec};
+use super::supervise::service_cwd_path;
+use super::supervise_replicas::replica_run_names;
 
 /// #75 FIX-1: every run dir recorded for a service, de-duplicated and in record
 /// order. Folds the current `run_dirs` list (one entry per replica instance) with
@@ -17,12 +19,11 @@ fn recorded_run_dirs(svc: &ServiceSpec) -> Vec<String> {
     out
 }
 
-/// Tear down a compose stack.
+/// Stop recorded service runs and remove their project-scoped workdirs.
 ///
-/// 1. Reads `spec.json` and stops any started service runs.
-/// 2. Writes `stop` file to signal the supervisor.
-/// 3. Removes the stack directory.
-pub fn compose_down(stack_dir: &Path) -> Result<()> {
+/// Used by both explicit `compose down` and eager supervisor startup failure.
+/// The latter must clean services without signalling its own process.
+pub(crate) fn cleanup_stack_services(stack_dir: &Path) -> Result<()> {
     let spec_path = stack_dir.join("spec.json");
     if spec_path.exists() {
         if let Ok(bytes) = std::fs::read(&spec_path) {
@@ -39,10 +40,31 @@ pub fn compose_down(stack_dir: &Path) -> Result<()> {
                             let _ = lightr_run::stop(&dir, 2);
                         }
                     }
+                    // Service workdirs are generated under a project-scoped
+                    // namespace. Remove only names this stack's own spec can
+                    // derive, after all recorded runs have been stopped.
+                    if let Ok(run_names) = replica_run_names(svc) {
+                        for run_name in run_names {
+                            let cwd = service_cwd_path(&spec.project, &run_name);
+                            if cwd.exists() {
+                                std::fs::remove_dir_all(cwd).map_err(LightrError::Io)?;
+                            }
+                        }
+                    }
                 }
             }
         }
     }
+    Ok(())
+}
+
+/// Tear down a compose stack.
+///
+/// 1. Stops started service runs and removes project-scoped workdirs.
+/// 2. Writes `stop` file to signal the supervisor.
+/// 3. Removes the stack directory.
+pub fn compose_down(stack_dir: &Path) -> Result<()> {
+    cleanup_stack_services(stack_dir)?;
 
     let stop_file = stack_dir.join("stop");
     let _ = std::fs::write(&stop_file, b"");

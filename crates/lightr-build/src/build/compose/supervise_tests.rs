@@ -190,6 +190,23 @@ fn dep_condition_completed_waits_on_exit_zero() {
 }
 
 #[test]
+fn unhealthy_dependency_timeout_refuses_dependent_start() {
+    // A health gate that never reaches `healthy` is an error, not permission to
+    // spawn its dependent after a timeout.
+    let stack = TempDir::new().unwrap();
+    let web = svc_with_deps("web", vec![("db", DepCondition::Healthy)]);
+    let err = wait_for_deps_until(
+        stack.path(),
+        &web,
+        std::time::Duration::ZERO,
+        std::time::Duration::ZERO,
+    )
+    .unwrap_err();
+    let message = err.to_string();
+    assert!(message.contains("refusing to start web"), "{message}");
+}
+
+#[test]
 fn dep_run_dir_reads_live_spec() {
     // dep_run_dir resolves a started dep's run dir from the live spec.json.
     let stack = TempDir::new().unwrap();
@@ -216,6 +233,33 @@ fn dep_run_dir_reads_live_spec() {
     assert_eq!(dep_run_dir(stack.path(), "web"), None);
     // An unknown service is None.
     assert_eq!(dep_run_dir(stack.path(), "nope"), None);
+}
+
+#[test]
+fn dep_run_dir_reads_first_eager_instance_record() {
+    // Eager spawn records all instances plus this scalar first-instance view.
+    // `depends_on: service_healthy|service_completed_successfully` reads this
+    // path while the supervisor starts the dependent.
+    let stack = TempDir::new().unwrap();
+    let mut db = svc_with_deps("db", vec![]);
+    db.run_dirs = vec!["/tmp/run-db-1".to_string(), "/tmp/run-db-2".to_string()];
+    db.run_dir = Some("/tmp/run-db-1".to_string());
+    let spec = StackSpec {
+        ttl_secs: 60,
+        created_at_unix: 0,
+        project: "default".to_string(),
+        supervisor_pid: None,
+        services: vec![db],
+    };
+    std::fs::write(
+        stack.path().join("spec.json"),
+        serde_json::to_vec_pretty(&spec).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        dep_run_dir(stack.path(), "db"),
+        Some(PathBuf::from("/tmp/run-db-1"))
+    );
 }
 
 // --- CMP-LOWER-RUNCFG: working_dir/user/restart reach the spawned RunSpec ---
