@@ -39,10 +39,12 @@
       "processes": 3,
       "initial": {"volume_exists": true, "owners": ["active:nonce_a", "active:nonce_b"]},
       "trace": [
+        {"event":"owner.active","nonce":"nonce_a","run_id":"run-a","process":{"pid":200,"start_token":"linux:200:20"},"mount_id":"mount-a"},
         {"event":"registry.active","run_id":"run-a","nonce":"nonce_a","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a"},
         {"event":"registry.terminal","run_id":"run-a","nonce":"nonce_a"},
         {"event":"registry.sync","run_id":"run-a"},
         {"event":"owner.remove","nonce":"nonce_a","run_id":"run-a","process_start_token":"linux:200:20"},
+        {"event":"owner.active","nonce":"nonce_b","run_id":"run-b","process":{"pid":201,"start_token":"linux:201:21"},"mount_id":"mount-b"},
         {"event":"registry.active","run_id":"run-b","nonce":"nonce_b","pid":201,"process_start_token":"linux:201:21","mount_id":"mount-b"},
         {"event":"registry.terminal","run_id":"run-b","nonce":"nonce_b"},
         {"event":"registry.sync","run_id":"run-b"},

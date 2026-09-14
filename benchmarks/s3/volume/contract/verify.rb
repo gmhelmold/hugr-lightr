@@ -53,6 +53,15 @@ def with_corpus
   end
 end
 
+def registry_matches_owner?(registry, owner)
+  process = owner.fetch("process")
+  registry["run_id"] == owner["run_id"] &&
+    registry["nonce"] == owner["nonce"] &&
+    registry["pid"] == process["pid"] &&
+    registry["process_start_token"] == process["start_token"] &&
+    registry["mount_id"] == owner["mount_id"]
+end
+
 schema_path, fixtures_path, goldens_path = ARGV
 if schema_path == "--self-test" && fixtures_path.nil? && goldens_path.nil?
   with_corpus do |schema, fixtures, goldens|
@@ -86,6 +95,30 @@ if schema_path == "--self-test" && fixtures_path.nil? && goldens_path.nil?
     File.write(fixtures, JSON.generate(mutated))
     fail_contract("self-test missing required lock passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
   end
+
+  with_corpus do |schema, fixtures, goldens|
+    mutated = load_json(fixtures)
+    trace = mutated.fetch("fixtures").find { |fixture| fixture.fetch("id") == "normal-teardown" }.fetch("trace")
+    trace.reject! { |event| event["event"] == "lock.release" }
+    File.write(fixtures, JSON.generate(mutated))
+    fail_contract("self-test missing lock release passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
+  end
+
+  with_corpus do |schema, fixtures, goldens|
+    mutated = load_json(fixtures)
+    registry = mutated.fetch("fixtures").find { |fixture| fixture.fetch("id") == "normal-teardown" }.fetch("trace").find { |event| event["event"] == "registry.active" }
+    registry["process_start_token"] = "linux:200:99"
+    File.write(fixtures, JSON.generate(mutated))
+    fail_contract("self-test registry process token mismatch passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
+  end
+
+  with_corpus do |schema, fixtures, goldens|
+    mutated = load_json(goldens)
+    golden = mutated.fetch("goldens").find { |candidate| candidate.fetch("id") == "concurrent-rm-prune-refuse-active" }
+    golden.fetch("observations")["lock_serialized"] = false
+    File.write(goldens, JSON.generate(mutated))
+    fail_contract("self-test concurrent lock serialization mismatch passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
+  end
   puts "volume contract self-test: OK"
   exit 0
 end
@@ -113,6 +146,20 @@ fixtures.each do |fixture|
   events = fixture.fetch("trace")
   fail_contract("#{id}: trace must be non-empty array") unless events.is_a?(Array) && !events.empty?
   required!(fixture.fetch("initial"), ["volume_exists", "owners"], "#{id}: initial")
+  golden = goldens_by_id.fetch(id)
+  unless events.any? { |event| event["event"] == "fault" }
+    required!(golden, schema.fetch("golden_required"), "#{id}: golden")
+    state = golden.fetch("state")
+    observations = golden.fetch("observations")
+    required!(state, schema.fetch("golden_state_required"), "#{id}: golden state")
+    fail_contract("#{id}: golden outcome must be non-empty string") unless golden.fetch("outcome").is_a?(String) && !golden.fetch("outcome").empty?
+    fail_contract("#{id}: golden state volume_exists must be boolean") unless [true, false].include?(state.fetch("volume_exists"))
+    fail_contract("#{id}: golden state owners must be array") unless state.fetch("owners").is_a?(Array)
+    fail_contract("#{id}: golden observations must be non-empty object") unless observations.is_a?(Hash) && !observations.empty?
+    if id == "concurrent-rm-prune-refuse-active"
+      fail_contract("#{id}: golden must require lock_serialized=true") unless observations["lock_serialized"] == true
+    end
+  end
 
   events.each_with_index do |event, index|
     required!(event, ["event"], "#{id}: event #{index}")
@@ -141,19 +188,28 @@ fixtures.each do |fixture|
       fail_contract("#{id}: lock release without matching acquire") unless lock_holder == event.fetch("actor")
       lock_holder = nil
     when "lock.loss"
-      fail_contract("#{id}: lock loss without matching acquire") unless lock_holder == event.fetch("actor")
+      fail_contract("#{id}: lock loss mismatches held actor") if lock_holder && lock_holder != event.fetch("actor")
       lock_holder = nil
     when "rm", "prune"
       fail_contract("#{id}: #{event["event"]} outside matching lock interval") unless lock_holder == event.fetch("actor")
     end
   end
+  # Fault traces terminate at the injected operation; complete traces must
+  # release every acquired lock instead of relying on process exit.
+  fail_contract("#{id}: lock acquire missing matching release for #{lock_holder}") if lock_holder && !events.any? { |event| event["event"] == "fault" }
 
   events.each_with_index do |event, index|
     next unless event["event"] == "owner.remove"
     run_id = event.fetch("run_id")
     nonce = event.fetch("nonce")
-    active = events.each_index.find { |candidate| candidate < index && events[candidate]["event"] == "registry.active" && events[candidate]["run_id"] == run_id && events[candidate]["nonce"] == nonce }
-    terminal = active && events.each_index.find { |candidate| candidate > active && candidate < index && events[candidate]["event"] == "registry.terminal" && events[candidate]["run_id"] == run_id && events[candidate]["nonce"] == nonce }
+    owner = events.each_index.find { |candidate| candidate < index && events[candidate]["event"] == "owner.active" && events[candidate]["run_id"] == run_id && events[candidate]["nonce"] == nonce }
+    fail_contract("#{id}: owner removal lacks matching active owner for #{run_id}") unless owner
+    process = events[owner].fetch("process")
+    required!(process, ["pid", "start_token"], "#{id}: active owner process")
+    fail_contract("#{id}: owner removal process token mismatch for #{run_id}") unless event.fetch("process_start_token") == process.fetch("start_token")
+    active = events.each_index.find { |candidate| candidate > owner && candidate < index && events[candidate]["event"] == "registry.active" && registry_matches_owner?(events[candidate], events[owner]) }
+    fail_contract("#{id}: active registry identity mismatch for #{run_id}") unless active
+    terminal = events.each_index.find { |candidate| candidate > active && candidate < index && events[candidate]["event"] == "registry.terminal" && events[candidate]["run_id"] == run_id && events[candidate]["nonce"] == nonce }
     terminal_sync = terminal && event_index_after(events, "registry.sync", terminal, run_id)
     fail_contract("#{id}: owner removal lacks active-terminal-sync registry sequence for #{run_id}") unless terminal_sync && terminal_sync < index
   end
