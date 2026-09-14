@@ -180,7 +180,10 @@ fn run_owner_record_roundtrips_strict_owner_shape() {
         terminal: false,
     };
     let bytes = serde_json::to_vec(&record).unwrap();
-    assert_eq!(serde_json::from_slice::<RunOwnerRecord>(&bytes).unwrap(), record);
+    assert_eq!(
+        serde_json::from_slice::<RunOwnerRecord>(&bytes).unwrap(),
+        record
+    );
 }
 
 #[cfg(target_os = "linux")]
@@ -202,9 +205,15 @@ fn owner_pending_active_terminal_release_is_exact() {
     )
     .unwrap();
     let lock = owner_lock(&root, "owned").unwrap();
-    assert_eq!(read_owners(&root, "owned", &lock).unwrap().owners, vec![active]);
+    assert_eq!(
+        read_owners(&root, "owned", &lock).unwrap().owners,
+        vec![active]
+    );
     drop(lock);
-    assert!(remove(&root, "owned", false).is_err(), "active owner blocks rm");
+    assert!(
+        remove(&root, "owned", false).is_err(),
+        "active owner blocks rm"
+    );
     terminal_run_owner(&run).unwrap();
     release_owner(&root, "owned", &run).unwrap();
     remove(&root, "owned", false).unwrap();
@@ -234,7 +243,10 @@ fn recovery_removes_only_terminal_matching_owner() {
     terminal_run_owner(&run).unwrap();
     recover(&root, "recover", &home).unwrap();
     let lock = owner_lock(&root, "recover").unwrap();
-    assert!(read_owners(&root, "recover", &lock).unwrap().owners.is_empty());
+    assert!(read_owners(&root, "recover", &lock)
+        .unwrap()
+        .owners
+        .is_empty());
 }
 
 #[cfg(target_os = "linux")]
@@ -308,7 +320,10 @@ fn sigkill_owner_recovers_after_matching_process_death_proof() {
     assert_eq!(unsafe { libc::waitpid(child, &mut status, 0) }, child);
     recover(&root, "killed", &home).unwrap();
     let lock = owner_lock(&root, "killed").unwrap();
-    assert!(read_owners(&root, "killed", &lock).unwrap().owners.is_empty());
+    assert!(read_owners(&root, "killed", &lock)
+        .unwrap()
+        .owners
+        .is_empty());
 }
 
 #[cfg(target_os = "linux")]

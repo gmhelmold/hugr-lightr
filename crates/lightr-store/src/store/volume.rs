@@ -230,7 +230,12 @@ pub fn read_owners(root: &Path, name: &str, _lock: &OwnerLock) -> Result<OwnersF
     let owners: OwnersFile = serde_json::from_slice(&fs::read(path)?).map_err(|_| {
         LightrError::InvalidManifest(format!("volume {name}: malformed .lightr/owners.json"))
     })?;
-    if owners.version != 1 || owners.owners.iter().any(|owner| !valid_nonce(owner.nonce())) {
+    if owners.version != 1
+        || owners
+            .owners
+            .iter()
+            .any(|owner| !valid_nonce(owner.nonce()))
+    {
         return Err(LightrError::InvalidManifest(format!(
             "volume {name}: malformed .lightr/owners.json"
         )));
@@ -241,15 +246,22 @@ pub fn read_owners(root: &Path, name: &str, _lock: &OwnerLock) -> Result<OwnersF
 /// Publish complete owner state while caller holds [`OwnerLock`]. `rename` is
 /// linearization point; success is returned only after parent-directory fsync.
 pub fn write_owners(root: &Path, name: &str, owners: &OwnersFile, _lock: &OwnerLock) -> Result<()> {
-    if owners.version != 1 || owners.owners.iter().any(|owner| !valid_nonce(owner.nonce())) {
-        return Err(LightrError::InvalidManifest("invalid volume owners v1".to_string()));
+    if owners.version != 1
+        || owners
+            .owners
+            .iter()
+            .any(|owner| !valid_nonce(owner.nonce()))
+    {
+        return Err(LightrError::InvalidManifest(
+            "invalid volume owners v1".to_string(),
+        ));
     }
     let dir = owner_dir(root, name);
     fs::create_dir_all(&dir)?;
     let tmp = dir.join("owners.json.tmp");
     let path = dir.join("owners.json");
-    let bytes = serde_json::to_vec(owners)
-        .map_err(|e| LightrError::Io(std::io::Error::other(e)))?;
+    let bytes =
+        serde_json::to_vec(owners).map_err(|e| LightrError::Io(std::io::Error::other(e)))?;
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
@@ -276,12 +288,14 @@ pub fn process_start_token(pid: i32) -> Result<String> {
         return Err(LightrError::InvalidRef("invalid process pid".to_string()));
     }
     let stat = fs::read_to_string(format!("/proc/{pid}/stat"))?;
-    let after = stat.rsplit_once(')').map(|(_, rest)| rest).ok_or_else(|| {
-        LightrError::InvalidManifest(format!("malformed /proc/{pid}/stat"))
-    })?;
-    let start = after.split_whitespace().nth(19).ok_or_else(|| {
-        LightrError::InvalidManifest(format!("malformed /proc/{pid}/stat"))
-    })?;
+    let after = stat
+        .rsplit_once(')')
+        .map(|(_, rest)| rest)
+        .ok_or_else(|| LightrError::InvalidManifest(format!("malformed /proc/{pid}/stat")))?;
+    let start = after
+        .split_whitespace()
+        .nth(19)
+        .ok_or_else(|| LightrError::InvalidManifest(format!("malformed /proc/{pid}/stat")))?;
     if !start.bytes().all(|b| b.is_ascii_digit()) {
         return Err(LightrError::InvalidManifest(format!(
             "malformed /proc/{pid}/stat"
@@ -329,7 +343,9 @@ pub fn activate_owner(
     let index = owners
         .owners
         .iter()
-        .position(|owner| matches!(owner, VolumeOwner::Pending { nonce, .. } if nonce == pending_nonce))
+        .position(
+            |owner| matches!(owner, VolumeOwner::Pending { nonce, .. } if nonce == pending_nonce),
+        )
         .ok_or_else(|| LightrError::InvalidRef(format!("volume {name}: pending owner lost")))?;
     let owner = VolumeOwner::Active {
         nonce: pending_nonce.to_string(),
@@ -357,9 +373,13 @@ pub fn abandon_pending(root: &Path, name: &str, nonce: &str) -> Result<()> {
     let lock = owner_lock(root, name)?;
     let mut owners = read_owners(root, name, &lock)?;
     let before = owners.owners.len();
-    owners.owners.retain(|owner| !matches!(owner, VolumeOwner::Pending { nonce: n, .. } if n == nonce));
+    owners
+        .owners
+        .retain(|owner| !matches!(owner, VolumeOwner::Pending { nonce: n, .. } if n == nonce));
     if owners.owners.len() == before {
-        return Err(LightrError::InvalidRef(format!("volume {name}: pending owner lost")));
+        return Err(LightrError::InvalidRef(format!(
+            "volume {name}: pending owner lost"
+        )));
     }
     write_owners(root, name, &owners, &lock)
 }
@@ -375,19 +395,33 @@ pub fn terminal_run_owner(run_dir: &Path) -> Result<()> {
 pub fn release_owner(root: &Path, name: &str, run_dir: &Path) -> Result<()> {
     let record = read_run_owner(run_dir)?;
     if record.volume != name || !record.terminal {
-        return Err(LightrError::InvalidRef(format!("volume {name}: terminal owner record required")));
+        return Err(LightrError::InvalidRef(format!(
+            "volume {name}: terminal owner record required"
+        )));
     }
-    let VolumeOwner::Active { nonce, run_id, process_start_token, .. } = &record.owner else {
-        return Err(LightrError::InvalidRef(format!("volume {name}: active owner required")));
+    let VolumeOwner::Active {
+        nonce,
+        run_id,
+        process_start_token,
+        ..
+    } = &record.owner
+    else {
+        return Err(LightrError::InvalidRef(format!(
+            "volume {name}: active owner required"
+        )));
     };
     let lock = owner_lock(root, name)?;
     let mut owners = read_owners(root, name, &lock)?;
     let before = owners.owners.len();
-    owners.owners.retain(|owner| !matches!(owner, VolumeOwner::Active {
+    owners.owners.retain(|owner| {
+        !matches!(owner, VolumeOwner::Active {
         nonce: n, run_id: r, process_start_token: token, ..
-    } if n == nonce && r == run_id && token == process_start_token));
+    } if n == nonce && r == run_id && token == process_start_token)
+    });
     if owners.owners.len() == before {
-        return Err(LightrError::InvalidRef(format!("volume {name}: active owner lost")));
+        return Err(LightrError::InvalidRef(format!(
+            "volume {name}: active owner lost"
+        )));
     }
     write_owners(root, name, &owners, &lock)
 }
@@ -481,7 +515,9 @@ fn process_dead(pid: i32, token: &str) -> Result<bool> {
     match process_start_token(pid) {
         Ok(observed) => Ok(observed != token),
         Err(LightrError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
-        Err(_) => Err(LightrError::InvalidRef("process observation ambiguous".to_string())),
+        Err(_) => Err(LightrError::InvalidRef(
+            "process observation ambiguous".to_string(),
+        )),
     }
 }
 
@@ -496,7 +532,12 @@ fn run_owner_path(run_dir: &Path) -> PathBuf {
     run_dir.join("volume-owner.json")
 }
 
-fn write_run_owner(run_dir: &Path, volume: &str, owner: &VolumeOwner, terminal: bool) -> Result<()> {
+fn write_run_owner(
+    run_dir: &Path,
+    volume: &str,
+    owner: &VolumeOwner,
+    terminal: bool,
+) -> Result<()> {
     fs::create_dir_all(run_dir)?;
     let bytes = serde_json::to_vec(&RunOwnerRecord {
         volume: volume.to_string(),
@@ -516,9 +557,8 @@ fn write_run_owner(run_dir: &Path, volume: &str, owner: &VolumeOwner, terminal: 
 }
 
 fn read_run_owner(run_dir: &Path) -> Result<RunOwnerRecord> {
-    serde_json::from_slice(&fs::read(run_owner_path(run_dir))?).map_err(|_| {
-        LightrError::InvalidManifest("malformed volume-owner.json".to_string())
-    })
+    serde_json::from_slice(&fs::read(run_owner_path(run_dir))?)
+        .map_err(|_| LightrError::InvalidManifest("malformed volume-owner.json".to_string()))
 }
 
 fn fresh_nonce() -> String {
@@ -529,7 +569,12 @@ fn fresh_nonce() -> String {
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     lightr_core::Digest::of_bytes(
-        format!("{}:{now}:{}", std::process::id(), COUNTER.fetch_add(1, Ordering::Relaxed)).as_bytes(),
+        format!(
+            "{}:{now}:{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        )
+        .as_bytes(),
     )
     .to_hex()
 }

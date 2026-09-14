@@ -113,7 +113,10 @@ fn named_volume_capability_fails_before_detached_spawn() {
             ..Default::default()
         },
     );
-    assert_eq!(code, 2, "unsupported host must reject before detached spawn");
+    assert_eq!(
+        code, 2,
+        "unsupported host must reject before detached spawn"
+    );
 }
 
 #[test]

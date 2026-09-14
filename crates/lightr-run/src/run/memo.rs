@@ -245,9 +245,8 @@ pub fn run_memoized_with(
     // addressed). Force a MISS — never replay a cached result for a bind run, and
     // never write one to the AC below. Empty (the common case) ⇒ caching is
     // byte-identical to before.
-    let non_reproducible = !spec.volumes.is_empty()
-        || !spec.named_volumes.is_empty()
-        || !spec.tmpfs.is_empty();
+    let non_reproducible =
+        !spec.volumes.is_empty() || !spec.named_volumes.is_empty() || !spec.tmpfs.is_empty();
 
     // --- Hit path (skipped for non-reproducible bind/tmpfs runs) ---
     if !non_reproducible {

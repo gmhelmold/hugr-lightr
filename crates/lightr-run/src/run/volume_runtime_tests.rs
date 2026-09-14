@@ -2,8 +2,8 @@
 //! external `/bin/sh` child, so `cargo test --workspace --lib --bins` exercises
 //! the owner barrier and terminal release path on CI.
 
-use crate::run::supervise::supervise;
 use crate::run::paths::write_spec_json;
+use crate::run::supervise::supervise;
 use crate::run::types::{MountOnDisk2, SpecOnDisk};
 use lightr_store::{volume, Store};
 use std::fs;
@@ -55,7 +55,11 @@ fn start(
 fn wait_for(path: &std::path::Path) {
     let deadline = Instant::now() + Duration::from_secs(10);
     while !path.exists() {
-        assert!(Instant::now() < deadline, "timed out waiting for {}", path.display());
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for {}",
+            path.display()
+        );
         std::thread::sleep(Duration::from_millis(20));
     }
 }
@@ -72,7 +76,10 @@ fn named_volume_child_cannot_exec_before_owner_activation() {
         "barrier",
         "data",
         "mounted",
-        &format!("grep -q '\"phase\":\"active\"' '{}' && printf ok > mounted/output", owner.display()),
+        &format!(
+            "grep -q '\"phase\":\"active\"' '{}' && printf ok > mounted/output",
+            owner.display()
+        ),
     );
     wait_for(&dir.join("volume-owner.json"));
     assert_eq!(supervisor.join().unwrap(), 0);
@@ -95,7 +102,10 @@ fn shared_named_mounts_hold_two_owners_then_release_exactly() {
         .count()
         < 2
     {
-        assert!(Instant::now() < deadline, "two active owners were not published");
+        assert!(
+            Instant::now() < deadline,
+            "two active owners were not published"
+        );
         std::thread::sleep(Duration::from_millis(20));
     }
     assert!(volume::remove(&store, "shared", false).is_err());
@@ -110,7 +120,14 @@ fn concurrent_remove_and_prune_cannot_delete_live_named_mount() {
     let (home, _guard) = home();
     let cwd = tempfile::tempdir().unwrap();
     let store = home.path().join("store");
-    let (dir, supervisor) = start(home.path(), cwd.path(), "locked", "locked", "mounted", "sleep 1");
+    let (dir, supervisor) = start(
+        home.path(),
+        cwd.path(),
+        "locked",
+        "locked",
+        "mounted",
+        "sleep 1",
+    );
     wait_for(&dir.join("volume-owner.json"));
     std::thread::scope(|scope| {
         let remove = scope.spawn(|| volume::remove(&store, "locked", false));

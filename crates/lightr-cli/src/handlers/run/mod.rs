@@ -124,6 +124,9 @@ pub fn run(
         Ok(f) => f,
         Err(code) => return code,
     };
+    if let Some(code) = policy::named_volume_policy(&runflags, restart) {
+        return code;
+    }
     if !runflags.named_volumes.is_empty() {
         if let Err(error) = lightr_store::volume::owner_runtime_supported() {
             return die_lightr(&error);
