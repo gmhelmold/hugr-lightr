@@ -245,3 +245,102 @@ fn recovery_refuses_missing_run_witness() {
     assert!(remove(&root, "ambiguous", false).is_err());
     assert!(volume_dir(&root, "ambiguous").exists());
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn sigkill_owner_recovers_after_matching_process_death_proof() {
+    use std::io::Read;
+    use std::os::fd::{FromRawFd, RawFd};
+
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "killed", &[]).unwrap();
+    let run = home.join("run/killed-run");
+    let mut fds: [RawFd; 2] = [0; 2];
+    assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
+    let child = unsafe { libc::fork() };
+    assert!(child >= 0);
+    if child == 0 {
+        unsafe { libc::close(fds[0]) };
+        let pending = begin_owner(&root, "killed", &run).unwrap();
+        activate_owner(
+            &root,
+            "killed",
+            &run,
+            pending.nonce(),
+            "killed-run",
+            std::process::id() as i32,
+            "m-killed",
+        )
+        .unwrap();
+        let mut ready = unsafe { std::fs::File::from_raw_fd(fds[1]) };
+        use std::io::Write;
+        ready.write_all(&[1]).unwrap();
+        loop {
+            std::thread::park();
+        }
+    }
+    unsafe { libc::close(fds[1]) };
+    let mut ready = unsafe { std::fs::File::from_raw_fd(fds[0]) };
+    let mut byte = [0; 1];
+    ready.read_exact(&mut byte).unwrap();
+    assert_eq!(unsafe { libc::kill(child, libc::SIGKILL) }, 0);
+    let mut status = 0;
+    assert_eq!(unsafe { libc::waitpid(child, &mut status, 0) }, child);
+    recover(&root, "killed", &home).unwrap();
+    let lock = owner_lock(&root, "killed").unwrap();
+    assert!(read_owners(&root, "killed", &lock).unwrap().owners.is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn shared_active_owners_require_each_exact_terminal_release() {
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "shared", &[]).unwrap();
+    for id in ["one", "two"] {
+        let run = home.join("run").join(id);
+        let pending = begin_owner(&root, "shared", &run).unwrap();
+        activate_owner(
+            &root,
+            "shared",
+            &run,
+            pending.nonce(),
+            id,
+            std::process::id() as i32,
+            &format!("m-{id}"),
+        )
+        .unwrap();
+    }
+    let one = home.join("run/one");
+    fs::write(one.join("status"), "exited 0").unwrap();
+    terminal_run_owner(&one).unwrap();
+    release_owner(&root, "shared", &one).unwrap();
+    assert!(remove(&root, "shared", false).is_err());
+    let two = home.join("run/two");
+    fs::write(two.join("status"), "exited 0").unwrap();
+    terminal_run_owner(&two).unwrap();
+    release_owner(&root, "shared", &two).unwrap();
+    remove(&root, "shared", false).unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn failed_spawn_abandons_only_its_pending_nonce() {
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "failed", &[]).unwrap();
+    let first = begin_owner(&root, "failed", &home.join("run/one")).unwrap();
+    let second = begin_owner(&root, "failed", &home.join("run/two")).unwrap();
+    abandon_pending(&root, "failed", first.nonce()).unwrap();
+    let lock = owner_lock(&root, "failed").unwrap();
+    let owners = read_owners(&root, "failed", &lock).unwrap();
+    assert_eq!(owners.owners.len(), 1);
+    assert_eq!(owners.owners[0].nonce(), second.nonce());
+}
