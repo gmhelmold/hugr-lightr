@@ -155,19 +155,72 @@ pub(super) fn run_engine(
         Err(e) => return die_lightr(&e),
     };
 
-    let spec = ExecSpec {
-        cwd: &run_cwd,
-        command: &argv,
-        rootfs: rootfs_path.as_deref(),
+    let spec = build_exec_spec(
+        &run_cwd,
+        &argv,
+        rootfs_path.as_deref(),
         limits,
-        net: false,   // synchronous CLI engine path; networked vz is detached (supervisor)
-        net_isolate,  // WP-NET-ISO: `--net=none` ⇒ ns engine creates a netns (loopback only)
+        net_isolate,
+        &env,
+        eff_user,
+        add_host,
+        read_only,
+        shm_size,
+        cap_drop,
+        cap_add,
+        init,
+        apparmor,
+        seccomp,
+        tmpfs,
+        ulimits,
+        oom_score_adj,
+    );
+
+    let code = match engine.run(&spec) {
+        Ok(c) => c,
+        Err(e) => return die_lightr(&e),
+    };
+
+    // Keep temp dir alive until after engine.run completes
+    drop(rootfs_tmp);
+
+    code
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn build_exec_spec<'a>(
+    cwd: &'a std::path::Path,
+    command: &'a [String],
+    rootfs: Option<&'a std::path::Path>,
+    limits: ResourceLimits,
+    net_isolate: bool,
+    env: &'a [(String, String)],
+    user: Option<&'a str>,
+    add_host: &'a [(String, String)],
+    read_only: bool,
+    shm_size: Option<u64>,
+    cap_drop: &'a [String],
+    cap_add: &'a [String],
+    init: bool,
+    apparmor: Option<&'a str>,
+    seccomp: Option<&'a str>,
+    tmpfs: &'a [TmpfsMount],
+    ulimits: &'a [Ulimit],
+    oom_score_adj: Option<i32>,
+) -> ExecSpec<'a> {
+    ExecSpec {
+        cwd,
+        command,
+        rootfs,
+        limits,
+        net: false, // synchronous CLI engine path; networked vz is detached (supervisor)
+        net_isolate,
         net_fd: None, // mesh NIC is wired by the supervisor path (ADR-0018), not here
         net_mac: None,
         mounts: &[],
-        env: &env,
+        env,
         workdir: None,
-        user: eff_user,
+        user,
         hostname: None,
         // `--add-host`: the ns engine appends `(ip, hostname)` lines to the
         // container's /etc/hosts before pivot. Empty ⇒ unchanged.
@@ -219,17 +272,7 @@ pub(super) fn run_engine(
         // native ignores this field (it applies oom-score-adj via apply_cfg on the
         // memo path — no double-apply); vz's OOM tuning lives in the guest.
         oom_score_adj,
-    };
-
-    let code = match engine.run(&spec) {
-        Ok(c) => c,
-        Err(e) => return die_lightr(&e),
-    };
-
-    // Keep temp dir alive until after engine.run completes
-    drop(rootfs_tmp);
-
-    code
+    }
 }
 
 #[derive(serde::Deserialize)]

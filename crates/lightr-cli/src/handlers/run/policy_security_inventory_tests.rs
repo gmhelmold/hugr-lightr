@@ -126,7 +126,7 @@ const CONTROLS: &[ControlMap] = &[
         parser: "RawRcFlags.pids_limit",
         run_config: "limits.pids_max",
         exec_spec: Some("limits"),
-        witness: "crates/lightr-cli/src/handlers/run/mod.rs::with_pids",
+        witness: "crates/lightr-core/src/core/limits.rs::ResourceLimits::with_pids",
     },
     ControlMap {
         control: "ulimit",
@@ -220,7 +220,7 @@ fn resolve_witness(path: &str, symbol: &str) -> Result<(), String> {
             let _ = ResourceLimits::parse;
             Ok(())
         }
-        ("crates/lightr-cli/src/handlers/run/mod.rs", "with_pids") => {
+        ("crates/lightr-core/src/core/limits.rs", "ResourceLimits::with_pids") => {
             let _ = ResourceLimits::with_pids;
             Ok(())
         }
@@ -442,6 +442,43 @@ fn cli_parser_lowers_all_security_controls_through_production_conversions() {
     assert_eq!(runflags.ulimit, ["nofile=64"]);
     assert_eq!(rc.apparmor.as_deref(), Some("profile"));
     assert_eq!(rc.seccomp.as_deref(), Some("profile.json"));
+    let tmpfs = super::super::parse_tmpfs(&runflags.tmpfs).unwrap();
+    let ulimits = super::super::parse_ulimits(&runflags.ulimit).unwrap();
+    let command = vec!["true".to_string()];
+    let env = vec![];
+    let exec = super::super::paths::build_exec_spec(
+        std::path::Path::new("/work"),
+        &command,
+        None,
+        limits,
+        net,
+        &env,
+        args.user.as_deref(),
+        &add_host,
+        rc.read_only,
+        rc.shm_size,
+        &rc.cap_drop,
+        &rc.cap_add,
+        rc.init,
+        rc.apparmor.as_deref(),
+        rc.seccomp.as_deref(),
+        &tmpfs,
+        &ulimits,
+        rc.oom_score_adj,
+    );
+    assert!(exec.read_only && exec.init && exec.net_isolate);
+    assert_eq!(exec.cap_add, ["NET_BIND_SERVICE"]);
+    assert_eq!(exec.cap_drop, ["ALL"]);
+    assert_eq!(exec.seccomp, Some("profile.json"));
+    assert_eq!(exec.apparmor, Some("profile"));
+    assert_eq!(exec.shm_size, Some(64 * 1024 * 1024));
+    assert_eq!(exec.tmpfs.len(), 1);
+    assert_eq!(exec.ulimits.len(), 1);
+    assert_eq!(exec.oom_score_adj, Some(100));
+    assert_eq!(
+        exec.add_host,
+        [("host".to_string(), "127.0.0.1".to_string())]
+    );
     assert!(health.build().is_some());
     assert!(net);
     assert_eq!(add_host, [("host".to_string(), "127.0.0.1".to_string())]);
