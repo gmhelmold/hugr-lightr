@@ -202,6 +202,7 @@ pub fn owner_lock(root: &Path, name: &str) -> Result<OwnerLock> {
         .read(true)
         .write(true)
         .create(true)
+        .truncate(false)
         .open(dir.join("lock"))?;
     let rc = unsafe { libc::flock(std::os::fd::AsRawFd::as_raw_fd(&file), libc::LOCK_EX) };
     if rc != 0 {
@@ -452,10 +453,11 @@ fn find_pending_witness(home: &Path, volume: &str, nonce: &str) -> Result<RunOwn
             Ok(record) => record,
             Err(_) => continue,
         };
-        if record.volume == volume && record.owner.nonce() == nonce {
-            if matched.replace(record).is_some() {
-                return Err(ambiguous(volume));
-            }
+        if record.volume == volume
+            && record.owner.nonce() == nonce
+            && matched.replace(record).is_some()
+        {
+            return Err(ambiguous(volume));
         }
     }
     matched.ok_or_else(|| ambiguous(volume))
