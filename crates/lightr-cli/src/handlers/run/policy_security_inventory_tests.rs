@@ -237,7 +237,7 @@ fn validate_inventory(inventory: &serde_json::Value) -> Result<(), String> {
             return Err(format!("{} has wrong exec_spec", map.control));
         }
         for field in ["enforcement", "platform", "oracle", "fixture", "mutation"] {
-            if !row[field].as_str().is_some_and(|value| !value.is_empty()) {
+            if row[field].as_str().is_none_or(str::is_empty) {
                 return Err(format!("{} missing {field}", map.control));
             }
         }
@@ -331,6 +331,15 @@ fn raw_rc_flags_lower_to_runspec_and_engine_policy_consumes_lsm_fields() {
     assert_eq!(spec.oom_score_adj, Some(100));
     assert_eq!(spec.pids_limit, Some(16));
     assert_eq!(spec.shm_size, Some(64 * 1024 * 1024));
-    assert_eq!(engine_capability_policy(EngineKind::Ns, &rc), None);
+    let mut apparmor_only = rc.clone();
+    apparmor_only.seccomp = None;
+    assert_eq!(
+        engine_capability_policy(EngineKind::Ns, &apparmor_only),
+        None
+    );
+    assert_eq!(
+        engine_capability_policy(EngineKind::Ns, &rc),
+        seccomp_arch_policy(rc.seccomp.as_deref(), cfg!(target_arch = "x86_64"))
+    );
     assert_eq!(engine_capability_policy(EngineKind::Native, &rc), Some(2));
 }
