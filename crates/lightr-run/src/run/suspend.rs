@@ -53,14 +53,32 @@ impl SuspensionOwner {
         }
     }
 
+    pub fn guest_ip(&self) -> Result<String> {
+        let ip = std::fs::read_to_string(
+            self.artifact
+                .rootfs()
+                .join(lightr_init::IP_FILE.trim_start_matches('/')),
+        )
+        .map_err(LightrError::Io)?;
+        let ip = ip.trim().to_string();
+        if ip.is_empty() {
+            return Err(LightrError::InvalidRef(
+                "suspended VZ guest has no DHCP IP proof".into(),
+            ));
+        }
+        Ok(ip)
+    }
+
     /// Removes snapshot/gate artifacts after retained engine is dropped.
     pub fn cleanup(self) -> Result<()> {
+        self.engine.teardown();
         std::fs::remove_dir_all(&self.artifact_dir).map_err(LightrError::Io)
     }
 }
 
 impl Drop for SuspensionOwner {
     fn drop(&mut self) {
+        self.engine.teardown();
         let _ = std::fs::remove_dir_all(&self.artifact_dir);
     }
 }

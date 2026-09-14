@@ -104,6 +104,12 @@ mod vz_impl {
         config_sha256: String,
     }
 
+    impl Drop for RetainedSession {
+        fn drop(&mut self) {
+            unsafe { lightr_vz_session_destroy(self.handle) };
+        }
+    }
+
     impl Engine for VzEngine {
         fn kind(&self) -> crate::engine::EngineKind {
             crate::engine::EngineKind::Vz
@@ -286,8 +292,11 @@ mod vz_impl {
             let gate_path = rootfs.join(SUSPEND_GATE_FILE.trim_start_matches('/'));
             let ready_path = rootfs.join(SUSPEND_READY_FILE.trim_start_matches('/'));
             let release_path = rootfs.join(SUSPEND_RELEASE_FILE.trim_start_matches('/'));
+            let pid_path = rootfs.join(WORKLOAD_PID_FILE.trim_start_matches('/'));
             let _ = std::fs::remove_file(&ready_path);
             let _ = std::fs::remove_file(&release_path);
+            // A prior guest PID is never proof for this retained session.
+            let _ = std::fs::remove_file(&pid_path);
             std::fs::write(
                 &cmd_path,
                 InitSpec {
@@ -408,12 +417,23 @@ mod vz_impl {
                 &session
                     .rootfs
                     .join(WORKLOAD_PID_FILE.trim_start_matches('/')),
+                &artifact.instance_id,
+                &session.release_token,
             )?;
+            *self.session.lock().expect("vz session mutex poisoned") = Some(session);
             Ok(ResumedInstance {
                 instance_id: artifact.instance_id.clone(),
                 artifact_sha256: artifact.artifact_sha256.clone(),
                 pid,
             })
+        }
+
+        fn teardown(&self) {
+            let _ = self
+                .session
+                .lock()
+                .expect("vz session mutex poisoned")
+                .take();
         }
     }
 
@@ -488,13 +508,14 @@ mod vz_impl {
         )))
     }
 
-    fn wait_for_pid(path: &std::path::Path) -> Result<u32> {
+    fn wait_for_pid(path: &std::path::Path, instance_id: &str, release_token: &str) -> Result<u32> {
         for _ in 0..600 {
             if let Ok(s) = std::fs::read_to_string(path) {
-                return s
-                    .trim()
-                    .parse::<u32>()
-                    .ok()
+                let mut proof = s.split_whitespace();
+                return (proof.next() == Some(instance_id) && proof.next() == Some(release_token))
+                    .then(|| proof.next())
+                    .flatten()
+                    .and_then(|pid| pid.parse::<u32>().ok())
                     .filter(|pid| *pid != 0)
                     .ok_or_else(|| {
                         LightrError::InvalidRef(

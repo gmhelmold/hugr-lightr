@@ -14,6 +14,7 @@ use super::model::ServiceSpec;
 pub(crate) trait LazyOwner: Send {
     fn identity(&self) -> SuspendedIdentity;
     fn resume(&self) -> Result<ResumedInstance>;
+    fn guest_ip(&self) -> Result<String>;
 }
 
 impl LazyOwner for SuspensionOwner {
@@ -22,6 +23,9 @@ impl LazyOwner for SuspensionOwner {
     }
     fn resume(&self) -> Result<ResumedInstance> {
         self.resume()
+    }
+    fn guest_ip(&self) -> Result<String> {
+        self.guest_ip()
     }
 }
 
@@ -159,8 +163,9 @@ impl LazyService {
             first_byte_at,
             resumed_at,
         )?;
-        let mut outbound =
-            std::net::TcpStream::connect(("127.0.0.1", target_port)).map_err(LightrError::Io)?;
+        let guest_ip = self.owner.guest_ip()?;
+        let mut outbound = std::net::TcpStream::connect((guest_ip.as_str(), target_port))
+            .map_err(LightrError::Io)?;
         outbound
             .write_all(&first[..read])
             .map_err(LightrError::Io)?;
@@ -299,6 +304,9 @@ mod tests {
                 artifact_sha256: "digest".into(),
                 pid: 4242,
             })
+        }
+        fn guest_ip(&self) -> Result<String> {
+            Ok("127.0.0.2".into())
         }
     }
 

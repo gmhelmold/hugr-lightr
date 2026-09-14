@@ -132,7 +132,15 @@ mod linux {
             // Snapshot resume proof: this is after exact gate release and before
             // waiting, so host can establish a real guest workload PID.
             let mut pid = std::fs::File::create(lightr_init::WORKLOAD_PID_FILE)?;
-            write!(pid, "{}", child.id())?;
+            let gate: SuspendGate = serde_json::from_slice(&std::fs::read(SUSPEND_GATE_FILE)?)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+            write!(
+                pid,
+                "{} {} {}",
+                gate.instance_id,
+                gate.release_token,
+                child.id()
+            )?;
             pid.sync_all()?;
             let status = child.wait()?;
 

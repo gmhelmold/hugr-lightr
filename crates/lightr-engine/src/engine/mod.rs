@@ -47,6 +47,13 @@ pub struct SuspendedArtifact {
     pub(crate) rootfs: PathBuf,
 }
 
+impl SuspendedArtifact {
+    /// Retained local rootfs, never serialized into compose state or receipts.
+    pub fn rootfs(&self) -> &std::path::Path {
+        &self.rootfs
+    }
+}
+
 /// Result of attempting to suspend a workload. Unsupported is data, not a
 /// cold-spawn permission; compose must surface it and bind no lazy listener.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -87,6 +94,9 @@ pub trait Engine: Send {
             self.kind()
         )))
     }
+
+    /// Release retained engine state before its snapshot artifacts disappear.
+    fn teardown(&self) {}
 
     fn kind(&self) -> EngineKind;
 }
