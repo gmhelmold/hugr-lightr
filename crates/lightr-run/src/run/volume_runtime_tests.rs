@@ -139,3 +139,30 @@ fn concurrent_remove_and_prune_cannot_delete_live_named_mount() {
     assert_eq!(supervisor.join().unwrap(), 0);
     volume::remove(&store, "locked", false).unwrap();
 }
+
+#[test]
+fn missing_named_volume_fails_before_owner_artifact() {
+    let (home, _guard) = home();
+    let cwd = tempfile::tempdir().unwrap();
+    let dir = home.path().join("run/missing");
+    fs::create_dir_all(&dir).unwrap();
+    Store::open(home.path().join("store")).unwrap();
+    write_spec_json(
+        &dir,
+        &SpecOnDisk {
+            cwd: cwd.path().to_string_lossy().into_owned(),
+            command: vec!["/bin/true".to_string()],
+            mounts2: vec![MountOnDisk2::NamedVolume {
+                source: "absent".to_string(),
+                target: "mounted".to_string(),
+                readonly: false,
+            }],
+            engine: "native".to_string(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(supervise(&dir).is_err());
+    assert!(!home.path().join("store/volumes/absent").exists());
+    assert!(!dir.join("volume-owner.json").exists());
+}

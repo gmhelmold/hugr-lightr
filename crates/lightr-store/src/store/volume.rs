@@ -430,6 +430,7 @@ pub fn release_owner(root: &Path, name: &str, run_dir: &Path) -> Result<()> {
 /// mismatched run witness is ambiguity: no owner is deleted and `rm`/`prune`
 /// callers receive refusal.
 pub fn recover(root: &Path, name: &str, home: &Path) -> Result<()> {
+    destructive_owner_supported()?;
     let lock = owner_lock(root, name)?;
     recover_locked(root, name, home, &lock)
 }
@@ -654,6 +655,7 @@ pub fn inspect(root: &Path, name: &str) -> Result<VolumeInfo> {
 /// Remove one volume only while its durable active-owner snapshot is empty.
 /// `in_use` remains an additional caller-side refusal for legacy callers.
 pub fn remove(root: &Path, name: &str, in_use: bool) -> Result<()> {
+    destructive_owner_supported()?;
     name_validate(name)?;
     let dir = volume_dir(root, name);
     if !dir.exists() {
@@ -684,6 +686,7 @@ pub fn owner_runtime_supported() -> Result<()> {
 /// Prune volumes with empty durable ownership snapshots. Busy or ambiguous
 /// volumes remain in place; `prune` is deliberately not a broad delete.
 pub fn prune(root: &Path) -> Result<Vec<String>> {
+    destructive_owner_supported()?;
     let mut removed: Vec<String> = Vec::new();
     for info in list(root)? {
         match remove(root, &info.name, false) {
@@ -694,6 +697,18 @@ pub fn prune(root: &Path) -> Result<Vec<String>> {
     }
     removed.sort();
     Ok(removed)
+}
+
+#[cfg(target_os = "linux")]
+fn destructive_owner_supported() -> Result<()> {
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn destructive_owner_supported() -> Result<()> {
+    Err(LightrError::Unsupported(
+        "named-volume remove/prune/recovery requires Linux process identity".to_string(),
+    ))
 }
 
 // ── meta.json encode / decode (hand-rolled, fixed schema) ─────────────────────

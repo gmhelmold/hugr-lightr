@@ -46,11 +46,16 @@ pub(super) fn supervise_native(
     let volumes = named_volumes(spec);
     let mut pending = Vec::new();
     for (name, _) in &volumes {
+        // Validate the pre-existing registry before begin_owner can create its
+        // `.lightr/` lock directory. A missing/corrupt named mount leaves no
+        // owner artifact behind.
+        if let Err(error) = lightr_store::volume::inspect(store.root(), name) {
+            return Err(error);
+        }
         match lightr_store::volume::begin_owner(store.root(), name, dir) {
             Ok(owner) => pending.push((name.clone(), owner)),
             Err(error) => {
-                abandon_pending(store.root(), &pending);
-                return Err(error);
+                return Err(cleanup_error(error, store.root(), &pending));
             }
         }
     }
@@ -60,8 +65,7 @@ pub(super) fn supervise_native(
         validate_mount_target(&m.target)?;
         let dest = cwd.join(&m.target);
         if let Err(error) = lightr_index::hydrate(&dest, store, &m.ref_name) {
-            abandon_pending(store.root(), &pending);
-            return Err(error);
+            return Err(cleanup_error(error, store.root(), &pending));
         }
     }
 
@@ -69,8 +73,7 @@ pub(super) fn supervise_native(
     // scratch dirs (the tagged `mounts2` shape) once for the run's lifetime, the
     // same way the synchronous memo path does. Empty ⇒ no-op (behaviour-preserving).
     if let Err(error) = super::bindmat::materialize_mounts2(&cwd, store.root(), &spec.mounts2) {
-        abandon_pending(store.root(), &pending);
-        return Err(error);
+        return Err(cleanup_error(error, store.root(), &pending));
     }
 
     // WP-RC-WORKDIR: honor `-w`/`--workdir` as the child's cwd (Docker WORKDIR),
@@ -78,8 +81,7 @@ pub(super) fn supervise_native(
     let run_cwd = match super::spawn::resolve_workdir(&cwd, spec.workdir.as_deref()) {
         Ok(path) => path,
         Err(error) => {
-            abandon_pending(store.root(), &pending);
-            return Err(error);
+            return Err(cleanup_error(error, store.root(), &pending));
         }
     };
 
@@ -91,8 +93,7 @@ pub(super) fn supervise_native(
     let health_cfg = match crate::healthcheck::load_for(dir) {
         Ok(config) => config,
         Err(error) => {
-            abandon_pending(store.root(), &pending);
-            return Err(error);
+            return Err(cleanup_error(error, store.root(), &pending));
         }
     };
 
@@ -114,13 +115,19 @@ pub(super) fn supervise_native(
     )
 }
 
-fn abandon_pending(
+fn cleanup_error(
+    error: LightrError,
     root: &std::path::Path,
     pending: &[(String, lightr_store::volume::VolumeOwner)],
-) {
+) -> LightrError {
     for (name, owner) in pending {
-        let _ = lightr_store::volume::abandon_pending(root, name, owner.nonce());
+        if let Err(cleanup) = lightr_store::volume::abandon_pending(root, name, owner.nonce()) {
+            return LightrError::InvalidRef(format!(
+                "{error}; named-volume pending cleanup failed: {cleanup}"
+            ));
+        }
     }
+    error
 }
 
 // FIX-#76 (godfile split): the per-concern setup helpers (`spawn_child`,

@@ -108,6 +108,7 @@ fn inspect_json_has_fields() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn remove_then_gone() {
     let (_d, root) = tmp_root();
     create(&root, "tmp", &[]).unwrap();
@@ -117,6 +118,7 @@ fn remove_then_gone() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn remove_missing_errors() {
     let (_d, root) = tmp_root();
     let err = remove(&root, "nope", false).unwrap_err();
@@ -124,6 +126,7 @@ fn remove_missing_errors() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn remove_in_use_refused() {
     let (_d, root) = tmp_root();
     create(&root, "busy", &[]).unwrap();
@@ -135,6 +138,7 @@ fn remove_in_use_refused() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn prune_removes_dangling() {
     let (_d, root) = tmp_root();
     create(&root, "a", &[]).unwrap();
@@ -149,9 +153,23 @@ fn prune_removes_dangling() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn prune_empty_registry_ok() {
     let (_d, root) = tmp_root();
     assert!(prune(&root).unwrap().is_empty());
+}
+
+#[test]
+#[cfg(not(target_os = "linux"))]
+fn destructive_verbs_are_unsupported_without_mutation() {
+    let (_d, root) = tmp_root();
+    create(&root, "locked", &[]).unwrap();
+    assert!(matches!(
+        remove(&root, "locked", false),
+        Err(LightrError::Unsupported(_))
+    ));
+    assert!(matches!(prune(&root), Err(LightrError::Unsupported(_))));
+    assert!(volume_dir(&root, "locked").exists());
 }
 
 #[test]
