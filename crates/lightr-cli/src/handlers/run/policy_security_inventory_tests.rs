@@ -466,19 +466,76 @@ fn cli_parser_lowers_all_security_controls_through_production_conversions() {
         &ulimits,
         rc.oom_score_adj,
     );
-    assert!(exec.read_only && exec.init && exec.net_isolate);
-    assert_eq!(exec.cap_add, ["NET_BIND_SERVICE"]);
-    assert_eq!(exec.cap_drop, ["ALL"]);
-    assert_eq!(exec.seccomp, Some("profile.json"));
-    assert_eq!(exec.apparmor, Some("profile"));
-    assert_eq!(exec.shm_size, Some(64 * 1024 * 1024));
-    assert_eq!(exec.tmpfs.len(), 1);
-    assert_eq!(exec.ulimits.len(), 1);
-    assert_eq!(exec.oom_score_adj, Some(100));
+    let mut captured = None;
+    let mut basics = None;
     assert_eq!(
-        exec.add_host,
-        [("host".to_string(), "127.0.0.1".to_string())]
+        super::super::paths::run_engine_with(&exec, |spec| {
+            basics = Some((
+                spec.cwd.to_path_buf(),
+                spec.command.to_vec(),
+                spec.rootfs.map(std::path::Path::to_path_buf),
+                spec.limits,
+                spec.env.to_vec(),
+                spec.user.map(str::to_owned),
+            ));
+            captured = Some((
+                spec.read_only,
+                spec.init,
+                spec.net_isolate,
+                spec.shm_size,
+                spec.cap_add.to_vec(),
+                spec.cap_drop.to_vec(),
+                spec.seccomp.map(str::to_owned),
+                spec.apparmor.map(str::to_owned),
+                spec.tmpfs.len(),
+                spec.ulimits.len(),
+                spec.oom_score_adj,
+                spec.add_host.to_vec(),
+                spec.net,
+                spec.net_fd,
+                spec.net_mac,
+                spec.mounts.len(),
+                spec.workdir.map(str::to_owned),
+                spec.hostname.map(str::to_owned),
+                spec.dns.len(),
+                spec.mesh_ip,
+                spec.join_netns.is_none(),
+                spec.cgroup_name.map(str::to_owned),
+                spec.exec_ready_fd,
+                spec.bind_mounts.len(),
+                spec.resolv_conf.map(str::to_owned),
+            ));
+            0
+        }),
+        0
     );
+    let captured = captured.unwrap();
+    let basics = basics.unwrap();
+    assert_eq!(basics.0, std::path::PathBuf::from("/work"));
+    assert_eq!(basics.1, ["true"]);
+    assert!(basics.2.is_none());
+    assert_eq!(basics.3.memory_bytes, Some(64 * 1024 * 1024));
+    assert_eq!(basics.3.cpu_millis, Some(500));
+    assert!(basics.4.is_empty());
+    assert_eq!(basics.5.as_deref(), Some("1000"));
+    assert!(captured.0 && captured.1 && captured.2);
+    assert_eq!(captured.3, Some(64 * 1024 * 1024));
+    assert_eq!(captured.4, ["NET_BIND_SERVICE"]);
+    assert_eq!(captured.5, ["ALL"]);
+    assert_eq!(captured.6.as_deref(), Some("profile.json"));
+    assert_eq!(captured.7.as_deref(), Some("profile"));
+    assert_eq!(captured.8, 1);
+    assert_eq!(captured.9, 1);
+    assert_eq!(captured.10, Some(100));
+    assert_eq!(captured.11, [("host".to_string(), "127.0.0.1".to_string())]);
+    assert!(!captured.12 && captured.13.is_none() && captured.14.is_none());
+    assert_eq!(captured.15, 0);
+    assert!(captured.16.is_none() && captured.17.is_none());
+    assert_eq!(captured.18, 0);
+    assert!(captured.19.is_none() && captured.20 && captured.21.is_none());
+    assert!(captured.22.is_none());
+    assert_eq!(captured.23, 0);
+    assert!(captured.24.is_none());
     assert!(health.build().is_some());
     assert!(net);
     assert_eq!(add_host, [("host".to_string(), "127.0.0.1".to_string())]);

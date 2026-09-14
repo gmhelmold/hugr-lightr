@@ -187,7 +187,7 @@ pub(super) fn run_engine(
 
 /// Single execution boundary for the hydrated CLI path. Tests supply a capture
 /// executor; production preserves the existing engine error mapping above.
-fn run_engine_with<F>(spec: &ExecSpec<'_>, execute: F) -> i32
+pub(super) fn run_engine_with<F>(spec: &ExecSpec<'_>, execute: F) -> i32
 where
     F: FnOnce(&ExecSpec<'_>) -> i32,
 {
