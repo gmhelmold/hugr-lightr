@@ -71,11 +71,15 @@ impl VolumeOwner {
 /// guard across every read/modify/write lifecycle transition.
 pub struct OwnerLock(File);
 
-#[cfg(unix)]
 impl Drop for OwnerLock {
     fn drop(&mut self) {
-        // Explicit unlock documents lifetime boundary; close would also release.
-        let _ = unsafe { libc::flock(std::os::fd::AsRawFd::as_raw_fd(&self.0), libc::LOCK_UN) };
+        #[cfg(unix)]
+        {
+            // Explicit unlock documents lifetime boundary; close would also release.
+            let _ = unsafe { libc::flock(std::os::fd::AsRawFd::as_raw_fd(&self.0), libc::LOCK_UN) };
+        }
+        #[cfg(not(unix))]
+        let _ = &self.0;
     }
 }
 
