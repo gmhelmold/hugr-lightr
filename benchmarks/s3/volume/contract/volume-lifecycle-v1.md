@@ -90,10 +90,13 @@ or barrier failure refuses operation without deletion.
 
 ## Fixture Oracle
 
-`fixtures.json` is typed trace input. Every fixture has `initial`, a complete
-ordered `trace`, and optional terminal `fault`. References such as `nonce_a`
-resolve from top-level fixture values. `goldens.json` maps each fixture ID to
-exact operation outcome, final observable state, and required observations.
+`schema.json` is source of truth for fixture fields and event requirements.
+`verify.rb` parses schema, fixtures, and goldens; it fails malformed input,
+unknown events, ordering violations, fault/golden drift, and missing positive
+death proof. `fixtures.json` is typed trace input. Every fixture has `initial`,
+a complete ordered `trace`, and optional terminal `fault`. References such as
+`nonce_a` resolve from top-level fixture values. `goldens.json` maps each
+fixture ID to exact operation outcome, final observable state, and observations.
 
 Trace event grammar:
 
@@ -109,7 +112,8 @@ Trace event grammar:
 | `rename.owners` | none | Atomically replace `owners.json`; this linearizes candidate. |
 | `fsync.parent` | none | Sync directory after rename. |
 | `barrier.spawn` / `barrier.release` | `run_id` | Spawn pre-exec child or permit exec. |
-| `registry.active` / `registry.terminal` | `run_id`, `nonce` | Write matching run registry transition or terminal marker. |
+| `registry.active` | `run_id`, `nonce`, `pid`, `process_start_token`, `mount_id` | Write matching active run registry transition. |
+| `registry.terminal` | `run_id`, `nonce` | Write terminal marker. |
 | `registry.sync` | `run_id` | Sync registry transition. |
 | `process.observe` | `pid`, `token`, `result` | Observe `absent`, `mismatch`, or `matching`. |
 | `registry.observe` | `run_id`, `nonce`, `result` | Observe `terminal`, `readable`, or `unreadable`. |
@@ -127,6 +131,13 @@ An event immediately followed by `fault` is attempted and fails; it does not
 produce its normal durable postcondition. `rename.owners` remains linearized
 before a later `fsync.parent` fault.
 
+Any `recover.active` trace must encode full active owner in `initial.owners`:
+`phase`, `nonce`, `run_id`, `pid`, `process_start_token`, and `mount_id`.
+It must also encode matching full run registry in `initial.registries`, with
+same fields plus `terminal_status`. Positive proof is either matching terminal
+registry observation or matching readable registry plus absent/mismatched
+observed process token. Shorthand owner labels are forbidden for recovery.
+
 Every failure golden requires `outcome: "refused:<point>"`,
 `state.volume_exists: true`, and `observations.delete_attempted: false`.
 For parent-fsync failure, rename has already linearized empty owner state;
@@ -134,4 +145,6 @@ volume still remains because caller must refuse deletion. Other durability
 failures retain pre-failure owners. S3-5B tests must execute traces in separate
 processes where stated by Sprint 03 and mutation-probe acquire, release,
 recovery, and refusal edges. Fixtures are protocol goldens, not current-runtime
-tests.
+tests. `test_gate.sh` runs verifier locally. No existing CI benchmark path is
+within S3-5A owner scope, so this work package does not wire files outside
+`benchmarks/s3/volume/contract/**`.
