@@ -12,8 +12,8 @@
 use std::fs;
 
 use super::{
-    bytes_after, follow_stop_reason, parse_since, select_tail, since_excludes_all, stream_paths,
-    timestamp_note, FollowStop,
+    bytes_after, filter_paths_since, follow_stop_reason, initial_log_bytes, parse_since,
+    select_tail, stream_paths, timestamp_note, FollowStop,
 };
 use super::{run as logs_run, LogOpts};
 use crate::test_lock::ENV_LOCK;
@@ -128,6 +128,22 @@ fn follow_offset_past_eof_clamps() {
 }
 
 #[test]
+fn follow_setup_emits_append_after_initial_tail_exactly_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    let log = tmp.path().join("stdout.log");
+    fs::write(&log, b"first\nsecond\n").unwrap();
+
+    // This read and returned offset are same snapshot. Simulate append while
+    // initial tail waits to print, then verify follow emits only new bytes.
+    let (initial, offset) = initial_log_bytes(&log, Some(1)).unwrap();
+    fs::write(&log, b"first\nsecond\nthird\n").unwrap();
+    let (append, next) = bytes_after(&log, offset).unwrap();
+    assert_eq!(initial, b"second\n");
+    assert_eq!(append, b"third\n");
+    assert_eq!(next, 19);
+}
+
+#[test]
 fn bounded_follow_stops_after_drain_or_poll_cap() {
     assert_eq!(
         follow_stop_reason(true, false, 0),
@@ -164,35 +180,34 @@ fn timestamp_disclosure_is_explicitly_mtime_only() {
 }
 
 #[test]
-fn since_excludes_old_file_includes_recent() {
+fn since_filters_both_streams_by_each_stream_mtime() {
     let tmp = tempfile::tempdir().unwrap();
-    let log = tmp.path().join("stdout.log");
-    fs::write(&log, b"line\n").unwrap();
+    let stdout = tmp.path().join("stdout.log");
+    let stderr = tmp.path().join("stderr.log");
+    let selected = filter_paths_since(vec![stdout.clone(), stderr.clone()], Some("20"), |path| {
+        if path == stdout {
+            Some(10)
+        } else if path == stderr {
+            Some(30)
+        } else {
+            None
+        }
+    });
+    assert_eq!(selected, vec![stderr.clone()]);
 
-    // Cutoff far in the future ⇒ file mtime is older ⇒ exclude all.
-    let far_future = "9999999999";
-    assert!(since_excludes_all(
-        tmp.path(),
-        &LogStream::Stdout,
-        Some(far_future)
-    ));
-
-    // Cutoff at epoch ⇒ file is newer ⇒ include.
-    assert!(!since_excludes_all(
-        tmp.path(),
-        &LogStream::Stdout,
-        Some("0")
-    ));
-
-    // No --since ⇒ never excludes.
-    assert!(!since_excludes_all(tmp.path(), &LogStream::Stdout, None));
-
-    // Unparseable --since ⇒ lenient include (don't exclude).
-    assert!(!since_excludes_all(
-        tmp.path(),
-        &LogStream::Stdout,
-        Some("yesterday")
-    ));
+    // No or malformed cutoff preserves all streams.
+    assert_eq!(
+        filter_paths_since(vec![stdout.clone(), stderr.clone()], None, |_| Some(0)),
+        vec![stdout.clone(), stderr.clone()]
+    );
+    assert_eq!(
+        filter_paths_since(
+            vec![stdout.clone(), stderr.clone()],
+            Some("yesterday"),
+            |_| Some(0)
+        ),
+        vec![stdout, stderr]
+    );
 }
 
 // ── exit-code contract (end-to-end, under ENV_LOCK) ─────────────────────────

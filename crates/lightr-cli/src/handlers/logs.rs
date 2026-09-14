@@ -76,18 +76,27 @@ pub fn run(id: &str, opts: &LogOpts) -> i32 {
 
     if enrich {
         emit_timestamp_note(&run_dir, &stream, opts.since);
-        if since_excludes_all(&run_dir, &stream, opts.since) {
-            return 0;
-        }
     }
 
-    let paths = stream_paths(&run_dir, &stream);
+    let paths = filter_paths_since(
+        stream_paths(&run_dir, &stream),
+        opts.since,
+        file_mtime_seconds,
+    );
 
-    // Print the (optionally tail-limited) existing content first.
+    // Read each initial tail and its offset together. An append after this read
+    // begins at its saved offset; an append before it is already in `data`.
+    // Either way follow emits every byte exactly once.
+    let mut offsets = Vec::with_capacity(paths.len());
     for p in &paths {
-        if let Err(e) = print_tail(p, opts.tail) {
+        let (data, offset) = match initial_log_bytes(p, opts.tail) {
+            Ok(value) => value,
+            Err(e) => return die_lightr(&e),
+        };
+        if let Err(e) = write_log_bytes(&data) {
             return die_lightr(&e);
         }
+        offsets.push(offset);
     }
 
     if !opts.follow {
@@ -97,7 +106,7 @@ pub fn run(id: &str, opts: &LogOpts) -> i32 {
     // Bounded follow: poll for appends, stop when the run has exited and the
     // streams are drained, OR when a hard cap is hit (never hang forever —
     // no-daemon discipline: nothing of ours should spin unbounded).
-    follow_bounded(&resolved, &home, &paths)
+    follow_bounded(&resolved, &home, &paths, offsets)
 }
 
 /// Resolve the concrete log file path(s) for the selected stream.
@@ -111,17 +120,19 @@ fn stream_paths(run_dir: &Path, stream: &LogStream) -> Vec<std::path::PathBuf> {
     }
 }
 
-/// Print the last `tail` lines of `path` (or all when `tail` is `None`).
-/// Missing file ⇒ nothing (a stream may have produced no output).
-fn print_tail(path: &Path, tail: Option<usize>) -> lightr_core::Result<()> {
+/// Read initial bytes and offset from one snapshot. Missing stream ⇒ empty.
+fn initial_log_bytes(path: &Path, tail: Option<usize>) -> lightr_core::Result<(Vec<u8>, u64)> {
     if !path.exists() {
-        return Ok(());
+        return Ok((Vec::new(), 0));
     }
     let data = std::fs::read(path).map_err(lightr_core::LightrError::Io)?;
-    let selected = select_tail(&data, tail);
+    let offset = data.len() as u64;
+    Ok((select_tail(&data, tail).to_vec(), offset))
+}
+
+fn write_log_bytes(data: &[u8]) -> lightr_core::Result<()> {
     let mut out = std::io::stdout();
-    out.write_all(selected)
-        .map_err(lightr_core::LightrError::Io)?;
+    out.write_all(data).map_err(lightr_core::LightrError::Io)?;
     out.flush().map_err(lightr_core::LightrError::Io)?;
     Ok(())
 }
@@ -182,12 +193,12 @@ fn follow_stop_reason(terminal: bool, had_new: bool, polls: u32) -> Option<Follo
 
 /// Stream appends to `paths`, stopping when the run has exited and the streams
 /// are drained, or when the poll cap is reached. Bounded — no infinite spin.
-fn follow_bounded(id: &str, home: &Path, paths: &[std::path::PathBuf]) -> i32 {
-    let mut offsets: Vec<u64> = paths
-        .iter()
-        .map(|p| std::fs::metadata(p).map(|m| m.len()).unwrap_or(0))
-        .collect();
-
+fn follow_bounded(
+    id: &str,
+    home: &Path,
+    paths: &[std::path::PathBuf],
+    mut offsets: Vec<u64>,
+) -> i32 {
     let mut polls = 0u32;
     loop {
         let mut had_new = false;
@@ -264,7 +275,7 @@ fn timestamp_note(since: bool, when: &str) -> String {
     if since {
         format!(
             "lightr: logs has no per-line timestamps; --since compares against \
-             the log file's last-modified time ({when})"
+             each log file's last-modified time ({when})"
         )
     } else {
         format!(
@@ -274,26 +285,33 @@ fn timestamp_note(since: bool, when: &str) -> String {
     }
 }
 
-/// `--since` honest semantics: with no per-line clock, the only honest cutoff is
-/// the whole file's mtime. If the file was last written BEFORE the cutoff, there
-/// is nothing "since" then ⇒ exclude all. Unparseable cutoff ⇒ include (lenient,
-/// matching docker's best-effort disposition rather than failing closed here).
-fn since_excludes_all(run_dir: &Path, stream: &LogStream, since: Option<&str>) -> bool {
-    let Some(s) = since else { return false };
-    let Some(cutoff) = parse_since(s) else {
-        return false;
+/// `--since` filters each stream independently. Raw logs have no line clock, so
+/// a stream is included whole only when its own mtime is at or after cutoff.
+fn filter_paths_since<F>(
+    paths: Vec<std::path::PathBuf>,
+    since: Option<&str>,
+    mut mtime: F,
+) -> Vec<std::path::PathBuf>
+where
+    F: FnMut(&Path) -> Option<u64>,
+{
+    let Some(cutoff) = since.and_then(parse_since) else {
+        return paths;
     };
-    let mtime = stream_paths(run_dir, stream)
-        .iter()
-        .filter_map(|p| std::fs::metadata(p).ok())
-        .filter_map(|m| m.modified().ok())
-        .filter_map(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs())
-        .max();
-    match mtime {
-        Some(m) => m < cutoff,
-        None => false,
-    }
+    paths
+        .into_iter()
+        .filter(|path| mtime(path).is_none_or(|time| time >= cutoff))
+        .collect()
+}
+
+fn file_mtime_seconds(path: &Path) -> Option<u64> {
+    std::fs::metadata(path)
+        .ok()?
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|duration| duration.as_secs())
 }
 
 /// Parse a `--since` value: unix seconds. We avoid a chrono dep — only the
