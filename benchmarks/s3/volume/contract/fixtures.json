@@ -73,7 +73,7 @@
       "trace": [
         {"event":"lock.acquire","actor":"recovery"},
         {"event":"registry.observe","run_id":"run-a","nonce":"nonce_a","result":"terminal"},
-        {"event":"recover.active","nonce":"nonce_a"},
+        {"event":"recover.active","nonce":"nonce_a","run_id":"run-a","process_start_token":"linux:200:20"},
         {"event":"write.tmp","owners":[]},
         {"event":"sync_all.tmp"},
         {"event":"rename.owners"},
@@ -89,7 +89,7 @@
         {"event":"lock.acquire","actor":"recovery"},
         {"event":"registry.observe","run_id":"run-a","nonce":"nonce_a","result":"readable"},
         {"event":"process.observe","pid":200,"token":"linux:200:99","result":"mismatch"},
-        {"event":"recover.active","nonce":"nonce_a"},
+        {"event":"recover.active","nonce":"nonce_a","run_id":"run-a","process_start_token":"linux:200:20"},
         {"event":"write.tmp","owners":[]},
         {"event":"sync_all.tmp"},
         {"event":"rename.owners"},
@@ -135,19 +135,19 @@
       "id": "sync-all-failure-refuses-without-deletion",
       "processes": 2,
       "initial": {"volume_exists": true, "owners": [{"phase":"active","nonce":"nonce_a","run_id":"run-a","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a"}], "registries": [{"run_id":"run-a","nonce":"nonce_a","phase":"active","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a","terminal_status":"exited"}]},
-      "trace": [{"event":"lock.acquire","actor":"rm"}, {"event":"registry.observe","run_id":"run-a","nonce":"nonce_a","result":"terminal"}, {"event":"recover.active","nonce":"nonce_a"}, {"event":"write.tmp","owners":[]}, {"event":"sync_all.tmp"}, {"event":"fault","point":"sync_all.tmp","operation":"rm"}]
+      "trace": [{"event":"lock.acquire","actor":"rm"}, {"event":"registry.observe","run_id":"run-a","nonce":"nonce_a","result":"terminal"}, {"event":"recover.active","nonce":"nonce_a","run_id":"run-a","process_start_token":"linux:200:20"}, {"event":"write.tmp","owners":[]}, {"event":"sync_all.tmp"}, {"event":"fault","point":"sync_all.tmp","operation":"rm"}]
     },
     {
       "id": "rename-failure-refuses-without-deletion",
       "processes": 2,
       "initial": {"volume_exists": true, "owners": [{"phase":"active","nonce":"nonce_a","run_id":"run-a","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a"}], "registries": [{"run_id":"run-a","nonce":"nonce_a","phase":"active","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a","terminal_status":"exited"}]},
-      "trace": [{"event":"lock.acquire","actor":"prune"}, {"event":"registry.observe","run_id":"run-a","nonce":"nonce_a","result":"terminal"}, {"event":"recover.active","nonce":"nonce_a"}, {"event":"write.tmp","owners":[]}, {"event":"sync_all.tmp"}, {"event":"rename.owners"}, {"event":"fault","point":"rename.owners","operation":"prune"}]
+      "trace": [{"event":"lock.acquire","actor":"prune"}, {"event":"registry.observe","run_id":"run-a","nonce":"nonce_a","result":"terminal"}, {"event":"recover.active","nonce":"nonce_a","run_id":"run-a","process_start_token":"linux:200:20"}, {"event":"write.tmp","owners":[]}, {"event":"sync_all.tmp"}, {"event":"rename.owners"}, {"event":"fault","point":"rename.owners","operation":"prune"}]
     },
     {
       "id": "parent-fsync-failure-refuses-without-deletion",
       "processes": 2,
       "initial": {"volume_exists": true, "owners": [{"phase":"active","nonce":"nonce_a","run_id":"run-a","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a"}], "registries": [{"run_id":"run-a","nonce":"nonce_a","phase":"active","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a","terminal_status":"exited"}]},
-      "trace": [{"event":"lock.acquire","actor":"rm"}, {"event":"registry.observe","run_id":"run-a","nonce":"nonce_a","result":"terminal"}, {"event":"recover.active","nonce":"nonce_a"}, {"event":"write.tmp","owners":[]}, {"event":"sync_all.tmp"}, {"event":"rename.owners"}, {"event":"fsync.parent"}, {"event":"fault","point":"fsync.parent","operation":"rm"}]
+      "trace": [{"event":"lock.acquire","actor":"rm"}, {"event":"registry.observe","run_id":"run-a","nonce":"nonce_a","result":"terminal"}, {"event":"recover.active","nonce":"nonce_a","run_id":"run-a","process_start_token":"linux:200:20"}, {"event":"write.tmp","owners":[]}, {"event":"sync_all.tmp"}, {"event":"rename.owners"}, {"event":"fsync.parent"}, {"event":"fault","point":"fsync.parent","operation":"rm"}]
     },
     {
       "id": "barrier-failure-refuses-without-deletion",

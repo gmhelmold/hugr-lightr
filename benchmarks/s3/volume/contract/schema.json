@@ -25,7 +25,7 @@
     "registry.sync": ["run_id"],
     "process.observe": ["pid", "token", "result"],
     "registry.observe": ["run_id", "nonce", "result"],
-    "recover.active": ["nonce"],
+    "recover.active": ["nonce", "run_id", "process_start_token"],
     "rm": ["actor"],
     "prune": ["actor"],
     "fault": ["point", "operation"]

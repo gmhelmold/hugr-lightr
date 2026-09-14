@@ -99,14 +99,17 @@ def reduce_final_owners(initial_owners, events)
         "process_start_token" => process.fetch("start_token"),
         "mount_id" => event.fetch("mount_id")
       }
-      owners.reject! { |candidate| candidate.is_a?(Hash) && candidate["phase"] == "active" && candidate["nonce"] == owner["nonce"] }
-      owners << owner
+      # Promotion replaces only its pending nonce. Existing active owners are
+      # distinct until a full-identity owner.remove or recover.active removes them.
+      owners.reject! { |candidate| candidate.is_a?(Hash) && candidate["phase"] == "pending" && candidate["nonce"] == owner["nonce"] }
+      owners << owner unless owners.any? { |candidate| candidate.is_a?(Hash) && candidate["phase"] == "active" && owner_identity(candidate) == owner_identity(owner) }
     when "owner.remove"
       target = [event.fetch("run_id"), event.fetch("nonce"), event.fetch("process_start_token")]
       index = owners.index { |candidate| candidate.is_a?(Hash) && candidate["phase"] == "active" && owner_identity(candidate) == target }
       owners.delete_at(index) if index
     when "recover.active"
-      owners.reject! { |candidate| candidate.is_a?(Hash) && candidate["phase"] == "active" && candidate["nonce"] == event.fetch("nonce") }
+      target = [event.fetch("run_id"), event.fetch("nonce"), event.fetch("process_start_token")]
+      owners.reject! { |candidate| candidate.is_a?(Hash) && candidate["phase"] == "active" && owner_identity(candidate) == target }
     end
   end
   owners
@@ -217,6 +220,14 @@ if schema_path == "--self-test" && fixtures_path.nil? && goldens_path.nil?
     trace[second_remove] = trace.find { |event| event["event"] == "owner.remove" }.dup
     File.write(fixtures, JSON.generate(mutated))
     fail_contract("self-test shared duplicate owner removal passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
+  end
+
+  with_corpus do |schema, fixtures, goldens|
+    mutated = load_json(fixtures)
+    owner = mutated.fetch("fixtures").find { |fixture| fixture.fetch("id") == "shared-mounts" }.fetch("initial").fetch("owners").last
+    owner["nonce"] = "nonce_a"
+    File.write(fixtures, JSON.generate(mutated))
+    fail_contract("self-test nonce collision owner removal passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
   end
   puts "volume contract self-test: OK"
   exit 0
@@ -334,9 +345,11 @@ fixtures.each do |fixture|
   recovery = events.find { |event| event["event"] == "recover.active" }
   next unless recovery
   nonce = recovery.fetch("nonce")
+  run_id = recovery.fetch("run_id")
+  process_start_token = recovery.fetch("process_start_token")
   owners = fixture.fetch("initial").fetch("owners")
   registries = fixture.fetch("initial")["registries"]
-  owner = owners.find { |candidate| candidate.is_a?(Hash) && candidate["phase"] == "active" && candidate["nonce"] == nonce }
+  owner = owners.find { |candidate| candidate.is_a?(Hash) && candidate["phase"] == "active" && owner_identity(candidate) == [run_id, nonce, process_start_token] }
   fail_contract("#{id}: recovery lacks full active owner") unless owner
   required!(owner, schema.fetch("active_owner_required"), "#{id}: active owner")
   registry = registries&.find { |candidate| candidate.is_a?(Hash) && candidate["nonce"] == nonce && candidate["run_id"] == owner["run_id"] }
