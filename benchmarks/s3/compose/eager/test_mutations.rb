@@ -23,11 +23,11 @@ Dir.mktmpdir("s3-eager-teeth") do |dir|
   abort "positive control failed: #{output}" unless status.success?
 
   mutations = {
-    "shared assertion" => ["bad assertions", ->(doc) { doc["cases"][0]["assertions"].pop }],
-    "eager flag" => ["lightr case lacks --eager", ->(doc) { doc["cases"][0]["lightr"].delete("--eager") }],
-    "namespace" => ["bad resources", ->(doc) { doc["cases"][0]["resources"][0] = "global-web" }],
-    "readiness" => ["bad readiness", ->(doc) { doc["cases"][0]["readiness"] = [] }],
-    "teardown" => ["bad teardown", ->(doc) { doc["cases"][0]["teardown"].delete("lightr") }]
+    "shared assertion" => ["bad assertions", ->(doc) { doc["scenarios"][0]["assertions"].pop }],
+    "eager flag" => ["lightr case lacks --eager", ->(doc) { doc["scenarios"][0]["lightr"].delete("--eager") }],
+    "profile" => ["profile not activated", ->(doc) { doc["scenarios"][0]["docker"].delete("default") }],
+    "engine" => ["bad engine", ->(doc) { doc["scenarios"][0]["lightr_engine"] = "bad" }],
+    "schema" => ["bad case", ->(doc) { doc["scenarios"][0]["readiness"] = [] }]
   }
   mutations.each do |name, (expected, mutate)|
     doc = YAML.safe_load(File.read(source), aliases: false)
