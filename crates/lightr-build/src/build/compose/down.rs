@@ -19,12 +19,11 @@ fn recorded_run_dirs(svc: &ServiceSpec) -> Vec<String> {
     out
 }
 
-/// Tear down a compose stack.
+/// Stop recorded service runs and remove their project-scoped workdirs.
 ///
-/// 1. Reads `spec.json` and stops any started service runs.
-/// 2. Writes `stop` file to signal the supervisor.
-/// 3. Removes the stack directory.
-pub fn compose_down(stack_dir: &Path) -> Result<()> {
+/// Used by both explicit `compose down` and eager supervisor startup failure.
+/// The latter must clean services without signalling its own process.
+pub(crate) fn cleanup_stack_services(stack_dir: &Path) -> Result<()> {
     let spec_path = stack_dir.join("spec.json");
     if spec_path.exists() {
         if let Ok(bytes) = std::fs::read(&spec_path) {
@@ -56,6 +55,16 @@ pub fn compose_down(stack_dir: &Path) -> Result<()> {
             }
         }
     }
+    Ok(())
+}
+
+/// Tear down a compose stack.
+///
+/// 1. Stops started service runs and removes project-scoped workdirs.
+/// 2. Writes `stop` file to signal the supervisor.
+/// 3. Removes the stack directory.
+pub fn compose_down(stack_dir: &Path) -> Result<()> {
+    cleanup_stack_services(stack_dir)?;
 
     let stop_file = stack_dir.join("stop");
     let _ = std::fs::write(&stop_file, b"");

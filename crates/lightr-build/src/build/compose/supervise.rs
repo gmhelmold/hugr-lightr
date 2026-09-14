@@ -7,6 +7,7 @@ use lightr_core::{LightrError, Result};
 use lightr_store::Store;
 use std::path::{Path, PathBuf};
 
+use super::down::cleanup_stack_services;
 use super::model::{ServiceSpec, StackSpec};
 use super::supervise_deps::{topo_order, wait_for_deps};
 use super::supervise_replicas::{instance_count, replica_run_names, sanitize_cwd_segment};
@@ -333,13 +334,29 @@ pub fn compose_supervise(stack_dir: &Path) -> Result<()> {
     // WP-CMP-NET: project namespaces each network id (`<project>_<network>`).
     let project = spec.project.clone();
 
-    let order = topo_order(&spec.services)?;
-    for &i in &order {
-        let svc = &spec.services[i];
-        if svc.eager && !svc.command.is_empty() {
-            wait_for_deps(stack_dir, svc)?;
-            start_service_detached(stack_dir, svc, &peers, &project)?;
+    let eager_start = (|| -> Result<()> {
+        let order = topo_order(&spec.services)?;
+        for &i in &order {
+            let svc = &spec.services[i];
+            if svc.eager && !svc.command.is_empty() {
+                wait_for_deps(stack_dir, svc)?;
+                start_service_detached(stack_dir, svc, &peers, &project)?;
+            }
         }
+        Ok(())
+    })();
+    if let Err(error) = eager_start {
+        // An eager dependency failure can happen after earlier services started.
+        // Clean only this stack's recorded runs/workdirs before supervisor exit.
+        if let Err(cleanup_error) = cleanup_stack_services(stack_dir) {
+            return Err(LightrError::InvalidManifest(format!(
+                "{error}; eager compose cleanup failed: {cleanup_error}"
+            )));
+        }
+        if stack_dir.exists() {
+            std::fs::remove_dir_all(stack_dir).map_err(LightrError::Io)?;
+        }
+        return Err(error);
     }
 
     let mut threads: Vec<std::thread::JoinHandle<()>> = Vec::new();
