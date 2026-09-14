@@ -17,7 +17,7 @@ use super::up::lightr_home_pub as lightr_home;
 #[cfg(test)]
 pub(crate) use super::model::DepCondition;
 #[cfg(test)]
-pub(crate) use super::supervise_deps::{dep_condition_met, dep_run_dir};
+pub(crate) use super::supervise_deps::{dep_condition_met, dep_run_dir, wait_for_deps_until};
 
 /// Prepare a clean per-service run directory and, if the service declares an
 /// `image_ref`, hydrate that ref's filesystem into it.
@@ -337,7 +337,7 @@ pub fn compose_supervise(stack_dir: &Path) -> Result<()> {
     for &i in &order {
         let svc = &spec.services[i];
         if svc.eager && !svc.command.is_empty() {
-            wait_for_deps(stack_dir, svc);
+            wait_for_deps(stack_dir, svc)?;
             start_service_detached(stack_dir, svc, &peers, &project)?;
         }
     }

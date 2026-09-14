@@ -190,6 +190,23 @@ fn dep_condition_completed_waits_on_exit_zero() {
 }
 
 #[test]
+fn unhealthy_dependency_timeout_refuses_dependent_start() {
+    // A health gate that never reaches `healthy` is an error, not permission to
+    // spawn its dependent after a timeout.
+    let stack = TempDir::new().unwrap();
+    let web = svc_with_deps("web", vec![("db", DepCondition::Healthy)]);
+    let err = wait_for_deps_until(
+        stack.path(),
+        &web,
+        std::time::Duration::ZERO,
+        std::time::Duration::ZERO,
+    )
+    .unwrap_err();
+    let message = err.to_string();
+    assert!(message.contains("refusing to start web"), "{message}");
+}
+
+#[test]
 fn dep_run_dir_reads_live_spec() {
     // dep_run_dir resolves a started dep's run dir from the live spec.json.
     let stack = TempDir::new().unwrap();

@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use super::model::{DepCondition, ServiceSpec, StackSpec};
 
 /// CMP-P0-DEPENDS: cap (and poll interval) for a `service_healthy`/`_completed`
-/// condition wait — fail-open after the cap so a never-healthy dep cannot wedge
-/// the whole stack (a hung supervisor would violate the no-daemon discipline).
+/// condition wait. An unsatisfied condition aborts the stack rather than starting
+/// its dependent without its declared prerequisite.
 const DEP_WAIT_TIMEOUT_SECS: u64 = 60;
 const DEP_POLL_INTERVAL_MS: u64 = 100;
 
@@ -92,16 +92,31 @@ pub(crate) fn dep_condition_met(run_dir: &Path, cond: DepCondition) -> bool {
     }
 }
 
-/// CMP-P0-DEPENDS: block until every `depends_on` edge of `svc` is satisfied (or
-/// the wait times out — fail-open so a wedged dep cannot hang the supervisor).
+/// CMP-P0-DEPENDS: block until every `depends_on` edge of `svc` is satisfied.
+///
+/// Times out fail-closed: an unsatisfied health or completion dependency returns
+/// an error, so its dependent is never spawned.
 /// Each dep's run dir is read live from `spec.json` (every `start_service_detached`
 /// records it there), so a dep started earlier in the topo order is observable.
-pub(crate) fn wait_for_deps(stack_dir: &Path, svc: &ServiceSpec) {
+pub(crate) fn wait_for_deps(stack_dir: &Path, svc: &ServiceSpec) -> Result<()> {
+    wait_for_deps_until(
+        stack_dir,
+        svc,
+        std::time::Duration::from_secs(DEP_WAIT_TIMEOUT_SECS),
+        std::time::Duration::from_millis(DEP_POLL_INTERVAL_MS),
+    )
+}
+
+pub(crate) fn wait_for_deps_until(
+    stack_dir: &Path,
+    svc: &ServiceSpec,
+    timeout: std::time::Duration,
+    poll_interval: std::time::Duration,
+) -> Result<()> {
     if svc.depends_on.is_empty() {
-        return;
+        return Ok(());
     }
-    let deadline =
-        std::time::Instant::now() + std::time::Duration::from_secs(DEP_WAIT_TIMEOUT_SECS);
+    let deadline = std::time::Instant::now() + timeout;
     for (dep_name, cond) in &svc.depends_on {
         loop {
             if let Some(run_dir) = dep_run_dir(stack_dir, dep_name) {
@@ -110,15 +125,15 @@ pub(crate) fn wait_for_deps(stack_dir: &Path, svc: &ServiceSpec) {
                 }
             }
             if std::time::Instant::now() >= deadline {
-                eprintln!(
-                    "lightr compose: depends_on wait for {dep_name} ({cond:?}) timed out; starting {} anyway",
+                return Err(LightrError::InvalidManifest(format!(
+                    "compose depends_on wait for {dep_name} ({cond:?}) timed out; refusing to start {}",
                     svc.name
-                );
-                break;
+                )));
             }
-            std::thread::sleep(std::time::Duration::from_millis(DEP_POLL_INTERVAL_MS));
+            std::thread::sleep(poll_interval);
         }
     }
+    Ok(())
 }
 
 /// Read a dependency's run dir from the live `spec.json` (populated by
