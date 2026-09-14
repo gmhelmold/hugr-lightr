@@ -10,9 +10,8 @@
 //! ```
 //!
 //! These dirs back [`lightr_engine::MountKind::NamedVolume`] (the VOL-1 type).
-//! Today nothing mounts a named volume yet (mount-wiring is VOL-8/9/10), so
-//! `in_use` is always false — see [`remove`] and the WP-VOL-5 note. We do NOT
-//! fake an in-use signal.
+//! Detached Linux runs publish durable active owners around child exec; [`remove`]
+//! and [`prune`] recover only positively-dead owners, then refuse nonempty state.
 //!
 //! `meta.json` is hand-encoded JSON (lightr-store is intentionally serde-free —
 //! cf. the refs/ac/imgmeta planes), with a single fixed, well-defined schema:

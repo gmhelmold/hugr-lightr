@@ -52,7 +52,7 @@ pub(super) fn supervise_native(
     // WP-RUNFLAGS: materialize the persisted `-v/--volume` host binds + `--tmpfs`
     // scratch dirs (the tagged `mounts2` shape) once for the run's lifetime, the
     // same way the synchronous memo path does. Empty ⇒ no-op (behaviour-preserving).
-    super::bindmat::materialize_mounts2(&cwd, &spec.mounts2)?;
+    super::bindmat::materialize_mounts2(&cwd, store.root(), &spec.mounts2)?;
 
     // WP-RC-WORKDIR: honor `-w`/`--workdir` as the child's cwd (Docker WORKDIR),
     // creating it if absent. `None` ⇒ `cwd` unchanged + no mkdir.

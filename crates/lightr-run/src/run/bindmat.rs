@@ -97,11 +97,12 @@ pub(super) fn materialize_tmpfs(cwd: &Path, tmpfs: &[String]) -> Result<()> {
 
 /// Materialize the persisted, tagged `mounts2` host binds + tmpfs dirs (the
 /// detached-supervisor path). Mirrors [`materialize_volumes`] + [`materialize_tmpfs`]
-/// over the on-disk shape. CAS-ref / named / anon variants are NOT this WP's
-/// scope (WP-VOL ring) — they are skipped here (left for a later WP), never
-/// silently mis-materialized. Empty ⇒ no-op (behaviour-preserving).
+/// over the on-disk shape. `store_root` is injected by the already-open supervisor
+/// store; never re-resolve it from process environment. CAS-ref / anon variants
+/// remain out of scope. Empty ⇒ no-op (behaviour-preserving).
 pub(super) fn materialize_mounts2(
     cwd: &Path,
+    store_root: &Path,
     mounts2: &[super::types::MountOnDisk2],
 ) -> Result<()> {
     use super::types::MountOnDisk2;
@@ -137,18 +138,14 @@ pub(super) fn materialize_mounts2(
                 std::fs::create_dir_all(&dest).map_err(LightrError::Io)?;
             }
             // WP-VOL ring (out of WP-RUNFLAGS scope): CAS-ref / named / anon.
-            MountOnDisk2::CasRef { .. }
-            | MountOnDisk2::AnonVolume { .. } => {}
+            MountOnDisk2::CasRef { .. } | MountOnDisk2::AnonVolume { .. } => {}
             MountOnDisk2::NamedVolume {
                 source,
                 target,
                 readonly,
             } => {
                 validate_mount_target(target)?;
-                let info = lightr_store::volume::inspect(
-                    &lightr_store::Store::default_root(),
-                    source,
-                )?;
+                let info = lightr_store::volume::inspect(store_root, source)?;
                 let dest = cwd.join(target);
                 remove_dest(&dest)?;
                 if let Some(parent) = dest.parent() {
