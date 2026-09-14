@@ -81,6 +81,37 @@ def expected_non_fault_outcome(events, id)
   fail_contract("#{id}: non-fault trace has no contract outcome")
 end
 
+def owner_identity(owner)
+  [owner["run_id"], owner["nonce"], owner["process_start_token"]]
+end
+
+def reduce_final_owners(initial_owners, events)
+  owners = initial_owners.map { |owner| owner.is_a?(Hash) ? owner.dup : owner }
+  events.each do |event|
+    case event["event"]
+    when "owner.active"
+      process = event.fetch("process")
+      owner = {
+        "phase" => "active",
+        "nonce" => event.fetch("nonce"),
+        "run_id" => event.fetch("run_id"),
+        "pid" => process.fetch("pid"),
+        "process_start_token" => process.fetch("start_token"),
+        "mount_id" => event.fetch("mount_id")
+      }
+      owners.reject! { |candidate| candidate.is_a?(Hash) && candidate["phase"] == "active" && candidate["nonce"] == owner["nonce"] }
+      owners << owner
+    when "owner.remove"
+      target = [event.fetch("run_id"), event.fetch("nonce"), event.fetch("process_start_token")]
+      index = owners.index { |candidate| candidate.is_a?(Hash) && candidate["phase"] == "active" && owner_identity(candidate) == target }
+      owners.delete_at(index) if index
+    when "recover.active"
+      owners.reject! { |candidate| candidate.is_a?(Hash) && candidate["phase"] == "active" && candidate["nonce"] == event.fetch("nonce") }
+    end
+  end
+  owners
+end
+
 schema_path, fixtures_path, goldens_path = ARGV
 if schema_path == "--self-test" && fixtures_path.nil? && goldens_path.nil?
   with_corpus do |schema, fixtures, goldens|
@@ -170,6 +201,23 @@ if schema_path == "--self-test" && fixtures_path.nil? && goldens_path.nil?
     File.write(fixtures, JSON.generate(mutated))
     fail_contract("self-test recovery registry identity mismatch passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
   end
+
+  with_corpus do |schema, fixtures, goldens|
+    mutated = load_json(fixtures)
+    terminal = mutated.fetch("fixtures").find { |fixture| fixture.fetch("id") == "terminal-registry-positive-death-proof" }.fetch("trace").find { |event| event["event"] == "registry.observe" }
+    terminal["run_id"] = "run-b"
+    File.write(fixtures, JSON.generate(mutated))
+    fail_contract("self-test recovery terminal observation identity mismatch passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
+  end
+
+  with_corpus do |schema, fixtures, goldens|
+    mutated = load_json(fixtures)
+    trace = mutated.fetch("fixtures").find { |fixture| fixture.fetch("id") == "shared-mounts" }.fetch("trace")
+    second_remove = trace.rindex { |event| event["event"] == "owner.remove" }
+    trace[second_remove] = trace.find { |event| event["event"] == "owner.remove" }.dup
+    File.write(fixtures, JSON.generate(mutated))
+    fail_contract("self-test shared duplicate owner removal passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
+  end
   puts "volume contract self-test: OK"
   exit 0
 end
@@ -209,7 +257,7 @@ fixtures.each do |fixture|
     fail_contract("#{id}: golden observations must be non-empty object") unless observations.is_a?(Hash) && !observations.empty?
     expected_outcome = expected_non_fault_outcome(events, id)
     fail_contract("#{id}: golden outcome expected #{expected_outcome}") unless golden.fetch("outcome") == expected_outcome
-    expected_owners = %w[released refused:spawn recovered].include?(expected_outcome) ? [] : fixture.fetch("initial").fetch("owners")
+    expected_owners = reduce_final_owners(fixture.fetch("initial").fetch("owners"), events)
     fail_contract("#{id}: golden volume existence mismatch") unless state.fetch("volume_exists") == fixture.fetch("initial").fetch("volume_exists")
     fail_contract("#{id}: golden final owners mismatch") unless state.fetch("owners") == expected_owners
     if id == "concurrent-rm-prune-refuse-active"
@@ -295,7 +343,9 @@ fixtures.each do |fixture|
   fail_contract("#{id}: recovery lacks matching full registry") unless registry
   required!(registry, schema.fetch("registry_required"), "#{id}: registry")
   fail_contract("#{id}: recovery registry identity mismatch") unless registry_matches_active_owner?(registry, owner)
-  terminal = events.any? { |event| event["event"] == "registry.observe" && event["nonce"] == nonce && event["result"] == "terminal" }
+  terminal_observations = events.select { |event| event["event"] == "registry.observe" && event["result"] == "terminal" }
+  terminal = terminal_observations.any? { |event| event["run_id"] == owner["run_id"] && event["nonce"] == nonce }
+  fail_contract("#{id}: recovery terminal observation identity mismatch") if !terminal_observations.empty? && !terminal
   token_proof = events.any? { |event| event["event"] == "registry.observe" && event["nonce"] == nonce && event["result"] == "readable" } && events.any? { |event| event["event"] == "process.observe" && event["pid"] == owner["pid"] && %w[absent mismatch].include?(event["result"]) }
   fail_contract("#{id}: recovery lacks positive death proof") unless terminal || token_proof
 end

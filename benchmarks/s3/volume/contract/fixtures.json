@@ -37,7 +37,7 @@
     {
       "id": "shared-mounts",
       "processes": 3,
-      "initial": {"volume_exists": true, "owners": ["active:nonce_a", "active:nonce_b"]},
+      "initial": {"volume_exists": true, "owners": [{"phase":"active","nonce":"nonce_a","run_id":"run-a","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a"}, {"phase":"active","nonce":"nonce_b","run_id":"run-b","pid":201,"process_start_token":"linux:201:21","mount_id":"mount-b"}]},
       "trace": [
         {"event":"owner.active","nonce":"nonce_a","run_id":"run-a","process":{"pid":200,"start_token":"linux:200:20"},"mount_id":"mount-a"},
         {"event":"registry.active","run_id":"run-a","nonce":"nonce_a","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a"},
