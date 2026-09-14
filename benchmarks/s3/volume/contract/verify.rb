@@ -62,6 +62,25 @@ def registry_matches_owner?(registry, owner)
     registry["mount_id"] == owner["mount_id"]
 end
 
+def registry_matches_active_owner?(registry, owner)
+  registry["run_id"] == owner["run_id"] &&
+    registry["nonce"] == owner["nonce"] &&
+    registry["pid"] == owner["pid"] &&
+    registry["process_start_token"] == owner["process_start_token"] &&
+    registry["mount_id"] == owner["mount_id"]
+end
+
+def expected_non_fault_outcome(events, id)
+  return "released" if events.any? { |event| event["event"] == "owner.remove" }
+  return "refused:spawn" if events.any? { |event| event["event"] == "pending.remove" }
+  return "recovered" if events.any? { |event| event["event"] == "recover.active" }
+  if events.any? { |event| %w[rm prune].include?(event["event"]) }
+    return "refused:ambiguous-registry" if events.any? { |event| event["event"] == "registry.observe" && event["result"] == "unreadable" }
+    return "refused:non-empty-owners"
+  end
+  fail_contract("#{id}: non-fault trace has no contract outcome")
+end
+
 schema_path, fixtures_path, goldens_path = ARGV
 if schema_path == "--self-test" && fixtures_path.nil? && goldens_path.nil?
   with_corpus do |schema, fixtures, goldens|
@@ -119,6 +138,38 @@ if schema_path == "--self-test" && fixtures_path.nil? && goldens_path.nil?
     File.write(goldens, JSON.generate(mutated))
     fail_contract("self-test concurrent lock serialization mismatch passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
   end
+
+  with_corpus do |schema, fixtures, goldens|
+    mutated = load_json(goldens)
+    golden = mutated.fetch("goldens").find { |candidate| candidate.fetch("id") == "normal-teardown" }
+    golden["outcome"] = "refused:non-empty-owners"
+    File.write(goldens, JSON.generate(mutated))
+    fail_contract("self-test normal outcome mismatch passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
+  end
+
+  with_corpus do |schema, fixtures, goldens|
+    mutated = load_json(goldens)
+    golden = mutated.fetch("goldens").find { |candidate| candidate.fetch("id") == "normal-teardown" }
+    golden.fetch("state")["owners"] = ["active:nonce_a"]
+    File.write(goldens, JSON.generate(mutated))
+    fail_contract("self-test normal final owners mismatch passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
+  end
+
+  with_corpus do |schema, fixtures, goldens|
+    mutated = load_json(fixtures)
+    loss = mutated.fetch("fixtures").find { |fixture| fixture.fetch("id") == "lock-loss-refuses-without-deletion" }.fetch("trace").find { |event| event["event"] == "lock.loss" }
+    loss["actor"] = "prune"
+    File.write(fixtures, JSON.generate(mutated))
+    fail_contract("self-test lock loss interval mismatch passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
+  end
+
+  with_corpus do |schema, fixtures, goldens|
+    mutated = load_json(fixtures)
+    registry = mutated.fetch("fixtures").find { |fixture| fixture.fetch("id") == "terminal-registry-positive-death-proof" }.fetch("initial").fetch("registries").first
+    registry["process_start_token"] = "linux:200:99"
+    File.write(fixtures, JSON.generate(mutated))
+    fail_contract("self-test recovery registry identity mismatch passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
+  end
   puts "volume contract self-test: OK"
   exit 0
 end
@@ -156,6 +207,11 @@ fixtures.each do |fixture|
     fail_contract("#{id}: golden state volume_exists must be boolean") unless [true, false].include?(state.fetch("volume_exists"))
     fail_contract("#{id}: golden state owners must be array") unless state.fetch("owners").is_a?(Array)
     fail_contract("#{id}: golden observations must be non-empty object") unless observations.is_a?(Hash) && !observations.empty?
+    expected_outcome = expected_non_fault_outcome(events, id)
+    fail_contract("#{id}: golden outcome expected #{expected_outcome}") unless golden.fetch("outcome") == expected_outcome
+    expected_owners = %w[released refused:spawn recovered].include?(expected_outcome) ? [] : fixture.fetch("initial").fetch("owners")
+    fail_contract("#{id}: golden volume existence mismatch") unless state.fetch("volume_exists") == fixture.fetch("initial").fetch("volume_exists")
+    fail_contract("#{id}: golden final owners mismatch") unless state.fetch("owners") == expected_owners
     if id == "concurrent-rm-prune-refuse-active"
       fail_contract("#{id}: golden must require lock_serialized=true") unless observations["lock_serialized"] == true
     end
@@ -188,7 +244,7 @@ fixtures.each do |fixture|
       fail_contract("#{id}: lock release without matching acquire") unless lock_holder == event.fetch("actor")
       lock_holder = nil
     when "lock.loss"
-      fail_contract("#{id}: lock loss mismatches held actor") if lock_holder && lock_holder != event.fetch("actor")
+      fail_contract("#{id}: lock loss outside matching lock interval") unless lock_holder == event.fetch("actor")
       lock_holder = nil
     when "rm", "prune"
       fail_contract("#{id}: #{event["event"]} outside matching lock interval") unless lock_holder == event.fetch("actor")
@@ -238,6 +294,7 @@ fixtures.each do |fixture|
   registry = registries&.find { |candidate| candidate.is_a?(Hash) && candidate["nonce"] == nonce && candidate["run_id"] == owner["run_id"] }
   fail_contract("#{id}: recovery lacks matching full registry") unless registry
   required!(registry, schema.fetch("registry_required"), "#{id}: registry")
+  fail_contract("#{id}: recovery registry identity mismatch") unless registry_matches_active_owner?(registry, owner)
   terminal = events.any? { |event| event["event"] == "registry.observe" && event["nonce"] == nonce && event["result"] == "terminal" }
   token_proof = events.any? { |event| event["event"] == "registry.observe" && event["nonce"] == nonce && event["result"] == "readable" } && events.any? { |event| event["event"] == "process.observe" && event["pid"] == owner["pid"] && %w[absent mismatch].include?(event["result"]) }
   fail_contract("#{id}: recovery lacks positive death proof") unless terminal || token_proof
