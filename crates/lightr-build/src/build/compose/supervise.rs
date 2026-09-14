@@ -298,6 +298,13 @@ fn start_one_instance(
 
 /// Compose supervisor -- called by `lightr __compose-supervise <stack_dir>`.
 pub fn compose_supervise(stack_dir: &Path) -> Result<()> {
+    compose_supervise_with_factory(stack_dir, &super::lazy::RealLazyFactory)
+}
+
+pub(crate) fn compose_supervise_with_factory(
+    stack_dir: &Path,
+    lazy_factory: &dyn super::lazy::LazyFactory,
+) -> Result<()> {
     use std::time::{Duration, Instant};
 
     let spec_path = stack_dir.join("spec.json");
@@ -365,6 +372,14 @@ pub fn compose_supervise(stack_dir: &Path) -> Result<()> {
         if svc_spec.eager {
             continue;
         }
+        // Snapshot MUST complete before any lazy listener binds. Unsupported and
+        // suspend errors abort this supervisor rather than permit a cold spawn.
+        let owner = lazy_factory.suspend(stack_dir, svc_spec)?;
+        let lazy = std::sync::Arc::new(std::sync::Mutex::new(super::lazy::LazyService::new(
+            owner,
+            stack_dir,
+            &svc_spec.name,
+        )?));
         for &(host_port, container_port) in &svc_spec.ports {
             let addr = format!("127.0.0.1:{host_port}");
             let listener = match std::net::TcpListener::bind(&addr) {
@@ -377,26 +392,27 @@ pub fn compose_supervise(stack_dir: &Path) -> Result<()> {
                     continue;
                 }
             };
-            let svc_clone = svc_spec.clone();
-            let stack_dir_clone = stack_dir.to_path_buf();
-            let peers_clone = peers.clone();
-            let project_clone = project.clone();
-            let jh = std::thread::spawn(move || {
-                if let Ok((inbound, _)) = listener.accept() {
-                    if let Err(e) = start_service_detached(
-                        &stack_dir_clone,
-                        &svc_clone,
-                        &peers_clone,
-                        &project_clone,
-                    ) {
-                        eprintln!("lightr compose: failed to start {}: {e}", svc_clone.name);
-                        return;
+            listener.set_nonblocking(true).map_err(LightrError::Io)?;
+            let lazy = std::sync::Arc::clone(&lazy);
+            let stop_file = stop_file.clone();
+            let deadline = start + ttl;
+            let jh = std::thread::spawn(move || loop {
+                if stop_file.exists() || std::time::Instant::now() >= deadline {
+                    break;
+                }
+                match listener.accept() {
+                    Ok((inbound, _)) => {
+                        if let Ok(mut lazy) = lazy.lock() {
+                            if let Err(e) = lazy.accept(inbound, container_port) {
+                                eprintln!("lightr compose: lazy VZ resume failed: {e}");
+                            }
+                        }
+                        break;
                     }
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                    let svc_addr = format!("127.0.0.1:{container_port}");
-                    if let Ok(outbound) = std::net::TcpStream::connect(&svc_addr) {
-                        super::supervise_net::proxy_bidirectional(inbound, outbound);
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(std::time::Duration::from_millis(50));
                     }
+                    Err(_) => break,
                 }
             });
             threads.push(jh);

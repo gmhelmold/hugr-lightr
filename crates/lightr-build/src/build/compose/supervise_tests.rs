@@ -90,6 +90,19 @@ fn prepare_service_cwd_empty_ref_is_clean() {
 }
 
 #[test]
+fn lazy_listener_cannot_fall_back_to_cold_detached_spawn() {
+    let src = include_str!("supervise.rs");
+    let lazy = &src[src.find("for svc_spec in &spec.services").unwrap()..];
+    assert!(lazy.contains("lazy_factory.suspend(stack_dir, svc_spec)?"));
+    assert!(!lazy.contains("start_service_detached("));
+    let mutated = lazy.replace(
+        "lazy_factory.suspend(stack_dir, svc_spec)?",
+        "start_service_detached(",
+    );
+    assert!(!mutated.contains("lazy_factory.suspend(stack_dir, svc_spec)?"));
+}
+
+#[test]
 fn topo_order_no_deps_preserves_declaration_order() {
     // Behavior-preserving: with no depends_on the order is 0..n (declaration).
     let services = vec![

@@ -11,6 +11,13 @@ pub struct SuspensionOwner {
     artifact_dir: PathBuf,
 }
 
+/// Non-secret suspended identity safe for compose state and receipts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SuspendedIdentity {
+    pub instance_id: String,
+    pub artifact_sha256: String,
+}
+
 impl SuspensionOwner {
     /// Suspend before listener bind. Unsupported remains typed data for caller.
     pub fn suspend(
@@ -37,6 +44,13 @@ impl SuspensionOwner {
     /// Call only after lazy listener consumed its accepted request payload.
     pub fn resume(&self) -> Result<ResumedInstance> {
         self.engine.resume(&self.artifact)
+    }
+
+    pub fn identity(&self) -> SuspendedIdentity {
+        SuspendedIdentity {
+            instance_id: self.artifact.instance_id.clone(),
+            artifact_sha256: self.artifact.artifact_sha256.clone(),
+        }
     }
 
     /// Removes snapshot/gate artifacts after retained engine is dropped.

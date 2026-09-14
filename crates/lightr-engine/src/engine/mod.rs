@@ -65,7 +65,7 @@ pub struct ResumedInstance {
 
 // ── Engine trait ──────────────────────────────────────────────────────────────
 
-pub trait Engine {
+pub trait Engine: Send {
     /// Spawn + wait; stdout/stderr inherit. Exit law: code or 128+signal.
     fn run(&self, spec: &ExecSpec) -> Result<i32>;
 
