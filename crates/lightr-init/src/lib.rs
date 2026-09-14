@@ -57,6 +57,17 @@ pub const STDERR_FILE: &str = "/.lightr-stderr";
 /// the interface up via `ip=dhcp` before PID1 runs, so the address is present.
 pub const IP_FILE: &str = "/.lightr-ip";
 
+/// Host-written gate metadata. This is distinct from [`CMD_FILE`] so a snapshot
+/// cannot accidentally treat command bytes as authorization to release it.
+pub const SUSPEND_GATE_FILE: &str = "/.lightr-suspend-gate.json";
+
+/// Guest-ready proof, fsynced by PID1 after mount/configuration and before any
+/// workload spawn. The host waits for this before pausing a VZ VM.
+pub const SUSPEND_READY_FILE: &str = "/.lightr-suspend-ready";
+
+/// Host release proof. PID1 accepts only the exact token from gate metadata.
+pub const SUSPEND_RELEASE_FILE: &str = "/.lightr-suspend-release";
+
 /// The PATH injected into the guest command's environment. SINGLE SOURCE OF
 /// TRUTH: the vz engine puts this in the command's env (InitSpec), and the
 /// vz-memo key (lightr-cli handler) hashes the SAME value — if these drifted, a
@@ -81,6 +92,32 @@ pub struct InitSpec {
     /// non-networked path — including the vz-memo path — is byte-identical.
     #[serde(default)]
     pub net: bool,
+    /// Snapshot gate is opt-in and serializes independently in
+    /// [`SUSPEND_GATE_FILE`]. A restored VM must still observe a token-matched
+    /// release before it spawns the workload.
+    #[serde(default)]
+    pub suspend_gate: bool,
+}
+
+/// Persisted authority for one snapshot gate. Host creates this before boot;
+/// guest never synthesizes it. Tokens are opaque and exact-match only.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SuspendGate {
+    pub version: u8,
+    pub instance_id: String,
+    pub release_token: String,
+}
+
+impl SuspendGate {
+    pub fn validate(&self) -> std::io::Result<()> {
+        if self.version != 1 || self.instance_id.is_empty() || self.release_token.is_empty() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "invalid suspend gate metadata",
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl InitSpec {
@@ -128,6 +165,9 @@ pub trait GuestOps {
     /// AFTER `enter_rootfs` (so the file lands on the rootfs share) and BEFORE
     /// `spawn_wait` (the command may block forever as a server).
     fn publish_ip(&mut self) -> std::io::Result<()>;
+    /// Fsync a guest-ready proof, then wait for the host's exact release token.
+    /// This must complete before `spawn_wait` is invoked.
+    fn await_suspend_release(&mut self) -> std::io::Result<()>;
 }
 
 /// The init lifecycle: mount rootfs → read the command → enter the rootfs →
@@ -155,6 +195,12 @@ pub fn run_init<M: GuestOps>(ops: &mut M, sink: &mut dyn ExitSink) -> std::io::R
     //     server blocks forever, so this must precede the spawn). Gated on net.
     if spec.net {
         ops.publish_ip()?;
+    }
+
+    // Snapshot protocol: readiness is durable before VZ pauses, while release is
+    // impossible until host validates/restores exact artifact after first payload.
+    if spec.suspend_gate {
+        ops.await_suspend_release()?;
     }
 
     // 4. Spawn and capture the REAL exit code. A spawn failure (command not

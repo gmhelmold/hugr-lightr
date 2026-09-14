@@ -108,6 +108,7 @@ mod vz_impl {
                 // DHCP IP to IP_FILE before spawning the (possibly long-running)
                 // command, so the host supervisor can forward published ports.
                 net: spec.net,
+                suspend_gate: false,
             };
             std::fs::write(&cmd_path, init_spec.to_json()).map_err(LightrError::Io)?;
 
