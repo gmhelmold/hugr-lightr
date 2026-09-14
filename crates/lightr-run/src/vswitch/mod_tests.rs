@@ -187,7 +187,7 @@ fn socket_smoke_dhcp_offer_round_trips() {
 
     // Hand the host end to the switch (transfers fd ownership).
     use std::os::unix::io::IntoRawFd;
-    sw.add_member(host.into_raw_fd(), client_mac, ip, "smoke")
+    sw.add_member(host.into_raw_fd(), client_mac, ip, "smoke", &[])
         .unwrap();
 
     // Send a DISCOVER from the guest end.
@@ -222,6 +222,7 @@ fn socket_smoke_unicast_between_two_members() {
         MAC_A,
         Ipv4Addr::new(10, 69, 0, 2),
         "a",
+        &[],
     )
     .unwrap();
     sw.add_member(
@@ -229,6 +230,7 @@ fn socket_smoke_unicast_between_two_members() {
         MAC_B,
         Ipv4Addr::new(10, 69, 0, 3),
         "b",
+        &[],
     )
     .unwrap();
 
@@ -260,6 +262,7 @@ fn remove_member_marks_port_unreachable() {
         MAC_A,
         Ipv4Addr::new(10, 69, 0, 9),
         "gone",
+        &[],
     )
     .unwrap();
     sw.remove_member("gone").unwrap();

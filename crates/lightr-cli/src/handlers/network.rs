@@ -28,7 +28,7 @@
 //! they are parallel-safe under `cargo test --workspace`.
 
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use lightr_core::LightrError;
 use lightr_run::name_validate;
@@ -36,27 +36,28 @@ use lightr_run::network::{MacAddr, Member, NetworkRegistry, Subnet};
 use serde::Serialize;
 
 use crate::cli::cmd::NetworkCmd;
-use crate::exit::{die_internal, die_lightr};
+use crate::exit::die_lightr;
 use crate::lightr_home;
 
 /// The predefined networks Docker always presents (and which a user can never
 /// create or remove): the default `bridge`, the host namespace `host`, and the
 /// no-network `none`. Their driver mirrors Docker's `network ls` shape.
 const PREDEFINED: &[(&str, &str)] = &[("bridge", "bridge"), ("host", "host"), ("none", "null")];
+const HOTPLUG_UNSUPPORTED: &str =
+    "network connect/disconnect unsupported: set --network when creating run";
 
 fn is_predefined(name: &str) -> bool {
     PREDEFINED.iter().any(|(n, _)| *n == name)
+}
+
+fn hotplug_refusal() -> LightrError {
+    LightrError::InvalidRef(HOTPLUG_UNSUPPORTED.to_string())
 }
 
 /// JSON-serialization failures are an internal invariant break, not user error;
 /// surface them as `Io` (exit-1) rather than collapsing to a usage error.
 fn json_err(e: serde_json::Error) -> LightrError {
     LightrError::Io(io::Error::other(e.to_string()))
-}
-
-/// `<home>/net/<name>` — the on-disk dir the registry owns for a network.
-fn net_dir(home: &Path, name: &str) -> PathBuf {
-    home.join("net").join(name)
 }
 
 // ── ls ──────────────────────────────────────────────────────────────────────
@@ -135,14 +136,7 @@ fn rm_one(home: &Path, name: &str) -> Result<(), LightrError> {
     }
     let reg = NetworkRegistry::open(home, &name.to_string())
         .map_err(|_| LightrError::RefNotFound(format!("network {name}")))?;
-    let members = reg.members().map_err(LightrError::Io)?;
-    if !members.is_empty() {
-        return Err(LightrError::Io(io::Error::other(format!(
-            "network {name} has active endpoints ({} member(s)); cannot remove",
-            members.len()
-        ))));
-    }
-    std::fs::remove_dir_all(net_dir(home, name)).map_err(LightrError::Io)?;
+    reg.remove().map_err(LightrError::Io)?;
     println!("{name}");
     Ok(())
 }
@@ -229,9 +223,7 @@ pub fn run(subcmd: NetworkCmd) -> i32 {
         NetworkCmd::Inspect { target, json: _ } => inspect(&home, &target),
         // Daemonless model: no live hot-plug. Honest usage-class (exit-2) error.
         NetworkCmd::Connect { .. } | NetworkCmd::Disconnect { .. } => {
-            return die_internal(
-                &"live network connect/disconnect not supported; set --network at run",
-            );
+            return die_lightr(&hotplug_refusal());
         }
     };
     match result {

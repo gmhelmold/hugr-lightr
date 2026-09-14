@@ -75,21 +75,33 @@ fn switch_lock_path(home: &Path, network_id: &str) -> PathBuf {
 
 // ── attach metadata: the member payload carried alongside the passed fd ───────
 //
-// Fixed layout: 6 MAC | 4 IP | 1 name-len | name bytes (matches the s6 spike,
-// the proven wire shape). Sent in the SAME SCM_RIGHTS message as host_fd so the
+// Layout: 6 MAC | 4 IP | 1 name-len | name | 1 alias-count |
+// (1 alias-len | alias)*. Sent in the SAME SCM_RIGHTS message as host_fd so the
 // switch never sees a torn attach.
 
-fn encode_meta(mac: [u8; 6], ip: Ipv4Addr, name: &str) -> Vec<u8> {
+fn encode_meta(mac: [u8; 6], ip: Ipv4Addr, name: &str, aliases: &[String]) -> Option<Vec<u8>> {
     let nb = name.as_bytes();
-    let mut v = Vec::with_capacity(11 + nb.len());
+    if nb.len() > u8::MAX as usize
+        || aliases.len() > u8::MAX as usize
+        || aliases.iter().any(|alias| alias.len() > u8::MAX as usize)
+    {
+        return None;
+    }
+    let alias_len: usize = aliases.iter().map(|alias| alias.len() + 1).sum();
+    let mut v = Vec::with_capacity(12 + nb.len() + alias_len);
     v.extend_from_slice(&mac);
     v.extend_from_slice(&ip.octets());
     v.push(nb.len() as u8);
     v.extend_from_slice(nb);
-    v
+    v.push(aliases.len() as u8);
+    for alias in aliases {
+        v.push(alias.len() as u8);
+        v.extend_from_slice(alias.as_bytes());
+    }
+    Some(v)
 }
 
-fn decode_meta(buf: &[u8]) -> Option<([u8; 6], Ipv4Addr, String)> {
+fn decode_meta(buf: &[u8]) -> Option<([u8; 6], Ipv4Addr, String, Vec<String>)> {
     if buf.len() < 11 {
         return None;
     }
@@ -97,8 +109,19 @@ fn decode_meta(buf: &[u8]) -> Option<([u8; 6], Ipv4Addr, String)> {
     mac.copy_from_slice(&buf[0..6]);
     let ip = Ipv4Addr::new(buf[6], buf[7], buf[8], buf[9]);
     let nlen = buf[10] as usize;
-    let name = String::from_utf8(buf.get(11..11 + nlen)?.to_vec()).ok()?;
-    Some((mac, ip, name))
+    let mut at = 11 + nlen;
+    let name = String::from_utf8(buf.get(11..at)?.to_vec()).ok()?;
+    let alias_count = *buf.get(at)? as usize;
+    at += 1;
+    let mut aliases = Vec::with_capacity(alias_count);
+    for _ in 0..alias_count {
+        let len = *buf.get(at)? as usize;
+        at += 1;
+        let alias = String::from_utf8(buf.get(at..at + len)?.to_vec()).ok()?;
+        at += len;
+        aliases.push(alias);
+    }
+    (at == buf.len()).then_some((mac, ip, name, aliases))
 }
 
 // ── flock election (S6 risk #2) ──────────────────────────────────────────────
@@ -157,7 +180,13 @@ pub fn attach(home: &Path, network_id: &str, member: &Member) -> io::Result<Owne
 
     // Fresh guest NIC pair. Keep `guest`; hand `host` to the switch.
     let (guest, host) = UnixDatagram::pair()?;
-    let meta = encode_meta(member.mac.0, member.ip, &member.name);
+    let meta =
+        encode_meta(member.mac.0, member.ip, &member.name, &member.aliases).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "network member metadata too large",
+            )
+        })?;
 
     // 1. Fast path: a live switch host is already serving — connect + pass.
     if let Ok(stream) = UnixStream::connect(&ctl) {
@@ -345,7 +374,7 @@ fn accept_loop(listener: &UnixListener, switch: &Arc<VSwitch>, stop: &AtomicBool
                     Ok(v) => v,
                     Err(_) => continue,
                 };
-                let Some((mac, ip, name)) = decode_meta(&meta) else {
+                let Some((mac, ip, name, aliases)) = decode_meta(&meta) else {
                     // SAFETY: close the orphaned fd so a bad attach cannot leak.
                     unsafe { libc::close(fd) };
                     continue;
@@ -354,7 +383,7 @@ fn accept_loop(listener: &UnixListener, switch: &Arc<VSwitch>, stop: &AtomicBool
                 // so even on a spawn failure there is nothing to close here. ACK
                 // only on success, so the member's `attach` returns exactly when
                 // its NIC is live (no caller-visible race).
-                if switch.add_member(fd, mac, ip, &name).is_ok() {
+                if switch.add_member(fd, mac, ip, &name, &aliases).is_ok() {
                     use std::io::Write;
                     let _ = conn.write_all(&[ATTACH_ACK]);
                 }
