@@ -22,7 +22,7 @@ const CONTROLS: &[ControlMap] = &[
         parser: "RunArgs.user",
         run_config: "user",
         exec_spec: Some("user"),
-        witness: "crates/lightr-cli/src/handlers/run/paths.rs::eff_user",
+        witness: "crates/lightr-cli/src/handlers/run/paths.rs::run_engine",
     },
     ControlMap {
         control: "hostname",
@@ -204,10 +204,6 @@ const CONTROLS: &[ControlMap] = &[
 
 fn resolve_witness(path: &str, symbol: &str) -> Result<(), String> {
     match (path, symbol) {
-        ("crates/lightr-cli/src/handlers/run/paths.rs", "eff_user") => {
-            let _ = super::super::paths::run_engine;
-            Ok(())
-        }
         ("crates/lightr-cli/src/handlers/run/paths.rs", "run_engine") => {
             let _ = super::super::paths::run_engine;
             Ok(())
@@ -442,6 +438,10 @@ fn cli_parser_lowers_all_security_controls_through_production_conversions() {
     assert_eq!(spec.limits.pids_max, Some(16));
     assert_eq!(spec.secrets.len(), 1);
     assert_eq!(spec.configs.len(), 1);
+    assert_eq!(runflags.tmpfs, ["/scratch"]);
+    assert_eq!(runflags.ulimit, ["nofile=64"]);
+    assert_eq!(rc.apparmor.as_deref(), Some("profile"));
+    assert_eq!(rc.seccomp.as_deref(), Some("profile.json"));
     assert!(health.build().is_some());
     assert!(net);
     assert_eq!(add_host, [("host".to_string(), "127.0.0.1".to_string())]);
