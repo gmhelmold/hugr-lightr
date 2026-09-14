@@ -90,9 +90,48 @@ or barrier failure refuses operation without deletion.
 
 ## Fixture Oracle
 
-`fixtures.json` defines operation traces. `goldens.json` maps every fixture ID
-to exact final owner and delete/refusal result. S3-5B tests must execute each
-trace in separate processes where stated by Sprint 03: normal teardown, shared
-mounts, failed spawn, SIGKILL owner, stale/PID-reused ledger, concurrent
-`rm`/`prune`. Tests must mutation-probe acquire, release, recovery, and refusal
-edges. Fixtures are protocol goldens, not current-runtime tests.
+`fixtures.json` is typed trace input. Every fixture has `initial`, a complete
+ordered `trace`, and optional terminal `fault`. References such as `nonce_a`
+resolve from top-level fixture values. `goldens.json` maps each fixture ID to
+exact operation outcome, final observable state, and required observations.
+
+Trace event grammar:
+
+| Event | Required fields | Meaning |
+| --- | --- | --- |
+| `lock.acquire` / `lock.release` / `lock.loss` | `actor` | Acquire, release, or lose volume lock. |
+| `owner.pending` | `nonce`, `coordinator` | Build pending candidate. |
+| `owner.active` | `nonce`, `run_id`, `process`, `mount_id` | Replace same-nonce pending candidate. |
+| `pending.remove` | `nonce` | Remove exact pending owner after failed spawn. |
+| `owner.remove` | `nonce`, `run_id`, `process_start_token` | Remove exact active owner. |
+| `write.tmp` | `owners` | Write complete candidate `owners.json.tmp`. |
+| `sync_all.tmp` | none | Sync tmp file after its write. |
+| `rename.owners` | none | Atomically replace `owners.json`; this linearizes candidate. |
+| `fsync.parent` | none | Sync directory after rename. |
+| `barrier.spawn` / `barrier.release` | `run_id` | Spawn pre-exec child or permit exec. |
+| `registry.active` / `registry.terminal` | `run_id`, `nonce` | Write matching run registry transition or terminal marker. |
+| `registry.sync` | `run_id` | Sync registry transition. |
+| `process.observe` | `pid`, `token`, `result` | Observe `absent`, `mismatch`, or `matching`. |
+| `registry.observe` | `run_id`, `nonce`, `result` | Observe `terminal`, `readable`, or `unreadable`. |
+| `recover.active` | `nonce` | Start recovery removal after positive death proof. |
+| `rm` / `prune` | none | Request deletion after lock, recovery, and owner snapshot. |
+| `fault` | `point`, `operation` | Inject named failure immediately after point; trace stops. |
+
+`owner.pending` and `owner.active` values are candidates only. They become
+durable only after ordered `write.tmp`, `sync_all.tmp`, `rename.owners`, and
+`fsync.parent`. `barrier.release` is invalid unless active owner plus matching
+registry transition are durable. `fault.point` is one of `lock.loss`,
+`sync_all.tmp`, `rename.owners`, `fsync.parent`, or `barrier.release`.
+
+An event immediately followed by `fault` is attempted and fails; it does not
+produce its normal durable postcondition. `rename.owners` remains linearized
+before a later `fsync.parent` fault.
+
+Every failure golden requires `outcome: "refused:<point>"`,
+`state.volume_exists: true`, and `observations.delete_attempted: false`.
+For parent-fsync failure, rename has already linearized empty owner state;
+volume still remains because caller must refuse deletion. Other durability
+failures retain pre-failure owners. S3-5B tests must execute traces in separate
+processes where stated by Sprint 03 and mutation-probe acquire, release,
+recovery, and refusal edges. Fixtures are protocol goldens, not current-runtime
+tests.

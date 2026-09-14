@@ -2,12 +2,17 @@
   "schema_version": 1,
   "contract": "S3 named-volume lifecycle v1",
   "goldens": [
-    {"id":"normal-teardown","owners":[],"rm":"allowed","prune":"allowed"},
-    {"id":"shared-mounts","owners":[],"rm":"allowed","prune":"allowed"},
-    {"id":"failed-spawn","owners":[],"rm":"allowed","prune":"allowed"},
-    {"id":"sigkill-owner-recovery","owners":[],"rm":"allowed","prune":"allowed"},
-    {"id":"pid-reused-ledger-recovery","owners":[],"rm":"allowed","prune":"allowed"},
-    {"id":"ambiguous-registry-refuses-rm-prune","owners":["nonce_a"],"rm":"refused:ambiguous-registry","prune":"refused:ambiguous-registry"},
-    {"id":"concurrent-rm-prune-refuse-active","owners":["nonce_a"],"rm":"refused:non-empty-owners","prune":"refused:non-empty-owners"}
+    {"id":"normal-teardown","outcome":"released","state":{"volume_exists":true,"owners":[]},"observations":{"lock_serialized":true,"linearization":"rename.owners","barrier_exec_after_active_registry":true,"terminal_before_release":true}},
+    {"id":"shared-mounts","outcome":"released","state":{"volume_exists":true,"owners":[]},"observations":{"shared_active_owners":2,"exact_release_only":true}},
+    {"id":"failed-spawn","outcome":"refused:spawn","state":{"volume_exists":true,"owners":[]},"observations":{"removed_exact_pending_nonce":true,"child_exec":false}},
+    {"id":"terminal-registry-positive-death-proof","outcome":"recovered","state":{"volume_exists":true,"owners":[]},"observations":{"registry_terminal_positive_death_proof":true}},
+    {"id":"pid-reused-token-positive-death-proof","outcome":"recovered","state":{"volume_exists":true,"owners":[]},"observations":{"registry_readable_matching":true,"process_start_token_mismatch_positive_death_proof":true}},
+    {"id":"ambiguous-registry-refuses-rm-prune","outcome":"refused:ambiguous-registry","state":{"volume_exists":true,"owners":["active:nonce_a"]},"observations":{"rm_refused":true,"prune_refused":true,"delete_attempted":false}},
+    {"id":"concurrent-rm-prune-refuse-active","outcome":"refused:non-empty-owners","state":{"volume_exists":true,"owners":["active:nonce_a"]},"observations":{"rm_refused":true,"prune_refused":true,"lock_serialized":true,"delete_attempted":false}},
+    {"id":"lock-loss-refuses-without-deletion","outcome":"refused:lock.loss","state":{"volume_exists":true,"owners":["active:nonce_a"]},"observations":{"fault":"lock.loss","delete_attempted":false}},
+    {"id":"sync-all-failure-refuses-without-deletion","outcome":"refused:sync_all.tmp","state":{"volume_exists":true,"owners":["active:nonce_a"]},"observations":{"fault":"sync_all.tmp","delete_attempted":false}},
+    {"id":"rename-failure-refuses-without-deletion","outcome":"refused:rename.owners","state":{"volume_exists":true,"owners":["active:nonce_a"]},"observations":{"fault":"rename.owners","delete_attempted":false}},
+    {"id":"parent-fsync-failure-refuses-without-deletion","outcome":"refused:fsync.parent","state":{"volume_exists":true,"owners":[]},"observations":{"fault":"fsync.parent","rename_linearized":true,"delete_attempted":false}},
+    {"id":"barrier-failure-refuses-without-deletion","outcome":"refused:barrier.release","state":{"volume_exists":true,"owners":["active:nonce_a"]},"observations":{"fault":"barrier.release","child_exec":false,"delete_attempted":false}}
   ]
 }
