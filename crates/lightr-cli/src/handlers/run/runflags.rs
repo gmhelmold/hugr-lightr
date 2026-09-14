@@ -20,6 +20,8 @@
 
 use lightr_run::{parse_v, MountKind, VolumeBind};
 
+use crate::cli::cmd::RunArgs;
+
 /// The WP-RUNFLAGS run flags as RAW clap values, bundled to keep `run()`'s arity
 /// flat. RUNTIME-ONLY — none of these enters the memo key.
 #[derive(Clone, Debug, Default)]
@@ -36,6 +38,23 @@ pub struct RawRunFlags {
     pub network_alias: Vec<String>,
     pub add_host: Vec<String>,
     pub dns: Vec<String>,
+}
+
+impl From<&RunArgs> for RawRunFlags {
+    fn from(args: &RunArgs) -> Self {
+        Self {
+            volume: args.volume.clone(),
+            tmpfs: args.tmpfs.clone(),
+            ulimit: args.ulimit.clone(),
+            name: args.name.clone(),
+            rm: args.rm,
+            entrypoint: args.entrypoint.clone(),
+            network: args.network.clone(),
+            network_alias: args.network_alias.clone(),
+            add_host: args.add_host.clone(),
+            dns: args.dns.clone(),
+        }
+    }
 }
 
 /// The resolved WP-RUNFLAGS config the handler lowers into `RunSpec`. `-v` parsed

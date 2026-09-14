@@ -11,6 +11,10 @@ use lightr_store::Store;
 use super::runflags::RunFlags;
 use super::RcConfig;
 
+#[cfg(test)]
+#[path = "policy_security_inventory_tests.rs"]
+mod security_inventory_tests;
+
 /// WP-#92: `--privileged` cannot be honestly enforced on the rootless `ns` engine
 /// (no real privilege in an unprivileged user namespace), so it is HONEST-ERRORED
 /// (exit 2) BEFORE any provisioning rather than silently recorded — a silent no-op
