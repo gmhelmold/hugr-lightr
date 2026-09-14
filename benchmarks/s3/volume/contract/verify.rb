@@ -238,6 +238,14 @@ if schema_path == "--self-test" && fixtures_path.nil? && goldens_path.nil?
     File.write(fixtures, JSON.generate(mutated))
     fail_contract("self-test recovery missing identity field passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
   end
+
+  with_corpus do |schema, fixtures, goldens|
+    mutated = load_json(fixtures)
+    readable = mutated.fetch("fixtures").find { |fixture| fixture.fetch("id") == "pid-reused-token-positive-death-proof" }.fetch("trace").find { |event| event["event"] == "registry.observe" && event["result"] == "readable" }
+    readable["run_id"] = "run-b"
+    File.write(fixtures, JSON.generate(mutated))
+    fail_contract("self-test recovery readable observation identity mismatch passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
+  end
   puts "volume contract self-test: OK"
   exit 0
 end
@@ -368,7 +376,10 @@ fixtures.each do |fixture|
   terminal_observations = events.select { |event| event["event"] == "registry.observe" && event["result"] == "terminal" }
   terminal = terminal_observations.any? { |event| event["run_id"] == owner["run_id"] && event["nonce"] == nonce }
   fail_contract("#{id}: recovery terminal observation identity mismatch") if !terminal_observations.empty? && !terminal
-  token_proof = events.any? { |event| event["event"] == "registry.observe" && event["nonce"] == nonce && event["result"] == "readable" } && events.any? { |event| event["event"] == "process.observe" && event["pid"] == owner["pid"] && %w[absent mismatch].include?(event["result"]) }
+  readable_observations = events.select { |event| event["event"] == "registry.observe" && event["result"] == "readable" }
+  readable = readable_observations.any? { |event| event["run_id"] == owner["run_id"] && event["nonce"] == nonce }
+  fail_contract("#{id}: recovery readable observation identity mismatch") if !readable_observations.empty? && !readable
+  token_proof = readable && events.any? { |event| event["event"] == "process.observe" && event["pid"] == owner["pid"] && %w[absent mismatch].include?(event["result"]) }
   fail_contract("#{id}: recovery lacks positive death proof") unless terminal || token_proof
 end
 
