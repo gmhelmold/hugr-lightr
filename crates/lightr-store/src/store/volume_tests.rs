@@ -422,3 +422,21 @@ fn activation_witness_failure_restores_exact_pending_owner() {
     let owners = read_owners(&root, "rollback", &lock).unwrap();
     assert_eq!(owners.owners, vec![pending]);
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn begin_owner_witness_failure_removes_just_written_pending() {
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "ghost", &[]).unwrap();
+    let run = home.join("run/r1");
+    fs::create_dir_all(run.join("volume-owner.json")).unwrap();
+    assert!(begin_owner(&root, "ghost", &run).is_err());
+    let lock = owner_lock(&root, "ghost").unwrap();
+    assert!(read_owners(&root, "ghost", &lock)
+        .unwrap()
+        .owners
+        .is_empty());
+}

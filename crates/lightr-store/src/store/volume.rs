@@ -323,7 +323,20 @@ pub fn begin_owner(root: &Path, name: &str, run_dir: &Path) -> Result<VolumeOwne
     };
     owners.owners.push(owner.clone());
     write_owners(root, name, &owners, &lock)?;
-    write_run_owner(run_dir, name, &owner, false)?;
+    if let Err(error) = write_run_owner(run_dir, name, &owner, false) {
+        // Witness publication failed after pending persistence. Remove only this
+        // nonce while retaining the same flock; never return a ghost pending that
+        // recovery cannot attribute to a run witness.
+        owners
+            .owners
+            .retain(|candidate| candidate.nonce() != owner.nonce());
+        if let Err(rollback) = write_owners(root, name, &owners, &lock) {
+            return Err(LightrError::InvalidRef(format!(
+                "{error}; named-volume pending rollback failed: {rollback}"
+            )));
+        }
+        return Err(error);
+    }
     Ok(owner)
 }
 
