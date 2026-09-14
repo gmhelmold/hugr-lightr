@@ -29,6 +29,13 @@ pub(super) fn supervise_native(
     store: &Store,
 ) -> Result<i32> {
     let cwd = PathBuf::from(&spec.cwd);
+    #[cfg(not(target_os = "linux"))]
+    if !named_volumes(spec).is_empty() {
+        return Err(LightrError::InvalidRef(
+            "named-volume runtime unsupported: atomic lock and stable process token required"
+                .to_string(),
+        ));
+    }
 
     // Hydrate mounts (same law as run_memoized), once for the run's lifetime.
     for m in &spec.mounts {
@@ -53,7 +60,10 @@ pub(super) fn supervise_native(
     // F-309 / WP-RC-4: load an optional healthcheck (probed on the monitor loop).
     let health_cfg = crate::healthcheck::load_for(dir)?;
 
-    run_supervisor_loop(dir, spec, &cwd, &run_cwd, policy, health_cfg, store.root())
+    #[cfg(unix)]
+    return run_supervisor_loop(dir, spec, &cwd, &run_cwd, policy, health_cfg, store.root());
+    #[cfg(windows)]
+    run_supervisor_loop(dir, spec, &cwd, &run_cwd, policy, health_cfg)
 }
 
 // FIX-#76 (godfile split): the per-concern setup helpers (`spawn_child`,
@@ -62,7 +72,9 @@ pub(super) fn supervise_native(
 // under the 400-line cap after the teardown-order fix.
 #[path = "supervise_native_setup.rs"]
 mod setup;
-use setup::{maybe_auto_remove, spawn_child, start_forwarders, ExecBarrier};
+use setup::{maybe_auto_remove, spawn_child, start_forwarders};
+#[cfg(unix)]
+use setup::ExecBarrier;
 
 fn named_volumes(spec: &SpecOnDisk) -> Vec<(String, String)> {
     spec.mounts2
