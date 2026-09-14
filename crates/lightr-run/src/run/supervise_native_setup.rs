@@ -77,9 +77,11 @@ pub(super) fn spawn_child(
     let argv = crate::run::bindmat::effective_argv(spec.entrypoint.as_deref(), &spec.command);
     #[cfg(unix)]
     let mut cmd = if let Some(barrier) = barrier {
-        let shim = std::env::var_os("LIGHTR_VOLUME_GATE_SHIM")
-            .map(std::path::PathBuf::from)
-            .unwrap_or(std::env::current_exe().map_err(LightrError::Io)?);
+        #[cfg(test)]
+        let override_path = std::env::var_os("LIGHTR_VOLUME_GATE_SHIM");
+        #[cfg(not(test))]
+        let override_path = None;
+        let shim = gate_shim_path(override_path).map_err(LightrError::Io)?;
         let mut shim = std::process::Command::new(shim);
         shim.arg("__volume_gate")
             .arg(barrier.read_fd().to_string())
@@ -130,6 +132,36 @@ pub(super) fn spawn_child(
     std::fs::write(dir.join("pid"), format!("{pid}")).map_err(LightrError::Io)?;
     std::fs::write(dir.join("status"), "running").map_err(LightrError::Io)?;
     Ok((child, pid))
+}
+
+#[cfg(unix)]
+fn gate_shim_path(
+    override_path: Option<std::ffi::OsString>,
+) -> std::io::Result<std::path::PathBuf> {
+    if let Some(path) = override_path {
+        return Ok(path.into());
+    }
+    std::env::current_exe()
+}
+
+#[cfg(all(test, unix))]
+mod gate_tests {
+    use super::gate_shim_path;
+
+    #[test]
+    fn production_selection_ignores_test_override() {
+        let selected = gate_shim_path(None).unwrap();
+        assert_eq!(selected, std::env::current_exe().unwrap());
+    }
+
+    #[test]
+    fn test_selection_uses_explicit_helper() {
+        let selected = gate_shim_path(Some("/tmp/lightr-volume-gate".into())).unwrap();
+        assert_eq!(
+            selected,
+            std::path::PathBuf::from("/tmp/lightr-volume-gate")
+        );
+    }
 }
 
 /// WP-RUNFLAGS: `--rm` — when the run's supervisor reaches its final exit, remove
