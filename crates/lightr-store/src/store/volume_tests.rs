@@ -166,6 +166,23 @@ fn meta_json_escapes_label_values() {
     );
 }
 
+#[test]
+fn run_owner_record_roundtrips_strict_owner_shape() {
+    let record = RunOwnerRecord {
+        volume: "data".to_string(),
+        owner: VolumeOwner::Active {
+            nonce: "a".repeat(64),
+            run_id: "run".to_string(),
+            pid: 42,
+            process_start_token: "linux:42:99".to_string(),
+            mount_id: "data:target".to_string(),
+        },
+        terminal: false,
+    };
+    let bytes = serde_json::to_vec(&record).unwrap();
+    assert_eq!(serde_json::from_slice::<RunOwnerRecord>(&bytes).unwrap(), record);
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn owner_pending_active_terminal_release_is_exact() {
