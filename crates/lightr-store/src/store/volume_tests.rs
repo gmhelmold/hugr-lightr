@@ -440,3 +440,114 @@ fn begin_owner_witness_failure_removes_just_written_pending() {
         .owners
         .is_empty());
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn recovery_refuses_each_active_witness_identity_mismatch() {
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "active", &[]).unwrap();
+    let run = home.join("run/r1");
+    let pending = begin_owner(&root, "active", &run).unwrap();
+    let active = activate_owner(
+        &root,
+        "active",
+        &run,
+        pending.nonce(),
+        "r1",
+        std::process::id() as i32,
+        "active:mounted",
+    )
+    .unwrap();
+    let VolumeOwner::Active {
+        nonce,
+        run_id,
+        pid,
+        process_start_token,
+        mount_id,
+    } = &active
+    else {
+        unreachable!()
+    };
+    let mismatches = vec![
+        VolumeOwner::Active {
+            nonce: nonce.clone(),
+            run_id: "other".to_string(),
+            pid: *pid,
+            process_start_token: process_start_token.clone(),
+            mount_id: mount_id.clone(),
+        },
+        VolumeOwner::Active {
+            nonce: "b".repeat(64),
+            run_id: run_id.clone(),
+            pid: *pid,
+            process_start_token: process_start_token.clone(),
+            mount_id: mount_id.clone(),
+        },
+        VolumeOwner::Active {
+            nonce: nonce.clone(),
+            run_id: run_id.clone(),
+            pid: pid.saturating_add(1),
+            process_start_token: process_start_token.clone(),
+            mount_id: mount_id.clone(),
+        },
+        VolumeOwner::Active {
+            nonce: nonce.clone(),
+            run_id: run_id.clone(),
+            pid: *pid,
+            process_start_token: "linux:bad:token".to_string(),
+            mount_id: mount_id.clone(),
+        },
+        VolumeOwner::Active {
+            nonce: nonce.clone(),
+            run_id: run_id.clone(),
+            pid: *pid,
+            process_start_token: process_start_token.clone(),
+            mount_id: "other:mount".to_string(),
+        },
+    ];
+    // Mutation proof: remove any exact active-field comparison and its case passes.
+    for witness in mismatches {
+        write_run_owner(&run, "active", &witness, false).unwrap();
+        assert!(recover(&root, "active", &home).is_err());
+        let lock = owner_lock(&root, "active").unwrap();
+        assert_eq!(
+            read_owners(&root, "active", &lock).unwrap().owners,
+            vec![active.clone()]
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn recovery_refuses_pending_coordinator_token_mismatch() {
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "pending", &[]).unwrap();
+    let run = home.join("run/r1");
+    let pending = begin_owner(&root, "pending", &run).unwrap();
+    let VolumeOwner::Pending {
+        nonce,
+        coordinator_pid,
+        ..
+    } = &pending
+    else {
+        unreachable!()
+    };
+    let witness = VolumeOwner::Pending {
+        nonce: nonce.clone(),
+        coordinator_pid: *coordinator_pid,
+        coordinator_start_token: "linux:bad:token".to_string(),
+    };
+    write_run_owner(&run, "pending", &witness, false).unwrap();
+    assert!(recover(&root, "pending", &home).is_err());
+    let lock = owner_lock(&root, "pending").unwrap();
+    assert_eq!(
+        read_owners(&root, "pending", &lock).unwrap().owners,
+        vec![pending]
+    );
+}
