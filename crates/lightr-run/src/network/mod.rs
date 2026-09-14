@@ -32,5 +32,6 @@ pub mod ipam;
 pub mod lib;
 pub mod vpn;
 
+pub use dns::DnsResolver;
 pub use registry::NetworkRegistry;
 pub use types::{MacAddr, Member, NetworkId, Subnet};

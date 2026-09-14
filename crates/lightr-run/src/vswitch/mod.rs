@@ -34,7 +34,7 @@ pub mod passfd;
 pub mod switch;
 pub mod switch_host;
 
-use crate::network::{NetworkId, Subnet};
+use crate::network::{DnsResolver, NetworkId, Subnet};
 use std::io;
 use std::net::Ipv4Addr;
 use std::os::unix::io::{FromRawFd, RawFd};
@@ -132,7 +132,7 @@ impl VSwitch {
     }
 
     /// Add a member: take ownership of the host end (`host_fd`) of its
-    /// socketpair, register it with its assigned MAC/IP/name for switching +
+    /// socketpair, register it with its assigned MAC/IP/name/aliases for switching +
     /// DHCP + DNS, and spawn its receive thread.
     pub fn add_member(
         &self,
@@ -140,6 +140,7 @@ impl VSwitch {
         mac: [u8; 6],
         ip: Ipv4Addr,
         name: &str,
+        aliases: &[String],
     ) -> std::io::Result<()> {
         // Wrap the host end of the socketpair. SAFETY: the caller transfers
         // ownership of `host_fd` (the host end of a VZ file-handle attachment);
@@ -164,11 +165,11 @@ impl VSwitch {
             port
         };
         self.shared.leases.lock().unwrap().insert(mac, ip);
-        self.shared
-            .names
-            .lock()
-            .unwrap()
-            .insert(name.to_ascii_lowercase(), ip);
+        let mut names = self.shared.names.lock().unwrap();
+        let resolver = DnsResolver;
+        for dns_name in resolver.member_names(name, aliases) {
+            names.insert(dns_name.to_ascii_lowercase(), ip);
+        }
 
         // Spawn the member's receive thread.
         let shared = Arc::clone(&self.shared);

@@ -15,6 +15,15 @@ use super::types::{Member, Subnet};
 pub struct DnsResolver;
 
 impl DnsResolver {
+    /// Names production switch must register for one spawn-time membership.
+    pub fn member_names<'a>(
+        &self,
+        name: &'a str,
+        aliases: &'a [String],
+    ) -> impl Iterator<Item = &'a str> {
+        std::iter::once(name).chain(aliases.iter().map(String::as_str))
+    }
+
     /// Resolve spawn-time membership names and aliases from registry snapshot.
     /// No record means no answer; callers must not substitute gateway address.
     pub fn resolve_member(&self, name: &str, members: &[Member]) -> Option<std::net::Ipv4Addr> {
@@ -89,5 +98,11 @@ mod tests {
             Some(Ipv4Addr::new(10, 69, 7, 2))
         );
         assert_eq!(resolver.resolve_member("missing", &[]), None);
+        assert_eq!(
+            resolver
+                .member_names("api", &["backend".to_string()])
+                .collect::<Vec<_>>(),
+            ["api", "backend"]
+        );
     }
 }

@@ -5,6 +5,7 @@
 //! under `cargo test` multi-threaded.
 
 use super::*;
+use crate::exit::error_exit_code;
 use lightr_run::network::NetworkRegistry;
 use tempfile::TempDir;
 
@@ -172,6 +173,11 @@ fn s3_network_connect_is_typed_refusal_exit_2() {
         container: "ctr1".to_string(),
     });
     assert_eq!(code, 2);
+    let error = hotplug_refusal();
+    assert!(
+        matches!(error, LightrError::InvalidRef(ref message) if message == "network connect/disconnect unsupported: set --network when creating run")
+    );
+    assert_eq!(error_exit_code(&error), 2);
 }
 
 #[test]
@@ -181,6 +187,11 @@ fn s3_network_disconnect_is_typed_refusal_exit_2() {
         container: "ctr1".to_string(),
     });
     assert_eq!(code, 2);
+    let error = hotplug_refusal();
+    assert!(
+        matches!(error, LightrError::InvalidRef(ref message) if message == "network connect/disconnect unsupported: set --network when creating run")
+    );
+    assert_eq!(error_exit_code(&error), 2);
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

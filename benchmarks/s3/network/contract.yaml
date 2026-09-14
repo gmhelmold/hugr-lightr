@@ -1,0 +1,13 @@
+schema_version: 1
+cases:
+  - id: registry-lifecycle
+    test: network::registry::tests::s3_network_registry_remove_refuses_member_then_removes_empty_network
+    outcome: locked-remove-refuses-live-member
+  - id: spawn-membership-dns-alias
+    test: vswitch::switch_host_tests::attach_forward_dhcp_dns_then_refcount_self_stop
+    outcome: alias-resolves-to-registry-ip
+  - id: hotplug-refusal
+    test: handlers::network::tests::s3_network_connect_is_typed_refusal_exit_2
+    error_class: InvalidRef
+    exit_code: 2
+    message: "network connect/disconnect unsupported: set --network when creating run"

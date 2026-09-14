@@ -35,11 +35,13 @@ fn fresh() -> (std::path::PathBuf, String) {
 fn meta_roundtrip() {
     let mac = [0x0a, 0x00, 0x00, 0x11, 0x22, 0x33];
     let ip = Ipv4Addr::new(10, 69, 7, 5);
-    let enc = encode_meta(mac, ip, "web");
-    let (m, i, n) = decode_meta(&enc).expect("decode");
+    let aliases = vec!["frontend".to_string()];
+    let enc = encode_meta(mac, ip, "web", &aliases).expect("encode");
+    let (m, i, n, got_aliases) = decode_meta(&enc).expect("decode");
     assert_eq!(m, mac);
     assert_eq!(i, ip);
     assert_eq!(n, "web");
+    assert_eq!(got_aliases, aliases);
 }
 
 #[test]
@@ -89,7 +91,7 @@ fn attach_forward_dhcp_dns_then_refcount_self_stop() {
     // Registry + members FIRST (refcount is lifecycle truth), THEN birth the host.
     let reg = NetworkRegistry::create(&home, &id).unwrap();
     let a = reg.join("a", &[], &[]).unwrap();
-    let b = reg.join("b", &[], &[]).unwrap();
+    let b = reg.join("b", &["backend".to_string()], &[]).unwrap();
 
     // Start the switch host on a thread (NOT a re-exec): the production body.
     let host_home = home.clone();
@@ -139,6 +141,15 @@ fn attach_forward_dhcp_dns_then_refcount_self_stop() {
         decode_dns_first_a(&buf[..n]),
         Some(b.ip),
         "DNS resolve mismatch"
+    );
+
+    let q = build_dns_query(a.mac.0, a.ip, "backend");
+    ga.send(&q).unwrap();
+    let n = recv_with_deadline(&ga, &mut buf).expect("DNS alias answer");
+    assert_eq!(
+        decode_dns_first_a(&buf[..n]),
+        Some(b.ip),
+        "DNS alias mismatch"
     );
 
     // PROOF 4: detach both → refcount 0 → host self-stops + reclaims ctl.sock.

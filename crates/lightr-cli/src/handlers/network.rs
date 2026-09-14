@@ -36,16 +36,22 @@ use lightr_run::network::{MacAddr, Member, NetworkRegistry, Subnet};
 use serde::Serialize;
 
 use crate::cli::cmd::NetworkCmd;
-use crate::exit::{die_internal, die_lightr};
+use crate::exit::die_lightr;
 use crate::lightr_home;
 
 /// The predefined networks Docker always presents (and which a user can never
 /// create or remove): the default `bridge`, the host namespace `host`, and the
 /// no-network `none`. Their driver mirrors Docker's `network ls` shape.
 const PREDEFINED: &[(&str, &str)] = &[("bridge", "bridge"), ("host", "host"), ("none", "null")];
+const HOTPLUG_UNSUPPORTED: &str =
+    "network connect/disconnect unsupported: set --network when creating run";
 
 fn is_predefined(name: &str) -> bool {
     PREDEFINED.iter().any(|(n, _)| *n == name)
+}
+
+fn hotplug_refusal() -> LightrError {
+    LightrError::InvalidRef(HOTPLUG_UNSUPPORTED.to_string())
 }
 
 /// JSON-serialization failures are an internal invariant break, not user error;
@@ -217,9 +223,7 @@ pub fn run(subcmd: NetworkCmd) -> i32 {
         NetworkCmd::Inspect { target, json: _ } => inspect(&home, &target),
         // Daemonless model: no live hot-plug. Honest usage-class (exit-2) error.
         NetworkCmd::Connect { .. } | NetworkCmd::Disconnect { .. } => {
-            return die_internal(
-                &"live network connect/disconnect not supported; set --network at run",
-            );
+            return die_lightr(&hotplug_refusal());
         }
     };
     match result {
