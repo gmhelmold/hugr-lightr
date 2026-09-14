@@ -98,30 +98,26 @@ impl LazyFactory for RealLazyFactory {
 }
 
 pub(crate) struct LazyService {
-    owner: Box<dyn LazyOwner>,
+    owner: std::sync::Mutex<Box<dyn LazyOwner>>,
     stack_dir: PathBuf,
     service: String,
-    resumed: Option<ResumedInstance>,
+    resumed: std::sync::Mutex<Option<ResumedInstance>>,
 }
 
 impl LazyService {
     pub(crate) fn new(owner: Box<dyn LazyOwner>, stack_dir: &Path, service: &str) -> Result<Self> {
         let identity = owner.identity();
         let this = Self {
-            owner,
+            owner: std::sync::Mutex::new(owner),
             stack_dir: stack_dir.to_path_buf(),
             service: service.to_string(),
-            resumed: None,
+            resumed: std::sync::Mutex::new(None),
         };
         this.write_state("suspended", &identity, None, None, None)?;
         Ok(this)
     }
 
-    pub(crate) fn accept(
-        &mut self,
-        mut inbound: std::net::TcpStream,
-        target_port: u16,
-    ) -> Result<()> {
+    pub(crate) fn accept(&self, mut inbound: std::net::TcpStream, target_port: u16) -> Result<()> {
         let accepted_at = now_ms();
         inbound
             .set_read_timeout(Some(Duration::from_secs(30)))
@@ -132,7 +128,11 @@ impl LazyService {
             return Ok(());
         }
         let first_byte_at = now_ms();
-        let identity = self.owner.identity();
+        let identity = self
+            .owner
+            .lock()
+            .expect("lazy owner mutex poisoned")
+            .identity();
         self.write_state(
             "resuming",
             &identity,
@@ -140,14 +140,20 @@ impl LazyService {
             Some(accepted_at),
             Some(first_byte_at),
         )?;
-        let resumed = match &self.resumed {
+        let mut retained = self.resumed.lock().expect("lazy resumed mutex poisoned");
+        let resumed = match &*retained {
             Some(instance) => instance.clone(),
             None => {
-                let instance = self.owner.resume()?;
-                self.resumed = Some(instance.clone());
+                let instance = self
+                    .owner
+                    .lock()
+                    .expect("lazy owner mutex poisoned")
+                    .resume()?;
+                *retained = Some(instance.clone());
                 instance
             }
         };
+        drop(retained);
         let resumed_at = now_ms();
         self.write_state(
             "running",
@@ -163,10 +169,19 @@ impl LazyService {
             first_byte_at,
             resumed_at,
         )?;
-        let guest_ip = self.owner.guest_ip()?;
+        let guest_ip = self
+            .owner
+            .lock()
+            .expect("lazy owner mutex poisoned")
+            .guest_ip()?;
+        let guest_addr = format!("{guest_ip}:{target_port}")
+            .parse()
+            .map_err(|error| {
+                LightrError::InvalidRef(format!("invalid VZ guest address: {error}"))
+            })?;
         let deadline = std::time::Instant::now() + Duration::from_secs(30);
         let mut outbound = loop {
-            match std::net::TcpStream::connect((guest_ip.as_str(), target_port)) {
+            match std::net::TcpStream::connect_timeout(&guest_addr, Duration::from_millis(250)) {
                 Ok(stream) => break stream,
                 Err(error) if std::time::Instant::now() < deadline => {
                     std::thread::sleep(Duration::from_millis(50));

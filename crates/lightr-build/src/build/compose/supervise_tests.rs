@@ -103,6 +103,16 @@ fn lazy_listener_cannot_fall_back_to_cold_detached_spawn() {
 }
 
 #[test]
+fn lazy_listener_keeps_accepting_until_ttl_or_stop() {
+    let src = include_str!("supervise.rs");
+    let lazy = &src[src.find("for svc_spec in &spec.services").unwrap()..];
+    assert!(lazy.contains("std::thread::spawn(move || loop"));
+    assert!(lazy.contains("stop_file.exists() || std::time::Instant::now() >= deadline"));
+    assert!(lazy.contains("let lazy = std::sync::Arc::clone(&lazy);"));
+    assert!(lazy.contains("lazy.accept(inbound, container_port)"));
+}
+
+#[test]
 fn topo_order_no_deps_preserves_declaration_order() {
     // Behavior-preserving: with no depends_on the order is 0..n (declaration).
     let services = vec![

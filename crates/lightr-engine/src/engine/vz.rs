@@ -110,6 +110,26 @@ mod vz_impl {
         }
     }
 
+    struct SessionDestroyGuard(Option<u64>);
+
+    impl SessionDestroyGuard {
+        fn new(handle: u64) -> Self {
+            Self(Some(handle))
+        }
+
+        fn dismiss(&mut self) {
+            self.0 = None;
+        }
+    }
+
+    impl Drop for SessionDestroyGuard {
+        fn drop(&mut self) {
+            if let Some(handle) = self.0 {
+                unsafe { lightr_vz_session_destroy(handle) };
+            }
+        }
+    }
+
     impl Engine for VzEngine {
         fn kind(&self) -> crate::engine::EngineKind {
             crate::engine::EngineKind::Vz
@@ -352,24 +372,22 @@ mod vz_impl {
                 });
             }
             vz_status(created, "session create")?;
+            // Every failure after create must remove Swift global session state.
+            let mut destroy_guard = SessionDestroyGuard::new(handle);
             vz_status(unsafe { lightr_vz_session_start(handle) }, "session start")?;
             wait_for_file(&ready_path, "guest suspend readiness")?;
-            let saved = unsafe { lightr_vz_session_pause_save(handle, state_c.as_ptr()) };
-            if let Err(error) = vz_status(saved, "pause/save") {
-                unsafe { lightr_vz_session_stop(handle) };
-                unsafe { lightr_vz_session_destroy(handle) };
-                return Err(error);
-            }
-            if let Err(error) = vz_status(unsafe { lightr_vz_session_stop(handle) }, "stop") {
-                unsafe { lightr_vz_session_destroy(handle) };
-                return Err(error);
-            }
+            vz_status(
+                unsafe { lightr_vz_session_pause_save(handle, state_c.as_ptr()) },
+                "pause/save",
+            )?;
+            vz_status(unsafe { lightr_vz_session_stop(handle) }, "stop")?;
             *self.session.lock().expect("vz session mutex poisoned") = Some(RetainedSession {
                 handle,
                 rootfs: rootfs.to_path_buf(),
                 release_token: release_token.clone(),
                 config_sha256: config_sha256.clone(),
             });
+            destroy_guard.dismiss();
             Ok(SuspendResume::Suspended(SuspendedArtifact {
                 instance_id,
                 artifact_sha256: lightr_core::Digest::of_file(&state_path)?.to_hex(),
@@ -741,9 +759,34 @@ mod tests {
                 "missing frozen VZ ABI symbol: {symbol}"
             );
         }
-        assert!(shim.contains("saveMachineStateToURL"));
-        assert!(shim.contains("restoreMachineStateFromURL"));
+        assert!(shim.contains("session.vm.pause(completionHandler:"));
+        assert!(shim.contains("saveMachineStateTo(url:"));
+        assert!(shim.contains("completionHandler: { (error: Error?) in"));
+        assert!(shim.contains("restoreMachineStateFrom(url:"));
         assert!(shim.contains("#if !arch(arm64)"));
+    }
+
+    #[test]
+    fn legacy_run_stays_independent_from_arm_only_session_abi() {
+        let shim = include_str!("../../shim/vz.swift");
+        let legacy = &shim[..shim
+            .find("// MARK: - Frozen retained-session C ABI")
+            .unwrap()];
+        assert!(legacy.contains("@_cdecl(\"lightr_vz_run\")"));
+        assert!(!legacy.contains("lightr_vz_session_create"));
+    }
+
+    #[test]
+    fn created_session_has_raii_destroy_until_retained_owner_takes_it() {
+        let src = include_str!("vz.rs");
+        let suspend = &src[src.find("fn suspend(").unwrap()..src.find("fn resume(").unwrap()];
+        let create = suspend.find("lightr_vz_session_create").unwrap();
+        let guard = suspend.find("SessionDestroyGuard::new(handle)").unwrap();
+        let retain = suspend.find("Some(RetainedSession {").unwrap();
+        let dismiss = suspend.find("destroy_guard.dismiss()").unwrap();
+        assert!(create < guard && guard < retain && retain < dismiss);
+        let shim = include_str!("../../shim/vz.swift");
+        assert!(shim.contains("sessions.removeValue(forKey: handle)"));
     }
 
     #[test]

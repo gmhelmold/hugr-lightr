@@ -375,11 +375,11 @@ pub(crate) fn compose_supervise_with_factory(
         // Snapshot MUST complete before any lazy listener binds. Unsupported and
         // suspend errors abort this supervisor rather than permit a cold spawn.
         let owner = lazy_factory.suspend(stack_dir, svc_spec)?;
-        let lazy = std::sync::Arc::new(std::sync::Mutex::new(super::lazy::LazyService::new(
+        let lazy = std::sync::Arc::new(super::lazy::LazyService::new(
             owner,
             stack_dir,
             &svc_spec.name,
-        )?));
+        )?);
         for &(host_port, container_port) in &svc_spec.ports {
             let addr = format!("127.0.0.1:{host_port}");
             let listener = match std::net::TcpListener::bind(&addr) {
@@ -402,11 +402,12 @@ pub(crate) fn compose_supervise_with_factory(
                 }
                 match listener.accept() {
                     Ok((inbound, _)) => {
-                        if let Ok(mut lazy) = lazy.lock() {
+                        let lazy = std::sync::Arc::clone(&lazy);
+                        std::thread::spawn(move || {
                             if let Err(e) = lazy.accept(inbound, container_port) {
                                 eprintln!("lightr compose: lazy VZ resume failed: {e}");
                             }
-                        }
+                        });
                     }
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                         std::thread::sleep(std::time::Duration::from_millis(50));
