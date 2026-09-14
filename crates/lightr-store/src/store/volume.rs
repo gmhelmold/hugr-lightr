@@ -464,14 +464,25 @@ fn recover_locked(root: &Path, name: &str, home: &Path, lock: &OwnerLock) -> Res
             } => {
                 let run_dir = home.join("run").join(run_id);
                 let record = read_run_owner(&run_dir).map_err(|_| ambiguous(name))?;
-                if record.volume != name || record.owner != *owner {
+                if record.volume != name {
                     return Err(ambiguous(name));
                 }
                 let terminal = record.terminal
                     && fs::read_to_string(run_dir.join("status"))
                         .map(|status| status.trim_start().starts_with("exited "))
                         .unwrap_or(false);
-                if terminal || process_dead(*pid, process_start_token)? {
+                let interrupted_activation = matches!(
+                    &record.owner,
+                    VolumeOwner::Pending { nonce, .. } if nonce == owner.nonce()
+                );
+                if record.owner != *owner && !interrupted_activation {
+                    return Err(ambiguous(name));
+                }
+                // Owners v1 linearizes active before its run witness. A pending
+                // same-nonce witness is that one interrupted transaction, never
+                // authority to release a live child.
+                if (record.owner == *owner && terminal) || process_dead(*pid, process_start_token)?
+                {
                     continue;
                 }
                 keep.push(owner.clone());
@@ -481,14 +492,13 @@ fn recover_locked(root: &Path, name: &str, home: &Path, lock: &OwnerLock) -> Res
                 coordinator_pid,
                 coordinator_start_token,
             } => {
-                let record = find_pending_witness(home, name, nonce)?;
                 let active_same_nonce = owners.owners.iter().any(|candidate| {
                     matches!(candidate, VolumeOwner::Active { nonce: active, .. } if active == nonce)
                 });
-                if record.owner != *owner
-                    || active_same_nonce
-                    || !process_dead(*coordinator_pid, coordinator_start_token)?
-                {
+                // Pending precedes its run witness. A dead coordinator plus no
+                // same-nonce active owner proves this unpublished transaction
+                // cannot acquire a child later; no witness is required.
+                if active_same_nonce || !process_dead(*coordinator_pid, coordinator_start_token)? {
                     keep.push(owner.clone());
                 }
             }
@@ -503,25 +513,6 @@ fn recover_locked(root: &Path, name: &str, home: &Path, lock: &OwnerLock) -> Res
 
 fn ambiguous(name: &str) -> LightrError {
     LightrError::InvalidRef(format!("volume {name}: owner recovery ambiguous"))
-}
-
-fn find_pending_witness(home: &Path, volume: &str, nonce: &str) -> Result<RunOwnerRecord> {
-    let runs = fs::read_dir(home.join("run")).map_err(|_| ambiguous(volume))?;
-    let mut matched = None;
-    for entry in runs {
-        let entry = entry.map_err(|_| ambiguous(volume))?;
-        let record = match read_run_owner(&entry.path()) {
-            Ok(record) => record,
-            Err(_) => continue,
-        };
-        if record.volume == volume
-            && record.owner.nonce() == nonce
-            && matched.replace(record).is_some()
-        {
-            return Err(ambiguous(volume));
-        }
-    }
-    matched.ok_or_else(|| ambiguous(volume))
 }
 
 #[cfg(target_os = "linux")]
