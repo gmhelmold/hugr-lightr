@@ -385,6 +385,93 @@ pub fn release_owner(root: &Path, name: &str, run_dir: &Path) -> Result<()> {
     write_owners(root, name, &owners, &lock)
 }
 
+/// Recover only owners with positive death proof. Any missing, malformed, or
+/// mismatched run witness is ambiguity: no owner is deleted and `rm`/`prune`
+/// callers receive refusal.
+pub fn recover(root: &Path, name: &str, home: &Path) -> Result<()> {
+    let lock = owner_lock(root, name)?;
+    let mut owners = read_owners(root, name, &lock)?;
+    let mut keep = Vec::with_capacity(owners.owners.len());
+    for owner in &owners.owners {
+        match owner {
+            VolumeOwner::Active {
+                nonce: _,
+                run_id,
+                pid,
+                process_start_token,
+                ..
+            } => {
+                let run_dir = home.join("run").join(run_id);
+                let record = read_run_owner(&run_dir).map_err(|_| ambiguous(name))?;
+                if record.volume != name || record.owner != *owner {
+                    return Err(ambiguous(name));
+                }
+                let terminal = record.terminal
+                    && fs::read_to_string(run_dir.join("status"))
+                        .map(|status| status.trim_start().starts_with("exited "))
+                        .unwrap_or(false);
+                if terminal || process_dead(*pid, process_start_token)? {
+                    continue;
+                }
+                keep.push(owner.clone());
+            }
+            VolumeOwner::Pending {
+                nonce,
+                coordinator_pid,
+                coordinator_start_token,
+            } => {
+                let record = find_pending_witness(home, name, nonce)?;
+                if record.owner != *owner || !process_dead(*coordinator_pid, coordinator_start_token)? {
+                    keep.push(owner.clone());
+                }
+            }
+        }
+    }
+    if keep != owners.owners {
+        owners.owners = keep;
+        write_owners(root, name, &owners, &lock)?;
+    }
+    Ok(())
+}
+
+fn ambiguous(name: &str) -> LightrError {
+    LightrError::InvalidRef(format!("volume {name}: owner recovery ambiguous"))
+}
+
+fn find_pending_witness(home: &Path, volume: &str, nonce: &str) -> Result<RunOwnerRecord> {
+    let runs = fs::read_dir(home.join("run")).map_err(|_| ambiguous(volume))?;
+    let mut matched = None;
+    for entry in runs {
+        let entry = entry.map_err(|_| ambiguous(volume))?;
+        let record = match read_run_owner(&entry.path()) {
+            Ok(record) => record,
+            Err(_) => continue,
+        };
+        if record.volume == volume && record.owner.nonce() == nonce {
+            if matched.replace(record).is_some() {
+                return Err(ambiguous(volume));
+            }
+        }
+    }
+    matched.ok_or_else(|| ambiguous(volume))
+}
+
+#[cfg(target_os = "linux")]
+fn process_dead(pid: i32, token: &str) -> Result<bool> {
+    match process_start_token(pid) {
+        Ok(observed) => Ok(observed != token),
+        Err(LightrError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
+        Err(_) => Err(LightrError::InvalidRef("process observation ambiguous".to_string())),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn process_dead(_pid: i32, _token: &str) -> Result<bool> {
+    Err(LightrError::InvalidRef(
+        "named-volume recovery unsupported: no stable process start token".to_string(),
+    ))
+}
+
 fn run_owner_path(run_dir: &Path) -> PathBuf {
     run_dir.join("volume-owner.json")
 }
@@ -510,6 +597,10 @@ pub fn remove(root: &Path, name: &str, in_use: bool) -> Result<()> {
     if in_use {
         return Err(LightrError::InvalidRef(format!("volume is in use: {name}")));
     }
+    let home = root.parent().ok_or_else(|| {
+        LightrError::InvalidRef(format!("volume {name}: owner recovery ambiguous"))
+    })?;
+    recover(root, name, home)?;
     let lock = owner_lock(root, name)?;
     let owners = read_owners(root, name, &lock)?;
     if !owners.owners.is_empty() {

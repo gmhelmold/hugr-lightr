@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use super::ctl::ctl_sock_path;
 use super::memo::validate_mount_target;
 use super::respawn;
-use super::types::SpecOnDisk;
+use super::types::{MountOnDisk2, SpecOnDisk};
 use crate::restart::RestartPolicy;
 
 pub(super) fn supervise_native(
@@ -53,7 +53,7 @@ pub(super) fn supervise_native(
     // F-309 / WP-RC-4: load an optional healthcheck (probed on the monitor loop).
     let health_cfg = crate::healthcheck::load_for(dir)?;
 
-    run_supervisor_loop(dir, spec, &cwd, &run_cwd, policy, health_cfg)
+    run_supervisor_loop(dir, spec, &cwd, &run_cwd, policy, health_cfg, store.root())
 }
 
 // FIX-#76 (godfile split): the per-concern setup helpers (`spawn_child`,
@@ -62,7 +62,17 @@ pub(super) fn supervise_native(
 // under the 400-line cap after the teardown-order fix.
 #[path = "supervise_native_setup.rs"]
 mod setup;
-use setup::{maybe_auto_remove, spawn_child, start_forwarders};
+use setup::{maybe_auto_remove, spawn_child, start_forwarders, ExecBarrier};
+
+fn named_volumes(spec: &SpecOnDisk) -> Vec<(String, String)> {
+    spec.mounts2
+        .iter()
+        .filter_map(|mount| match mount {
+            MountOnDisk2::NamedVolume { source, target, .. } => Some((source.clone(), target.clone())),
+            _ => None,
+        })
+        .collect()
+}
 
 #[cfg(unix)]
 fn run_supervisor_loop(
@@ -72,6 +82,7 @@ fn run_supervisor_loop(
     run_cwd: &std::path::Path,
     policy: RestartPolicy,
     health_cfg: Option<crate::healthcheck::Healthcheck>,
+    volume_root: &std::path::Path,
 ) -> Result<i32> {
     use std::io::{BufRead, BufReader, Write};
     use std::os::unix::net::UnixListener;
@@ -98,8 +109,48 @@ fn run_supervisor_loop(
     let mut stopped = false;
     let mut restarts_done: u32 = 0;
 
+    let volumes = named_volumes(spec);
     let final_exit = 'restart: loop {
-        let (mut child, child_pid) = spawn_child(dir, spec, run_cwd)?;
+        let mut pending = Vec::new();
+        for (name, _) in &volumes {
+            match lightr_store::volume::begin_owner(volume_root, name, dir) {
+                Ok(owner) => pending.push((name.clone(), owner)),
+                Err(error) => {
+                    for (prior, owner) in pending {
+                        let _ = lightr_store::volume::abandon_pending(volume_root, &prior, owner.nonce());
+                    }
+                    return Err(error);
+                }
+            }
+        }
+        let barrier = (!pending.is_empty()).then(ExecBarrier::new).transpose()?;
+        let (mut child, child_pid) = match spawn_child(dir, spec, run_cwd, barrier.as_ref()) {
+            Ok(child) => child,
+            Err(error) => {
+                for (name, owner) in pending {
+                    let _ = lightr_store::volume::abandon_pending(volume_root, &name, owner.nonce());
+                }
+                return Err(error);
+            }
+        };
+        for ((name, target), (_, owner)) in volumes.iter().zip(&pending) {
+            let mount_id = format!("{name}:{target}");
+            if let Err(error) = lightr_store::volume::activate_owner(
+                volume_root,
+                name,
+                dir,
+                owner.nonce(),
+                dir.file_name().and_then(|id| id.to_str()).unwrap_or_default(),
+                child_pid,
+                &mount_id,
+            ) {
+                let _ = unsafe { libc::kill(child_pid, libc::SIGKILL) };
+                return Err(error);
+            }
+        }
+        if let Some(barrier) = &barrier {
+            barrier.release()?;
+        }
 
         // Per-child monitor: serve ctl.sock + poll child + probe health.
         let exit_code = loop {
@@ -192,7 +243,13 @@ fn run_supervisor_loop(
     // once any reader observes the socket gone (→ not-running), the terminal status
     // is already (about to be) written, so the two are never contradictory.
     let _ = std::fs::remove_file(&sock_path);
-    std::fs::write(dir.join("status"), format!("exited {final_exit}")).map_err(LightrError::Io)?;
+    let status = dir.join("status");
+    std::fs::write(&status, format!("exited {final_exit}")).map_err(LightrError::Io)?;
+    std::fs::File::open(&status).map_err(LightrError::Io)?.sync_all().map_err(LightrError::Io)?;
+    for (name, _) in &volumes {
+        lightr_store::volume::terminal_run_owner(dir)?;
+        lightr_store::volume::release_owner(volume_root, name, dir)?;
+    }
     // WP-RUNFLAGS: `--rm` auto-clean on final exit (no-op unless `rm`).
     maybe_auto_remove(dir, spec);
     Ok(final_exit)

@@ -12,12 +12,39 @@ use lightr_core::{LightrError, Result};
 
 use crate::run::types::SpecOnDisk;
 
+#[cfg(unix)]
+pub(super) struct ExecBarrier {
+    read: std::fs::File,
+    write: std::fs::File,
+}
+
+#[cfg(unix)]
+impl ExecBarrier {
+    pub(super) fn new() -> Result<Self> {
+        use std::os::fd::FromRawFd;
+        let mut fds = [0; 2];
+        if unsafe { libc::pipe(fds.as_mut_ptr()) } != 0 {
+            return Err(LightrError::Io(std::io::Error::last_os_error()));
+        }
+        Ok(Self {
+            read: unsafe { std::fs::File::from_raw_fd(fds[0]) },
+            write: unsafe { std::fs::File::from_raw_fd(fds[1]) },
+        })
+    }
+
+    pub(super) fn release(&self) -> Result<()> {
+        use std::io::Write;
+        (&self.write).write_all(&[1]).map_err(LightrError::Io)
+    }
+}
+
 /// Spawn one child with the run's persisted command/env/identity in `run_cwd`,
 /// writing its pid + a `running` status. Returns the spawned `Child` + its pid.
 pub(super) fn spawn_child(
     dir: &std::path::Path,
     spec: &SpecOnDisk,
     run_cwd: &std::path::Path,
+    #[cfg(unix)] barrier: Option<&ExecBarrier>,
 ) -> Result<(std::process::Child, i32)> {
     // Append, not truncate, on a re-spawn so a restarting service's logs are not
     // lost. The first spawn creates the files; subsequent ones append.
@@ -66,6 +93,27 @@ pub(super) fn spawn_child(
         pids_max: None,
     };
     crate::limits::apply_native(&mut cmd, &limits)?;
+
+    #[cfg(unix)]
+    if let Some(barrier) = barrier {
+        use std::os::fd::AsRawFd;
+        use std::os::unix::process::CommandExt;
+        let read_fd = barrier.read.as_raw_fd();
+        unsafe {
+            cmd.pre_exec(move || {
+                let mut byte = [0_u8; 1];
+                let got = libc::read(read_fd, byte.as_mut_ptr().cast(), 1);
+                if got == 1 && byte[0] == 1 {
+                    Ok(())
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::Interrupted,
+                        "volume exec barrier was not released",
+                    ))
+                }
+            });
+        }
+    }
 
     let child = cmd.spawn().map_err(LightrError::Io)?;
     let pid = child.id() as i32;

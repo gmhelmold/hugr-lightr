@@ -185,6 +185,11 @@ pub(crate) fn run_native_memo(req: NativeRun) -> i32 {
         }
     }
 
+    if !spec.named_volumes.is_empty() {
+        eprintln!("lightr: named volumes require detached Linux runtime ownership");
+        return 2;
+    }
+
     if explain {
         let os_arch = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
         eprintln!(
