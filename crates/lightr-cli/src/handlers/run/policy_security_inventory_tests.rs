@@ -1,5 +1,8 @@
 use super::*;
-use crate::handlers::run::flags::RawRcFlags;
+use clap::Parser;
+
+use crate::cli::cmd::{Cli, Cmd};
+use crate::handlers::run::{HealthFlags, RawRcFlags, RawRunFlags};
 
 struct ControlMap {
     control: &'static str,
@@ -199,13 +202,54 @@ const CONTROLS: &[ControlMap] = &[
     },
 ];
 
-fn source(path: &str) -> Option<&'static str> {
-    match path {
-        "crates/lightr-cli/src/handlers/run/policy.rs" => Some(include_str!("policy.rs")),
-        "crates/lightr-cli/src/handlers/run/paths.rs" => Some(include_str!("paths.rs")),
-        "crates/lightr-cli/src/handlers/run/mod.rs" => Some(include_str!("mod.rs")),
-        "crates/lightr-cli/src/handlers/run/flags.rs" => Some(include_str!("flags.rs")),
-        _ => None,
+fn resolve_witness(control: &str) -> bool {
+    match control {
+        "user" | "init" | "read_only" | "cap_add" | "cap_drop" | "seccomp" | "apparmor"
+        | "oom_score_adj" | "shm_size" => {
+            let _ = super::super::paths::run_engine;
+            true
+        }
+        "hostname" | "labels" | "tty" => {
+            let _ = build_detached_spec;
+            true
+        }
+        "privileged" => {
+            let _ = rc_privileged_policy;
+            true
+        }
+        "memory_limit" | "cpu_limit" => {
+            let _ = ResourceLimits::parse;
+            true
+        }
+        "pids_limit" => {
+            let _ = ResourceLimits::with_pids;
+            true
+        }
+        "ulimit" => {
+            let _ = super::super::parse_ulimits;
+            true
+        }
+        "tmpfs" => {
+            let _ = super::super::parse_tmpfs;
+            true
+        }
+        "network_mode" => {
+            let _ = super::super::resolve_net_isolate;
+            true
+        }
+        "add_host" => {
+            let _ = resolve_add_host_pairs;
+            true
+        }
+        "healthcheck" => {
+            let _ = HealthFlags::build;
+            true
+        }
+        "secret" | "config" => {
+            let _ = resolve_store_files;
+            true
+        }
+        _ => false,
     }
 }
 
@@ -241,13 +285,7 @@ fn validate_inventory(inventory: &serde_json::Value) -> Result<(), String> {
                 return Err(format!("{} missing {field}", map.control));
             }
         }
-        let (path, symbol) = map
-            .witness
-            .split_once("::")
-            .ok_or_else(|| format!("{} witness has no symbol", map.control))?;
-        let contents = source(path)
-            .ok_or_else(|| format!("{} witness path is not allowlisted", map.control))?;
-        if !contents.contains(symbol) {
+        if !map.witness.contains("::") || !resolve_witness(map.control) {
             return Err(format!("{} witness symbol is not resolvable", map.control));
         }
         for engine in ["native", "ns", "vz"] {
@@ -288,40 +326,86 @@ fn inventory_validator_rejects_mapping_and_witness_mutations() {
 }
 
 #[test]
-fn raw_rc_flags_lower_to_runspec_and_engine_policy_consumes_lsm_fields() {
-    let rc = RawRcFlags {
-        hostname: Some("host".to_string()),
-        label: vec!["key=value".to_string()],
-        cap_add: vec!["NET_BIND_SERVICE".to_string()],
-        cap_drop: vec!["ALL".to_string()],
-        privileged: true,
-        tty: true,
-        init: true,
-        read_only: true,
-        oom_score_adj: Some(100),
-        pids_limit: Some(16),
-        shm_size: Some("64m".to_string()),
-        apparmor: Some("profile".to_string()),
-        seccomp: Some("profile.json".to_string()),
-    }
-    .resolve()
+fn cli_parser_lowers_all_security_controls_through_production_conversions() {
+    let cli = Cli::try_parse_from([
+        "lightr",
+        "run",
+        "--user",
+        "1000",
+        "--hostname",
+        "host",
+        "--label",
+        "key=value",
+        "--tty",
+        "--init",
+        "--privileged",
+        "--read-only",
+        "--cap-add",
+        "NET_BIND_SERVICE",
+        "--cap-drop",
+        "ALL",
+        "--seccomp",
+        "profile.json",
+        "--apparmor",
+        "profile",
+        "--memory",
+        "64m",
+        "--cpus",
+        "0.5",
+        "--pids-limit",
+        "16",
+        "--ulimit",
+        "nofile=64",
+        "--oom-score-adj",
+        "100",
+        "--shm-size",
+        "64m",
+        "--tmpfs",
+        "/scratch",
+        "--net",
+        "none",
+        "--add-host",
+        "host:127.0.0.1",
+        "--health-cmd",
+        "true",
+        "--secret",
+        "sec=ref",
+        "--config",
+        "cfg=ref",
+        "--",
+        "true",
+    ])
     .unwrap();
+    let Cmd::Run(args) = cli.cmd else {
+        panic!("expected run")
+    };
+    let rc = RawRcFlags::from(&args).resolve().unwrap();
+    let raw_runflags = RawRunFlags::from(&args);
+    let health = HealthFlags::from(&args);
+    let limits = ResourceLimits::parse(args.memory.as_deref(), args.cpus.as_deref())
+        .unwrap()
+        .with_pids(rc.pids_limit);
+    let secrets = resolve_store_files(&args.secret, "secret").unwrap();
+    let configs = resolve_store_files(&args.config, "config").unwrap();
+    let net = super::super::flags::resolve_net_isolate(&args.net, false).unwrap();
+    let runflags = raw_runflags.resolve().unwrap();
+    let add_host = resolve_add_host_pairs(&runflags);
     let spec = build_detached_spec(
         std::path::PathBuf::from("/work"),
         &[],
         &[],
         vec![],
-        vec![],
-        vec![],
+        secrets,
+        configs,
         vec![],
         vec![],
         None,
+        args.user.as_deref(),
         None,
         None,
-        None,
-        ResourceLimits::default(),
+        limits,
         &rc,
-        &RunFlags::default(),
+        &runflags,
     );
     assert_eq!(spec.hostname.as_deref(), Some("host"));
     assert_eq!(spec.labels, vec![("key".to_string(), "value".to_string())]);
@@ -331,6 +415,15 @@ fn raw_rc_flags_lower_to_runspec_and_engine_policy_consumes_lsm_fields() {
     assert_eq!(spec.oom_score_adj, Some(100));
     assert_eq!(spec.pids_limit, Some(16));
     assert_eq!(spec.shm_size, Some(64 * 1024 * 1024));
+    assert_eq!(spec.user.as_deref(), Some("1000"));
+    assert_eq!(spec.limits.cpu_millis, Some(500));
+    assert_eq!(spec.limits.memory_bytes, Some(64 * 1024 * 1024));
+    assert_eq!(spec.limits.pids_max, Some(16));
+    assert_eq!(spec.secrets.len(), 1);
+    assert_eq!(spec.configs.len(), 1);
+    assert!(health.build().is_some());
+    assert!(net);
+    assert_eq!(add_host, [("host".to_string(), "127.0.0.1".to_string())]);
     let mut apparmor_only = rc.clone();
     apparmor_only.seccomp = None;
     assert_eq!(
