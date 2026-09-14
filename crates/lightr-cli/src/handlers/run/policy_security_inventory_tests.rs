@@ -529,7 +529,10 @@ fn cli_parser_lowers_all_security_controls_through_production_conversions() {
     assert_eq!(captured.8[0].target, "/scratch");
     assert_eq!(captured.8[0].size, None);
     assert_eq!(captured.8[0].mode, "1777");
-    assert_eq!(captured.9, ulimits);
+    assert_eq!(captured.9.len(), 1);
+    assert_eq!(captured.9[0].resource, 7);
+    assert_eq!(captured.9[0].soft, 64);
+    assert_eq!(captured.9[0].hard, 64);
     assert_eq!(captured.10, Some(100));
     assert_eq!(captured.11, [("host".to_string(), "127.0.0.1".to_string())]);
     assert!(!captured.12 && captured.13.is_none() && captured.14.is_none());
