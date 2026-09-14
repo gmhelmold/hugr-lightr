@@ -240,11 +240,6 @@ fn run_supervisor_loop(
         if let Some(barrier) = &barrier {
             if let Err(error) = barrier.release() {
                 kill_and_reap(&mut child, child_pid);
-                write_terminal_status(dir, 1)?;
-                for (name, _) in &owners.volumes {
-                    lightr_store::volume::terminal_run_owner(dir)?;
-                    lightr_store::volume::release_owner(owners.root, name, dir)?;
-                }
                 return Err(error);
             }
         }

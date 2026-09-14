@@ -272,6 +272,34 @@ fn ensure_named_volume_capability(count: usize) -> Result<()> {
     lightr_store::volume::owner_runtime_supported()
 }
 
+#[cfg(unix)]
+pub fn volume_gate_dispatch() -> bool {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    let args: Vec<_> = std::env::args_os().collect();
+    if args.len() < 5 || args[1] != "__volume_gate" || args[3] != "--" {
+        return false;
+    }
+    let Ok(fd) = args[2].to_string_lossy().parse::<libc::c_int>() else {
+        std::process::exit(127)
+    };
+    let mut byte = [0_u8; 1];
+    if unsafe { libc::read(fd, byte.as_mut_ptr().cast(), 1) } != 1 || byte[0] != 1 {
+        std::process::exit(127);
+    }
+    if unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) } == -1 {
+        std::process::exit(127);
+    }
+    let argv: Vec<CString> = args[4..]
+        .iter()
+        .map(|arg| CString::new(arg.as_bytes()).unwrap())
+        .collect();
+    let mut raw: Vec<*const libc::c_char> = argv.iter().map(|arg| arg.as_ptr()).collect();
+    raw.push(std::ptr::null());
+    unsafe { libc::execvp(argv[0].as_ptr(), raw.as_ptr()) };
+    std::process::exit(127);
+}
+
 /// WP-RC-WORKDIR: resolve the directory the run's process must execute in, and
 /// CREATE it if absent (Docker creates `WORKDIR`). `workdir = None` ⇒ `base`
 /// unchanged, with NO mkdir — so a run with no `-w` is byte-identical to before

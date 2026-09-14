@@ -28,7 +28,12 @@ impl ExecBarrier {
         }
         // Shim must inherit only read end. Parent write end never leaks through
         // its exec, so EOF/release semantics remain bounded to supervisor.
-        unsafe { libc::fcntl(fds[1], libc::F_SETFD, libc::FD_CLOEXEC) };
+        if unsafe { libc::fcntl(fds[1], libc::F_SETFD, libc::FD_CLOEXEC) } == -1 {
+            let error = std::io::Error::last_os_error();
+            unsafe { libc::close(fds[0]) };
+            unsafe { libc::close(fds[1]) };
+            return Err(LightrError::Io(error));
+        }
         Ok(Self {
             read: unsafe { std::fs::File::from_raw_fd(fds[0]) },
             write: unsafe { std::fs::File::from_raw_fd(fds[1]) },

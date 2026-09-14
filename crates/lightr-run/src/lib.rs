@@ -71,6 +71,8 @@ pub use run::deepmemo::{deep_memo_available, run_memoized_deep};
 // WP-D: `create_run_prepared` is the prepare-without-launch primitive the CLI
 // `create` verb calls (docker `create` = the "Created" state: dir + spec.json,
 // no supervisor). `spawn_detached_engine` now = prepare + launch.
+#[cfg(unix)]
+pub use run::spawn::volume_gate_dispatch;
 pub use run::spawn::{
     create_run_prepared, spawn_detached, spawn_detached_engine, spawn_detached_with_health,
 };
