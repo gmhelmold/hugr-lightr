@@ -438,7 +438,6 @@ pub(crate) fn compose_supervise_with_factory(
         std::thread::sleep(Duration::from_millis(500));
     }
 
-    let _ = std::fs::write(&stop_file, []);
     for thread in threads {
         let _ = thread.join();
     }
