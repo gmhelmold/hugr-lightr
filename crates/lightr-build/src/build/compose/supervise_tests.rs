@@ -236,6 +236,33 @@ fn second_lazy_port_bind_failure_cleans_first_owner_and_listener() {
 }
 
 #[test]
+fn second_lazy_cleanup_failure_still_removes_failed_stack() {
+    let stack = TempDir::new().unwrap();
+    let first_port = unused_port();
+    let mut first = svc_with_deps("cleanup-fail", vec![]);
+    first.eager = false;
+    first.ports = vec![(first_port, 80)];
+    let mut second = svc_with_deps("second", vec![]);
+    second.eager = false;
+    write_lazy_stack(stack.path(), vec![first, second]);
+    let cwd = service_cwd_path("test", "cleanup-fail");
+    let _ = std::fs::remove_file(&cwd);
+    let _ = std::fs::remove_dir_all(&cwd);
+    std::fs::write(&cwd, b"not a directory").unwrap();
+    let drops = Arc::new(AtomicUsize::new(0));
+    let factory = CleanupFactory {
+        calls: AtomicUsize::new(0),
+        drops,
+        fail_suspend: true,
+    };
+
+    let error = compose_supervise_with_factory(stack.path(), &factory).unwrap_err();
+    assert!(error.to_string().contains("lazy compose cleanup failed"));
+    assert_lazy_stack_removed(stack.path());
+    std::fs::remove_file(cwd).unwrap();
+}
+
+#[test]
 fn topo_order_no_deps_preserves_declaration_order() {
     // Behavior-preserving: with no depends_on the order is 0..n (declaration).
     let services = vec![

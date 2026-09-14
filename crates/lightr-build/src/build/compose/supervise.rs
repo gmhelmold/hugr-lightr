@@ -402,13 +402,21 @@ pub(crate) fn compose_supervise_with_factory(
         // exists before setup succeeds, so there is nothing left to join.
         pending_listeners.clear();
         lazy_services.clear();
-        if let Err(cleanup_error) = cleanup_stack_services(stack_dir) {
-            return Err(LightrError::InvalidManifest(format!(
-                "{error}; lazy compose cleanup failed: {cleanup_error}"
-            )));
-        }
-        if stack_dir.exists() {
-            std::fs::remove_dir_all(stack_dir).map_err(LightrError::Io)?;
+        let cleanup_error = cleanup_stack_services(stack_dir).err();
+        let remove_error = stack_dir
+            .exists()
+            .then(|| std::fs::remove_dir_all(stack_dir))
+            .transpose()
+            .err();
+        if cleanup_error.is_some() || remove_error.is_some() {
+            let mut diagnostic = error.to_string();
+            if let Some(cleanup_error) = cleanup_error {
+                diagnostic.push_str(&format!("; lazy compose cleanup failed: {cleanup_error}"));
+            }
+            if let Some(remove_error) = remove_error {
+                diagnostic.push_str(&format!("; lazy stack removal failed: {remove_error}"));
+            }
+            return Err(LightrError::InvalidManifest(diagnostic));
         }
         return Err(error);
     }
