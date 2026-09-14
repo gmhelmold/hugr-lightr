@@ -108,6 +108,7 @@ def reduce_final_owners(initial_owners, events)
       index = owners.index { |candidate| candidate.is_a?(Hash) && candidate["phase"] == "active" && owner_identity(candidate) == target }
       owners.delete_at(index) if index
     when "recover.active"
+      required!(event, ["nonce", "run_id", "process_start_token"], "recover.active")
       target = [event.fetch("run_id"), event.fetch("nonce"), event.fetch("process_start_token")]
       owners.reject! { |candidate| candidate.is_a?(Hash) && candidate["phase"] == "active" && owner_identity(candidate) == target }
     end
@@ -228,6 +229,14 @@ if schema_path == "--self-test" && fixtures_path.nil? && goldens_path.nil?
     owner["nonce"] = "nonce_a"
     File.write(fixtures, JSON.generate(mutated))
     fail_contract("self-test nonce collision owner removal passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
+  end
+
+  with_corpus do |schema, fixtures, goldens|
+    mutated = load_json(fixtures)
+    recovery = mutated.fetch("fixtures").find { |fixture| fixture.fetch("id") == "terminal-registry-positive-death-proof" }.fetch("trace").find { |event| event["event"] == "recover.active" }
+    recovery.delete("process_start_token")
+    File.write(fixtures, JSON.generate(mutated))
+    fail_contract("self-test recovery missing identity field passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
   end
   puts "volume contract self-test: OK"
   exit 0

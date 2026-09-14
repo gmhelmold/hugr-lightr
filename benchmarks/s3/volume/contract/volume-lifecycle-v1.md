@@ -124,7 +124,7 @@ Trace event grammar:
 | `registry.sync` | `run_id` | Sync registry transition. |
 | `process.observe` | `pid`, `token`, `result` | Observe `absent`, `mismatch`, or `matching`. |
 | `registry.observe` | `run_id`, `nonce`, `result` | Observe `terminal`, `readable`, or `unreadable`. |
-| `recover.active` | `nonce` | Start recovery removal after positive death proof. |
+| `recover.active` | `nonce`, `run_id`, `process_start_token` | Start recovery removal after positive death proof for exact active owner identity. |
 | `rm` / `prune` | `actor` | Request deletion inside matching actor lock after recovery and owner snapshot. |
 | `fault` | `point`, `operation` | Inject named failure immediately after point; trace stops. |
 
@@ -138,12 +138,13 @@ An event immediately followed by `fault` is attempted and fails; it does not
 produce its normal durable postcondition. `rename.owners` remains linearized
 before a later `fsync.parent` fault.
 
-Any `recover.active` trace must encode full active owner in `initial.owners`:
-`phase`, `nonce`, `run_id`, `pid`, `process_start_token`, and `mount_id`.
-It must also encode matching full run registry in `initial.registries`, with
-same fields plus `terminal_status`. Positive proof is either matching terminal
-registry observation or matching readable registry plus absent/mismatched
-observed process token. Shorthand owner labels are forbidden for recovery.
+Any `recover.active` trace must carry `nonce`, `run_id`, and
+`process_start_token` matching full active owner in `initial.owners`: `phase`,
+`nonce`, `run_id`, `pid`, `process_start_token`, and `mount_id`. It must also
+encode matching full run registry in `initial.registries`, with same fields plus
+`terminal_status`. Positive proof is either matching terminal registry
+observation or matching readable registry plus absent/mismatched observed
+process token. Shorthand owner labels are forbidden for recovery.
 
 Every failure golden requires `outcome: "refused:<point>"`,
 `state.volume_exists: true`, and `observations.delete_attempted: false`.
