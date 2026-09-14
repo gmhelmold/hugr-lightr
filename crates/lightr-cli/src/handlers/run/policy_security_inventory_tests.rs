@@ -202,54 +202,60 @@ const CONTROLS: &[ControlMap] = &[
     },
 ];
 
-fn resolve_witness(control: &str) -> bool {
-    match control {
-        "user" | "init" | "read_only" | "cap_add" | "cap_drop" | "seccomp" | "apparmor"
-        | "oom_score_adj" | "shm_size" => {
+fn resolve_witness(path: &str, symbol: &str) -> Result<(), String> {
+    match (path, symbol) {
+        ("crates/lightr-cli/src/handlers/run/paths.rs", "eff_user") => {
             let _ = super::super::paths::run_engine;
-            true
+            Ok(())
         }
-        "hostname" | "labels" | "tty" => {
+        ("crates/lightr-cli/src/handlers/run/paths.rs", "run_engine") => {
+            let _ = super::super::paths::run_engine;
+            Ok(())
+        }
+        ("crates/lightr-cli/src/handlers/run/policy.rs", "build_detached_spec") => {
             let _ = build_detached_spec;
-            true
+            Ok(())
         }
-        "privileged" => {
+        ("crates/lightr-cli/src/handlers/run/policy.rs", "rc_privileged_policy") => {
             let _ = rc_privileged_policy;
-            true
+            Ok(())
         }
-        "memory_limit" | "cpu_limit" => {
+        ("crates/lightr-cli/src/handlers/run/mod.rs", "ResourceLimits::parse") => {
             let _ = ResourceLimits::parse;
-            true
+            Ok(())
         }
-        "pids_limit" => {
+        ("crates/lightr-cli/src/handlers/run/mod.rs", "with_pids") => {
             let _ = ResourceLimits::with_pids;
-            true
+            Ok(())
         }
-        "ulimit" => {
+        ("crates/lightr-cli/src/handlers/run/mod.rs", "parse_ulimits") => {
             let _ = super::super::parse_ulimits;
-            true
+            Ok(())
         }
-        "tmpfs" => {
+        ("crates/lightr-cli/src/handlers/run/mod.rs", "parse_tmpfs") => {
             let _ = super::super::parse_tmpfs;
-            true
+            Ok(())
         }
-        "network_mode" => {
+        ("crates/lightr-cli/src/handlers/run/flags.rs", "resolve_net_isolate") => {
             let _ = super::super::resolve_net_isolate;
-            true
+            Ok(())
         }
-        "add_host" => {
+        ("crates/lightr-cli/src/handlers/run/policy.rs", "resolve_add_host_pairs") => {
             let _ = resolve_add_host_pairs;
-            true
+            Ok(())
         }
-        "healthcheck" => {
+        ("crates/lightr-cli/src/handlers/run/flags.rs", "HealthFlags") => {
             let _ = HealthFlags::build;
-            true
+            Ok(())
         }
-        "secret" | "config" => {
+        ("crates/lightr-cli/src/handlers/run/policy.rs", "resolve_store_files") => {
             let _ = resolve_store_files;
-            true
+            Ok(())
         }
-        _ => false,
+        (unknown, _) if !unknown.starts_with("crates/lightr-cli/src/") => {
+            Err(format!("witness path not declared: {unknown}"))
+        }
+        (path, symbol) => Err(format!("witness symbol not declared: {path}::{symbol}")),
     }
 }
 
@@ -263,6 +269,7 @@ fn validate_inventory(inventory: &serde_json::Value) -> Result<(), String> {
         ));
     }
     for map in CONTROLS {
+        debug_assert!(!map.witness.is_empty());
         let row = rows
             .iter()
             .find(|row| row["control"] == map.control)
@@ -271,7 +278,6 @@ fn validate_inventory(inventory: &serde_json::Value) -> Result<(), String> {
             ("cli", map.cli),
             ("parser", map.parser),
             ("run_config", map.run_config),
-            ("witness", map.witness),
         ] {
             if row[key].as_str() != Some(expected) {
                 return Err(format!("{} has wrong {key}", map.control));
@@ -285,9 +291,13 @@ fn validate_inventory(inventory: &serde_json::Value) -> Result<(), String> {
                 return Err(format!("{} missing {field}", map.control));
             }
         }
-        if !map.witness.contains("::") || !resolve_witness(map.control) {
-            return Err(format!("{} witness symbol is not resolvable", map.control));
-        }
+        let witness = row["witness"]
+            .as_str()
+            .ok_or_else(|| format!("{} witness is not a string", map.control))?;
+        let (path, symbol) = witness
+            .split_once("::")
+            .ok_or_else(|| format!("{} witness has no path::symbol", map.control))?;
+        resolve_witness(path, symbol).map_err(|error| format!("{} {error}", map.control))?;
         for engine in ["native", "ns", "vz"] {
             if !matches!(
                 row[engine].as_str(),
@@ -320,9 +330,20 @@ fn inventory_validator_rejects_mapping_and_witness_mutations() {
     inventory["controls"][0]["cli"] = serde_json::Value::String("--mutated".into());
     assert!(validate_inventory(&inventory).is_err());
     inventory["controls"][0]["cli"] = serde_json::Value::String("--user".into());
+    inventory["controls"][0]["witness"] = serde_json::Value::String("missing.rs::eff_user".into());
+    assert_eq!(
+        validate_inventory(&inventory),
+        Err("user witness path not declared: missing.rs".into())
+    );
     inventory["controls"][0]["witness"] =
         serde_json::Value::String("crates/lightr-cli/src/handlers/run/paths.rs::gone".into());
-    assert!(validate_inventory(&inventory).is_err());
+    assert_eq!(
+        validate_inventory(&inventory),
+        Err(
+            "user witness symbol not declared: crates/lightr-cli/src/handlers/run/paths.rs::gone"
+                .into()
+        )
+    );
 }
 
 #[test]
