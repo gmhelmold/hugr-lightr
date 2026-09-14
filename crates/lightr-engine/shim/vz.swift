@@ -545,7 +545,7 @@ public func lightr_vz_session_start(_ handle: UInt64) -> Int32 {
     return vzUnsupported
     #else
     guard #available(macOS 14.0, *) else { return vzUnsupported }
-    return withSession(handle) { session in
+    return withSession(handle) { (session: VzSession) -> Int32 in
         guard session.vm.state == .stopped else { return vzInvalidState }
         session.vm.start { result in if case .failure = result { session.terminalStatus = vzLifecycle; session.done.signal() } }
         return vzOk
@@ -559,13 +559,13 @@ public func lightr_vz_session_pause_save(_ handle: UInt64, _ statePath: UnsafePo
     return vzUnsupported
     #else
     guard #available(macOS 14.0, *) else { return vzUnsupported }
-    return withSession(handle) { session in
+    return withSession(handle) { (session: VzSession) -> Int32 in
         guard session.vm.state == .running else { return vzInvalidState }
         let done = DispatchSemaphore(value: 0); var status = vzLifecycle
-        session.vm.pause { result in
-            guard case .success = result else { done.signal(); return }
-            session.vm.saveMachineStateToURL(URL(fileURLWithPath: String(cString: statePath))) { result in
-                status = result == nil ? vzOk : vzLifecycle; done.signal()
+        session.vm.pause { (error: Error?) in
+            guard error == nil else { done.signal(); return }
+            session.vm.saveMachineStateTo(url: URL(fileURLWithPath: String(cString: statePath))) { (error: Error?) in
+                status = error == nil ? vzOk : vzLifecycle; done.signal()
             }
         }
         return done.wait(timeout: .now() + 60) == .success ? status : vzTimeout
@@ -579,7 +579,7 @@ public func lightr_vz_session_stop(_ handle: UInt64) -> Int32 {
     return vzUnsupported
     #else
     guard #available(macOS 14.0, *) else { return vzUnsupported }
-    return withSession(handle) { session in
+    return withSession(handle) { (session: VzSession) -> Int32 in
         guard session.vm.canStop else { return vzInvalidState }
         let done = DispatchSemaphore(value: 0)
         session.vm.stop { _ in done.signal() }
@@ -594,11 +594,11 @@ public func lightr_vz_session_restore(_ handle: UInt64, _ statePath: UnsafePoint
     return vzUnsupported
     #else
     guard #available(macOS 14.0, *) else { return vzUnsupported }
-    return withSession(handle) { session in
+    return withSession(handle) { (session: VzSession) -> Int32 in
         guard session.vm.state == .stopped else { return vzInvalidState }
         let done = DispatchSemaphore(value: 0); var status = vzLifecycle
-        session.vm.restoreMachineStateFromURL(URL(fileURLWithPath: String(cString: statePath))) { result in
-            status = result == nil ? vzOk : vzIo; done.signal()
+        session.vm.restoreMachineStateFrom(url: URL(fileURLWithPath: String(cString: statePath))) { (error: Error?) in
+            status = error == nil ? vzOk : vzIo; done.signal()
         }
         return done.wait(timeout: .now() + 60) == .success ? status : vzTimeout
     }
@@ -614,7 +614,9 @@ public func lightr_vz_session_resume(_ handle: UInt64) -> Int32 {
     return withSession(handle) { session in
         guard session.vm.state == .paused else { return vzInvalidState }
         let done = DispatchSemaphore(value: 0); var status = vzLifecycle
-        session.vm.resume { error in status = error == nil ? vzOk : vzLifecycle; done.signal() }
+        session.vm.resume { (result: Result<Void, Error>) in
+            switch result { case .success: status = vzOk; case .failure: status = vzLifecycle }; done.signal()
+        }
         return done.wait(timeout: .now() + 60) == .success ? status : vzTimeout
     }
     #endif

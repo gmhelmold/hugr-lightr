@@ -407,7 +407,6 @@ pub(crate) fn compose_supervise_with_factory(
                                 eprintln!("lightr compose: lazy VZ resume failed: {e}");
                             }
                         }
-                        break;
                     }
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                         std::thread::sleep(std::time::Duration::from_millis(50));

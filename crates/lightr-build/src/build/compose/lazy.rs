@@ -164,8 +164,17 @@ impl LazyService {
             resumed_at,
         )?;
         let guest_ip = self.owner.guest_ip()?;
-        let mut outbound = std::net::TcpStream::connect((guest_ip.as_str(), target_port))
-            .map_err(LightrError::Io)?;
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        let mut outbound = loop {
+            match std::net::TcpStream::connect((guest_ip.as_str(), target_port)) {
+                Ok(stream) => break stream,
+                Err(error) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(50));
+                    let _ = error;
+                }
+                Err(error) => return Err(LightrError::Io(error)),
+            }
+        };
         outbound
             .write_all(&first[..read])
             .map_err(LightrError::Io)?;
