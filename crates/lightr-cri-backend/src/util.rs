@@ -335,6 +335,9 @@ pub fn map_lightr_err(e: lightr_core::LightrError) -> BackendError {
         L::NotFound(d) => BackendError::NotFound(format!("object {}", d.to_hex())),
         L::InvalidRef(n) => BackendError::InvalidArgument(format!("invalid ref: {n}")),
         L::InvalidManifest(m) => BackendError::Internal(format!("invalid manifest: {m}")),
+        L::Unsupported(reason) => {
+            BackendError::FailedPrecondition(format!("unsupported: {reason}"))
+        }
         L::Registry { status, msg } => {
             BackendError::Internal(format!("registry error (HTTP {status}): {msg}"))
         }
@@ -347,5 +350,19 @@ pub fn map_lightr_err(e: lightr_core::LightrError) -> BackendError {
             BackendError::InvalidArgument(format!("blob {size} bytes exceeds cap {cap}"))
         }
         L::Io(io) => BackendError::Io(io),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::map_lightr_err;
+    use crate::vocab::BackendError;
+
+    #[test]
+    fn unsupported_engine_capability_is_a_failed_precondition() {
+        assert!(matches!(
+            map_lightr_err(lightr_core::LightrError::Unsupported("vz snapshot".to_string())),
+            BackendError::FailedPrecondition(message) if message == "unsupported: vz snapshot"
+        ));
     }
 }

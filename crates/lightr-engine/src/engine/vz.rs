@@ -358,7 +358,7 @@ mod vz_impl {
             *self.session.lock().expect("vz session mutex poisoned") = Some(RetainedSession {
                 handle,
                 rootfs: rootfs.to_path_buf(),
-                release_token,
+                release_token: release_token.clone(),
                 config_sha256: config_sha256.clone(),
             });
             Ok(SuspendResume::Suspended(SuspendedArtifact {
@@ -368,6 +368,8 @@ mod vz_impl {
                 state_path,
                 machine_id: "vz-arm64".to_string(),
                 config_sha256,
+                release_token: release_token.clone(),
+                rootfs: rootfs.to_path_buf(),
             }))
         }
 
@@ -383,6 +385,8 @@ mod vz_impl {
             let handle = session.handle;
             if artifact.machine_id != "vz-arm64"
                 || artifact.config_sha256 != session.config_sha256
+                || artifact.rootfs != session.rootfs
+                || artifact.release_token != session.release_token
                 || lightr_core::Digest::of_file(&artifact.state_path)?.to_hex()
                     != artifact.artifact_sha256
             {
@@ -395,14 +399,11 @@ mod vz_impl {
                 unsafe { lightr_vz_session_restore(handle, state_c.as_ptr()) },
                 "restore",
             )?;
-            vz_status(unsafe { lightr_vz_session_resume(handle) }, "resume")?;
-            std::fs::write(
-                session
-                    .rootfs
-                    .join(SUSPEND_RELEASE_FILE.trim_start_matches('/')),
-                session.release_token,
-            )
-            .map_err(LightrError::Io)?;
+            write_release_token(&session.rootfs, &session.release_token)?;
+            vz_status(
+                unsafe { lightr_vz_session_resume(session.handle) },
+                "resume",
+            )?;
             let pid = wait_for_pid(
                 &session
                     .rootfs
@@ -414,6 +415,36 @@ mod vz_impl {
                 pid,
             })
         }
+    }
+
+    /// Publish exact retained authority with durable visibility before VM resume.
+    fn write_release_token(rootfs: &std::path::Path, token: &str) -> Result<()> {
+        let release_path = rootfs.join(SUSPEND_RELEASE_FILE.trim_start_matches('/'));
+        let parent = release_path.parent().ok_or_else(|| {
+            LightrError::InvalidRef("vz release gate has no parent directory".to_string())
+        })?;
+        let temp_path = parent.join(format!(
+            ".lightr-release-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("resume")
+        ));
+        let mut gate = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+            .map_err(LightrError::Io)?;
+        use std::io::Write;
+        gate.write_all(token.as_bytes()).map_err(LightrError::Io)?;
+        gate.sync_all().map_err(LightrError::Io)?;
+        std::fs::rename(&temp_path, &release_path).map_err(LightrError::Io)?;
+        std::fs::File::open(&release_path)
+            .map_err(LightrError::Io)?
+            .sync_all()
+            .map_err(LightrError::Io)?;
+        std::fs::File::open(parent)
+            .map_err(LightrError::Io)?
+            .sync_all()
+            .map_err(LightrError::Io)
     }
 
     fn vz_status(status: libc::c_int, operation: &str) -> Result<()> {
@@ -509,8 +540,9 @@ mod vz_impl {
 
     #[cfg(test)]
     mod tests {
-        use super::{vz_caps, vz_status};
+        use super::{vz_caps, vz_status, write_release_token};
         use lightr_core::ResourceLimits;
+        use lightr_init::SUSPEND_RELEASE_FILE;
 
         #[test]
         fn unlimited_yields_zero_defaults() {
@@ -561,6 +593,21 @@ mod vz_impl {
                 );
             }
             assert!(vz_status(-99, "test").is_err());
+        }
+
+        #[test]
+        fn release_gate_contains_exact_retained_token() {
+            let rootfs = tempfile::tempdir().unwrap();
+            write_release_token(rootfs.path(), "retained-token").unwrap();
+            assert_eq!(
+                std::fs::read_to_string(
+                    rootfs
+                        .path()
+                        .join(SUSPEND_RELEASE_FILE.trim_start_matches('/'))
+                )
+                .unwrap(),
+                "retained-token"
+            );
         }
     }
 }
@@ -676,5 +723,75 @@ mod tests {
         assert!(shim.contains("saveMachineStateToURL"));
         assert!(shim.contains("restoreMachineStateFromURL"));
         assert!(shim.contains("#if !arch(arm64)"));
+    }
+
+    #[test]
+    fn suspension_token_stays_private_and_owner_resume_accepts_no_token() {
+        let artifact = include_str!("mod.rs");
+        let owner = include_str!("../../../lightr-run/src/run/suspend.rs");
+        assert!(artifact.contains("pub(crate) release_token: String"));
+        assert!(artifact.contains("pub(crate) rootfs: PathBuf"));
+        assert!(!owner.contains("pub fn artifact("));
+        assert!(owner.contains("pub fn resume(&self) -> Result<ResumedInstance>"));
+        assert!(owner.contains("self.engine.resume(&self.artifact)"));
+    }
+
+    #[test]
+    fn wrong_token_fails_before_restore_gate_or_pid_proof() {
+        let src = include_str!("vz.rs");
+        let implementation = &src[..src.find("\n    #[cfg(test)]").unwrap()];
+        let resume = &implementation[implementation.find("fn resume(&self, artifact").unwrap()..];
+        let token_check = resume
+            .find("artifact.release_token != session.release_token")
+            .expect("resume must compare artifact token with retained session token");
+        let restore = resume
+            .find("lightr_vz_session_restore")
+            .expect("resume must restore only after validation");
+        let gate = resume
+            .find("write_release_token(&session.rootfs, &session.release_token)")
+            .expect("resume must release exact retained token");
+        let pid = resume
+            .find("wait_for_pid(")
+            .expect("resume must require workload PID proof");
+        assert!(token_check < restore && token_check < gate && token_check < pid);
+    }
+
+    #[test]
+    fn resume_order_is_restore_then_durable_gate_then_vm_resume() {
+        let src = include_str!("vz.rs");
+        let implementation = &src[..src.find("\n    #[cfg(test)]").unwrap()];
+        let resume_body =
+            &implementation[implementation.find("fn resume(&self, artifact").unwrap()..];
+        let restore = resume_body.find("lightr_vz_session_restore").unwrap();
+        let gate = resume_body
+            .find("write_release_token(&session.rootfs, &session.release_token)")
+            .unwrap();
+        let resume = resume_body
+            .find("lightr_vz_session_resume(session.handle)")
+            .unwrap();
+        assert!(restore < gate && gate < resume);
+        let gate_body = &src[src.find("fn write_release_token").unwrap()..];
+        assert!(gate_body.contains("gate.sync_all()"));
+        assert!(gate_body.contains("std::fs::rename(&temp_path, &release_path)"));
+        assert!(gate_body.contains("std::fs::File::open(parent)"));
+    }
+
+    #[test]
+    fn resumed_output_retains_artifact_identity_and_token_check_has_teeth() {
+        let src = include_str!("vz.rs");
+        let implementation = &src[..src.find("\n    #[cfg(test)]").unwrap()];
+        assert!(implementation.contains("instance_id: artifact.instance_id.clone()"));
+        assert!(implementation.contains("artifact_sha256: artifact.artifact_sha256.clone()"));
+        assert!(resume_has_retained_token_check(implementation));
+        let mutated =
+            implementation.replace("artifact.release_token != session.release_token", "true");
+        assert!(
+            !resume_has_retained_token_check(&mutated),
+            "removing retained-token comparison must fail this test"
+        );
+    }
+
+    fn resume_has_retained_token_check(src: &str) -> bool {
+        src.contains("artifact.release_token != session.release_token")
     }
 }

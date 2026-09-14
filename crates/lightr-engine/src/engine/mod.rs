@@ -42,6 +42,9 @@ pub struct SuspendedArtifact {
     pub state_path: PathBuf,
     pub machine_id: String,
     pub config_sha256: String,
+    // Authority and rootfs identity never leave the retained owner protocol.
+    pub(crate) release_token: String,
+    pub(crate) rootfs: PathBuf,
 }
 
 /// Result of attempting to suspend a workload. Unsupported is data, not a

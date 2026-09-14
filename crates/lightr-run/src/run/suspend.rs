@@ -34,18 +34,8 @@ impl SuspensionOwner {
         }
     }
 
-    pub fn artifact(&self) -> &SuspendedArtifact {
-        &self.artifact
-    }
-
-    /// Release token is authority owned by engine's gate protocol. Empty tokens
-    /// fail before restore; VZ verifies exact token before workload spawn.
-    pub fn resume(&self, release_token: &str) -> Result<ResumedInstance> {
-        if release_token.is_empty() {
-            return Err(LightrError::InvalidRef(
-                "snapshot release token is empty".to_string(),
-            ));
-        }
+    /// Call only after lazy listener consumed its accepted request payload.
+    pub fn resume(&self) -> Result<ResumedInstance> {
         self.engine.resume(&self.artifact)
     }
 
