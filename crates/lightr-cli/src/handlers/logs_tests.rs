@@ -12,7 +12,7 @@
 use std::fs;
 
 use super::{
-    bytes_after, filter_paths_since, follow_stop_reason, initial_log_bytes, parse_since,
+    bytes_after, follow_stop_reason, initial_and_follow_paths, initial_log_bytes, parse_since,
     select_tail, stream_paths, timestamp_note, FollowStop,
 };
 use super::{run as logs_run, LogOpts};
@@ -186,33 +186,38 @@ fn timestamp_disclosure_is_explicitly_mtime_only() {
 }
 
 #[test]
-fn since_filters_both_streams_by_each_stream_mtime() {
+fn since_skips_old_backlog_but_follow_keeps_both_streams() {
     let tmp = tempfile::tempdir().unwrap();
     let stdout = tmp.path().join("stdout.log");
     let stderr = tmp.path().join("stderr.log");
-    let selected = filter_paths_since(vec![stdout.clone(), stderr.clone()], Some("20"), |path| {
-        if path == stdout {
-            Some(10)
-        } else if path == stderr {
-            Some(30)
-        } else {
-            None
-        }
-    });
-    assert_eq!(selected, vec![stderr.clone()]);
+    let (initial, follow) =
+        initial_and_follow_paths(vec![stdout.clone(), stderr.clone()], Some("20"), |path| {
+            if path == stdout {
+                Some(10)
+            } else if path == stderr {
+                Some(30)
+            } else {
+                None
+            }
+        });
+    assert_eq!(initial, vec![stderr.clone()]);
+    assert_eq!(follow, vec![stdout.clone(), stderr.clone()]);
 
-    // No or malformed cutoff preserves all streams.
+    // No or malformed cutoff preserves all initial and follow streams.
     assert_eq!(
-        filter_paths_since(vec![stdout.clone(), stderr.clone()], None, |_| Some(0)),
-        vec![stdout.clone(), stderr.clone()]
+        initial_and_follow_paths(vec![stdout.clone(), stderr.clone()], None, |_| Some(0)),
+        (
+            vec![stdout.clone(), stderr.clone()],
+            vec![stdout.clone(), stderr.clone()]
+        )
     );
     assert_eq!(
-        filter_paths_since(
+        initial_and_follow_paths(
             vec![stdout.clone(), stderr.clone()],
             Some("yesterday"),
             |_| Some(0)
         ),
-        vec![stdout, stderr]
+        (vec![stdout.clone(), stderr.clone()], vec![stdout, stderr])
     );
 }
 

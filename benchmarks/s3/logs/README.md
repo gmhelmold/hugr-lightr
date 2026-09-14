@@ -13,8 +13,9 @@ Frozen S3-4 contract for `lightr logs`.
 | timestamps | `timestamp_disclosure_is_explicitly_mtime_only` | stderr states no per-line timestamps and lists each selected stream path with its own mtime. |
 
 Raw logs contain no line timestamps. `-t` and `--since` may only expose or compare
-file mtime. With `--both`, `--since` filters each stream by its own mtime. They
-must not fabricate line timestamps.
+file mtime. With `--both`, `--since` filters each stream's existing backlog by
+its own mtime, but `--follow` continues polling both streams for later bytes.
+They must not fabricate line timestamps.
 
 Mutation probes:
 
@@ -22,4 +23,4 @@ Mutation probes:
   `follow_poll_cap_is_bounded` fails.
 - Remove mtime/no-per-line disclosure or collapse selected streams to one mtime: `timestamp_disclosure_is_explicitly_mtime_only` fails.
 - Capture follow offsets after initial read/output: `follow_setup_emits_append_after_initial_tail_exactly_once` fails.
-- Use aggregate mtime for `--both --since`: `since_filters_both_streams_by_each_stream_mtime` fails.
+- Use aggregate mtime for `--both --since`, or drop old stream from follow: `since_skips_old_backlog_but_follow_keeps_both_streams` fails.

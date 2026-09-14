@@ -79,19 +79,21 @@ pub fn run(id: &str, opts: &LogOpts) -> i32 {
         emit_timestamp_note(&stream_paths, opts.since);
     }
 
-    let paths = filter_paths_since(stream_paths, opts.since, file_mtime_seconds);
+    let (initial_paths, follow_paths) =
+        initial_and_follow_paths(stream_paths, opts.since, file_mtime_seconds);
 
-    // Read each initial tail and its offset together. An append after this read
-    // begins at its saved offset; an append before it is already in `data`.
-    // Either way follow emits every byte exactly once.
-    let mut offsets = Vec::with_capacity(paths.len());
-    for p in &paths {
+    // Snapshot every followed stream. `--since` skips only initial backlog;
+    // old streams retain their offset and receive later appends under follow.
+    let mut offsets = Vec::with_capacity(follow_paths.len());
+    for p in &follow_paths {
         let (data, offset) = match initial_log_bytes(p, opts.tail) {
             Ok(value) => value,
             Err(e) => return die_lightr(&e),
         };
-        if let Err(e) = write_log_bytes(&data) {
-            return die_lightr(&e);
+        if initial_paths.contains(p) {
+            if let Err(e) = write_log_bytes(&data) {
+                return die_lightr(&e);
+            }
         }
         offsets.push(offset);
     }
@@ -103,7 +105,7 @@ pub fn run(id: &str, opts: &LogOpts) -> i32 {
     // Bounded follow: poll for appends, stop when the run has exited and the
     // streams are drained, OR when a hard cap is hit (never hang forever —
     // no-daemon discipline: nothing of ours should spin unbounded).
-    follow_bounded(&resolved, &home, &paths, offsets)
+    follow_bounded(&resolved, &home, &follow_paths, offsets)
 }
 
 /// Resolve the concrete log file path(s) for the selected stream.
@@ -312,6 +314,20 @@ where
         .into_iter()
         .filter(|path| mtime(path).is_none_or(|time| time >= cutoff))
         .collect()
+}
+
+/// `--since` filters existing backlog only. Follow must keep all selected
+/// streams so bytes appended after setup are never silently dropped.
+fn initial_and_follow_paths<F>(
+    paths: Vec<std::path::PathBuf>,
+    since: Option<&str>,
+    mtime: F,
+) -> (Vec<std::path::PathBuf>, Vec<std::path::PathBuf>)
+where
+    F: FnMut(&Path) -> Option<u64>,
+{
+    let initial = filter_paths_since(paths.clone(), since, mtime);
+    (initial, paths)
 }
 
 fn file_mtime_seconds(path: &Path) -> Option<u64> {
