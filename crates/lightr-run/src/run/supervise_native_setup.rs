@@ -26,6 +26,9 @@ impl ExecBarrier {
         if unsafe { libc::pipe(fds.as_mut_ptr()) } != 0 {
             return Err(LightrError::Io(std::io::Error::last_os_error()));
         }
+        // Shim must inherit only read end. Parent write end never leaks through
+        // its exec, so EOF/release semantics remain bounded to supervisor.
+        unsafe { libc::fcntl(fds[1], libc::F_SETFD, libc::FD_CLOEXEC) };
         Ok(Self {
             read: unsafe { std::fs::File::from_raw_fd(fds[0]) },
             write: unsafe { std::fs::File::from_raw_fd(fds[1]) },
@@ -35,6 +38,11 @@ impl ExecBarrier {
     pub(super) fn release(&self) -> Result<()> {
         use std::io::Write;
         (&self.write).write_all(&[1]).map_err(LightrError::Io)
+    }
+
+    pub(super) fn read_fd(&self) -> std::os::fd::RawFd {
+        use std::os::fd::AsRawFd;
+        self.read.as_raw_fd()
     }
 }
 
@@ -62,9 +70,25 @@ pub(super) fn spawn_child(
     // WP-RUNFLAGS: `--entrypoint` prepends to the persisted command (Docker CMD).
     // `None` ⇒ argv == command (byte-identical to before).
     let argv = crate::run::bindmat::effective_argv(spec.entrypoint.as_deref(), &spec.command);
+    #[cfg(unix)]
+    let mut cmd = if let Some(barrier) = barrier {
+        let mut shim =
+            std::process::Command::new(std::env::current_exe().map_err(LightrError::Io)?);
+        shim.arg("__volume_gate")
+            .arg(barrier.read_fd().to_string())
+            .arg("--")
+            .args(&argv);
+        shim
+    } else {
+        let mut direct = std::process::Command::new(&argv[0]);
+        direct.args(&argv[1..]);
+        direct
+    };
+    #[cfg(not(unix))]
     let mut cmd = std::process::Command::new(&argv[0]);
-    cmd.args(&argv[1..])
-        .current_dir(run_cwd)
+    #[cfg(not(unix))]
+    cmd.args(&argv[1..]);
+    cmd.current_dir(run_cwd)
         // WP-DISC: explicit per-child env (compose service discovery + service
         // env). Empty for a plain `lightr run -d` (byte-identical to before).
         .envs(spec.env.iter().cloned())
@@ -93,27 +117,6 @@ pub(super) fn spawn_child(
         pids_max: None,
     };
     crate::limits::apply_native(&mut cmd, &limits)?;
-
-    #[cfg(unix)]
-    if let Some(barrier) = barrier {
-        use std::os::fd::AsRawFd;
-        use std::os::unix::process::CommandExt;
-        let read_fd = barrier.read.as_raw_fd();
-        unsafe {
-            cmd.pre_exec(move || {
-                let mut byte = [0_u8; 1];
-                let got = libc::read(read_fd, byte.as_mut_ptr().cast(), 1);
-                if got == 1 && byte[0] == 1 {
-                    Ok(())
-                } else {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Interrupted,
-                        "volume exec barrier was not released",
-                    ))
-                }
-            });
-        }
-    }
 
     let child = cmd.spawn().map_err(LightrError::Io)?;
     let pid = child.id() as i32;
