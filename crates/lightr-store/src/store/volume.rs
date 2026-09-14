@@ -19,11 +19,65 @@
 //! `{"name":"…","created_at":<u64>,"driver":"local","labels":{…}}`.
 
 use lightr_core::{LightrError, Result};
+use serde::{Deserialize, Serialize};
 use std::fs;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 
 /// Fixed driver for the local on-disk registry (docker's default driver name).
 pub const DRIVER_LOCAL: &str = "local";
+
+/// Durable named-volume owner envelope. No mutable refcount exists: active
+/// entries are the complete refcount authority.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct OwnersFile {
+    pub version: u8,
+    pub owners: Vec<VolumeOwner>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "phase", deny_unknown_fields)]
+pub enum VolumeOwner {
+    #[serde(rename = "pending")]
+    Pending {
+        nonce: String,
+        coordinator_pid: i32,
+        coordinator_start_token: String,
+    },
+    #[serde(rename = "active")]
+    Active {
+        nonce: String,
+        run_id: String,
+        pid: i32,
+        process_start_token: String,
+        mount_id: String,
+    },
+}
+
+impl VolumeOwner {
+    pub fn nonce(&self) -> &str {
+        match self {
+            Self::Pending { nonce, .. } | Self::Active { nonce, .. } => nonce,
+        }
+    }
+
+    pub fn active(&self) -> bool {
+        matches!(self, Self::Active { .. })
+    }
+}
+
+/// Exclusive ownership lock for one volume. Unix only: callers retain this
+/// guard across every read/modify/write lifecycle transition.
+pub struct OwnerLock(File);
+
+#[cfg(unix)]
+impl Drop for OwnerLock {
+    fn drop(&mut self) {
+        // Explicit unlock documents lifetime boundary; close would also release.
+        let _ = unsafe { libc::flock(std::os::fd::AsRawFd::as_raw_fd(&self.0), libc::LOCK_UN) };
+    }
+}
 
 /// Metadata for one named volume — the decoded `meta.json` plus the resolved
 /// host path of the `_data/` directory.
@@ -112,6 +166,120 @@ fn data_dir(root: &Path, name: &str) -> PathBuf {
 /// One volume's `meta.json` path.
 fn meta_path(root: &Path, name: &str) -> PathBuf {
     volume_dir(root, name).join("meta.json")
+}
+
+fn owner_dir(root: &Path, name: &str) -> PathBuf {
+    volume_dir(root, name).join(".lightr")
+}
+
+fn owners_path(root: &Path, name: &str) -> PathBuf {
+    owner_dir(root, name).join("owners.json")
+}
+
+/// Acquire exclusive ownership lock. Platforms without Unix `flock` are
+/// deliberately unsupported until an equivalent atomic primitive exists.
+#[cfg(unix)]
+pub fn owner_lock(root: &Path, name: &str) -> Result<OwnerLock> {
+    name_validate(name)?;
+    let dir = owner_dir(root, name);
+    fs::create_dir_all(&dir)?;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(dir.join("lock"))?;
+    let rc = unsafe { libc::flock(std::os::fd::AsRawFd::as_raw_fd(&file), libc::LOCK_EX) };
+    if rc != 0 {
+        return Err(LightrError::Io(std::io::Error::last_os_error()));
+    }
+    Ok(OwnerLock(file))
+}
+
+#[cfg(not(unix))]
+pub fn owner_lock(_root: &Path, _name: &str) -> Result<OwnerLock> {
+    Err(LightrError::InvalidRef(
+        "named-volume ownership unsupported: no atomic flock".to_string(),
+    ))
+}
+
+/// Read strict v1 ownership state while caller holds [`OwnerLock`]. Missing state
+/// is an empty v1 envelope; malformed state is never repaired or guessed.
+pub fn read_owners(root: &Path, name: &str, _lock: &OwnerLock) -> Result<OwnersFile> {
+    let path = owners_path(root, name);
+    if !path.exists() {
+        return Ok(OwnersFile {
+            version: 1,
+            owners: Vec::new(),
+        });
+    }
+    let owners: OwnersFile = serde_json::from_slice(&fs::read(path)?).map_err(|_| {
+        LightrError::InvalidManifest(format!("volume {name}: malformed .lightr/owners.json"))
+    })?;
+    if owners.version != 1 || owners.owners.iter().any(|owner| !valid_nonce(owner.nonce())) {
+        return Err(LightrError::InvalidManifest(format!(
+            "volume {name}: malformed .lightr/owners.json"
+        )));
+    }
+    Ok(owners)
+}
+
+/// Publish complete owner state while caller holds [`OwnerLock`]. `rename` is
+/// linearization point; success is returned only after parent-directory fsync.
+pub fn write_owners(root: &Path, name: &str, owners: &OwnersFile, _lock: &OwnerLock) -> Result<()> {
+    if owners.version != 1 || owners.owners.iter().any(|owner| !valid_nonce(owner.nonce())) {
+        return Err(LightrError::InvalidManifest("invalid volume owners v1".to_string()));
+    }
+    let dir = owner_dir(root, name);
+    fs::create_dir_all(&dir)?;
+    let tmp = dir.join("owners.json.tmp");
+    let path = dir.join("owners.json");
+    let bytes = serde_json::to_vec(owners)
+        .map_err(|e| LightrError::Io(std::io::Error::other(e)))?;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&tmp)?;
+    use std::io::Write;
+    file.write_all(&bytes)?;
+    file.sync_all()?;
+    drop(file);
+    fs::rename(tmp, path)?;
+    File::open(dir)?.sync_all()?;
+    Ok(())
+}
+
+fn valid_nonce(nonce: &str) -> bool {
+    nonce.len() == 64 && nonce.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// Stable process identity. Linux `/proc/<pid>/stat` field 22 is parsed only
+/// after final `)` so a comm containing spaces or parentheses cannot shift it.
+#[cfg(target_os = "linux")]
+pub fn process_start_token(pid: i32) -> Result<String> {
+    if pid <= 0 {
+        return Err(LightrError::InvalidRef("invalid process pid".to_string()));
+    }
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat"))?;
+    let after = stat.rsplit_once(')').map(|(_, rest)| rest).ok_or_else(|| {
+        LightrError::InvalidManifest(format!("malformed /proc/{pid}/stat"))
+    })?;
+    let start = after.split_whitespace().nth(19).ok_or_else(|| {
+        LightrError::InvalidManifest(format!("malformed /proc/{pid}/stat"))
+    })?;
+    if !start.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(LightrError::InvalidManifest(format!(
+            "malformed /proc/{pid}/stat"
+        )));
+    }
+    Ok(format!("linux:{pid}:{start}"))
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn process_start_token(_pid: i32) -> Result<String> {
+    Err(LightrError::InvalidRef(
+        "named-volume ownership unsupported: no stable process start token".to_string(),
+    ))
 }
 
 // ── verbs (called from the CLI handler) ───────────────────────────────────────
