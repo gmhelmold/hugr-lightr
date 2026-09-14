@@ -150,11 +150,6 @@ pub(super) fn run_engine(
     // `None` everywhere ⇒ the engine runs as the current user (behavior-preserving).
     let eff_user = user.or(cfg.user.as_deref());
 
-    let engine = match engine_for(engine_kind) {
-        Ok(e) => e,
-        Err(e) => return die_lightr(&e),
-    };
-
     let spec = build_exec_spec(
         &run_cwd,
         &argv,
@@ -176,15 +171,27 @@ pub(super) fn run_engine(
         oom_score_adj,
     );
 
-    let code = match engine.run(&spec) {
-        Ok(c) => c,
-        Err(e) => return die_lightr(&e),
-    };
+    let code = run_engine_with(&spec, |spec| match engine_for(engine_kind) {
+        Ok(engine) => match engine.run(spec) {
+            Ok(code) => code,
+            Err(error) => die_lightr(&error),
+        },
+        Err(error) => die_lightr(&error),
+    });
 
     // Keep temp dir alive until after engine.run completes
     drop(rootfs_tmp);
 
     code
+}
+
+/// Single execution boundary for the hydrated CLI path. Tests supply a capture
+/// executor; production preserves the existing engine error mapping above.
+fn run_engine_with<F>(spec: &ExecSpec<'_>, execute: F) -> i32
+where
+    F: FnOnce(&ExecSpec<'_>) -> i32,
+{
+    execute(spec)
 }
 
 #[allow(clippy::too_many_arguments)]
