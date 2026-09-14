@@ -29,6 +29,11 @@ pub(super) fn supervise_native(
     store: &Store,
 ) -> Result<i32> {
     let cwd = PathBuf::from(&spec.cwd);
+    if named_volumes(spec).len() > 1 || (!named_volumes(spec).is_empty() && spec.restart.is_some()) {
+        return Err(LightrError::InvalidRef(
+            "named-volume runtime currently supports one non-restarting mount".to_string(),
+        ));
+    }
     #[cfg(not(target_os = "linux"))]
     if !named_volumes(spec).is_empty() {
         return Err(LightrError::InvalidRef(

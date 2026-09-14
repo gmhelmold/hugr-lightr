@@ -192,3 +192,56 @@ fn owner_pending_active_terminal_release_is_exact() {
     release_owner(&root, "owned", &run).unwrap();
     remove(&root, "owned", false).unwrap();
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn recovery_removes_only_terminal_matching_owner() {
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "recover", &[]).unwrap();
+    let run = home.join("run/r1");
+    let pending = begin_owner(&root, "recover", &run).unwrap();
+    activate_owner(
+        &root,
+        "recover",
+        &run,
+        pending.nonce(),
+        "r1",
+        std::process::id() as i32,
+        "m1",
+    )
+    .unwrap();
+    fs::write(run.join("status"), "exited 0").unwrap();
+    terminal_run_owner(&run).unwrap();
+    recover(&root, "recover", &home).unwrap();
+    let lock = owner_lock(&root, "recover").unwrap();
+    assert!(read_owners(&root, "recover", &lock).unwrap().owners.is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn recovery_refuses_missing_run_witness() {
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "ambiguous", &[]).unwrap();
+    let run = home.join("run/r2");
+    let pending = begin_owner(&root, "ambiguous", &run).unwrap();
+    activate_owner(
+        &root,
+        "ambiguous",
+        &run,
+        pending.nonce(),
+        "r2",
+        std::process::id() as i32,
+        "m2",
+    )
+    .unwrap();
+    fs::remove_file(run.join("volume-owner.json")).unwrap();
+    assert!(recover(&root, "ambiguous", &home).is_err());
+    assert!(remove(&root, "ambiguous", false).is_err());
+    assert!(volume_dir(&root, "ambiguous").exists());
+}

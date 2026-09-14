@@ -421,7 +421,13 @@ pub fn recover(root: &Path, name: &str, home: &Path) -> Result<()> {
                 coordinator_start_token,
             } => {
                 let record = find_pending_witness(home, name, nonce)?;
-                if record.owner != *owner || !process_dead(*coordinator_pid, coordinator_start_token)? {
+                let active_same_nonce = owners.owners.iter().any(|candidate| {
+                    matches!(candidate, VolumeOwner::Active { nonce: active, .. } if active == nonce)
+                });
+                if record.owner != *owner
+                    || active_same_nonce
+                    || !process_dead(*coordinator_pid, coordinator_start_token)?
+                {
                     keep.push(owner.clone());
                 }
             }
