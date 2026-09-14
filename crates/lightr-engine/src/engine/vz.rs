@@ -9,8 +9,12 @@ use super::Engine;
 mod vz_impl {
     use super::{Engine, ExecSpec};
     use crate::engine::probe::pack_dir;
+    use crate::engine::{ResumedInstance, SuspendResume, SuspendedArtifact};
     use lightr_core::{LightrError, Result};
-    use lightr_init::{InitSpec, CMD_FILE, EXIT_FILE, GUEST_PATH};
+    use lightr_init::{
+        InitSpec, CMD_FILE, EXIT_FILE, GUEST_PATH, SUSPEND_GATE_FILE, SUSPEND_READY_FILE,
+        SUSPEND_RELEASE_FILE, WORKLOAD_PID_FILE,
+    };
     use std::ffi::CString;
 
     /// Exit code returned when the VM booted (and stopped) but the guest never
@@ -19,6 +23,27 @@ mod vz_impl {
     const GUEST_NO_REPORT_CODE: i32 = 255;
 
     extern "C" {
+        fn lightr_vz_session_create(
+            kernel: *const libc::c_char,
+            initrd: *const libc::c_char,
+            rootfs: *const libc::c_char,
+            store: *const libc::c_char,
+            memory_mb: u64,
+            cpu_count: u64,
+            net_fd: libc::c_int,
+            net_mac: *const libc::c_char,
+            console_path: *const libc::c_char,
+            out_handle: *mut u64,
+        ) -> libc::c_int;
+        fn lightr_vz_session_start(handle: u64) -> libc::c_int;
+        fn lightr_vz_session_pause_save(
+            handle: u64,
+            state_path: *const libc::c_char,
+        ) -> libc::c_int;
+        fn lightr_vz_session_stop(handle: u64) -> libc::c_int;
+        fn lightr_vz_session_restore(handle: u64, state_path: *const libc::c_char) -> libc::c_int;
+        fn lightr_vz_session_resume(handle: u64) -> libc::c_int;
+        fn lightr_vz_session_destroy(handle: u64) -> libc::c_int;
         /// C ABI exposed by shim/vz.swift (compiled to static lib by build.rs).
         ///
         /// VALIDATED end-to-end on Intel x86_64 (i7-9750H, macOS 15.3.2,
@@ -60,9 +85,56 @@ mod vz_impl {
         ) -> libc::c_int;
     }
 
-    pub struct VzEngine;
+    pub struct VzEngine {
+        session: std::sync::Mutex<Option<RetainedSession>>,
+    }
+
+    impl VzEngine {
+        pub(super) fn new() -> Self {
+            Self {
+                session: std::sync::Mutex::new(None),
+            }
+        }
+    }
+
+    struct RetainedSession {
+        handle: u64,
+        rootfs: std::path::PathBuf,
+        release_token: String,
+        config_sha256: String,
+    }
+
+    impl Drop for RetainedSession {
+        fn drop(&mut self) {
+            unsafe { lightr_vz_session_destroy(self.handle) };
+        }
+    }
+
+    struct SessionDestroyGuard(Option<u64>);
+
+    impl SessionDestroyGuard {
+        fn new(handle: u64) -> Self {
+            Self(Some(handle))
+        }
+
+        fn dismiss(&mut self) {
+            self.0 = None;
+        }
+    }
+
+    impl Drop for SessionDestroyGuard {
+        fn drop(&mut self) {
+            if let Some(handle) = self.0 {
+                unsafe { lightr_vz_session_destroy(handle) };
+            }
+        }
+    }
 
     impl Engine for VzEngine {
+        fn kind(&self) -> crate::engine::EngineKind {
+            crate::engine::EngineKind::Vz
+        }
+
         /// Run the guest and return its REAL exit code.
         ///
         /// Sequence (file channel — macOS has NO host AF_VSOCK):
@@ -104,6 +176,7 @@ mod vz_impl {
                 // DHCP IP to IP_FILE before spawning the (possibly long-running)
                 // command, so the host supervisor can forward published ports.
                 net: spec.net,
+                suspend_gate: false,
             };
             std::fs::write(&cmd_path, init_spec.to_json()).map_err(LightrError::Io)?;
 
@@ -195,14 +268,7 @@ mod vz_impl {
             //               the console marker (no virtiofs lag) → use directly;
             //   -2        = the VM stopped without a marker (guest crashed before
             //               printing) → fall back to the durable EXIT_FILE.
-            if vm_status == -1 {
-                return Err(LightrError::InvalidRef(
-                    "vz engine: VM boot/config failed".to_string(),
-                ));
-            }
-            if vm_status >= 0 {
-                return Ok(vm_status);
-            }
+            vz_status(vm_status, "run")?;
 
             // ── 3. Fallback: read the guest's exit code from the rootfs share ──
             // Only reached when no console marker arrived. PID1 wrote EXIT_FILE
@@ -219,6 +285,267 @@ mod vz_impl {
             }
             Ok(GUEST_NO_REPORT_CODE)
         }
+
+        fn suspend(
+            &self,
+            spec: &ExecSpec,
+            artifact_dir: &std::path::Path,
+        ) -> Result<SuspendResume> {
+            if self
+                .session
+                .lock()
+                .expect("vz session mutex poisoned")
+                .is_some()
+            {
+                return Err(LightrError::InvalidRef(
+                    "vz suspend already has a retained session".to_string(),
+                ));
+            }
+            let rootfs = spec.rootfs.ok_or_else(|| {
+                LightrError::InvalidRef("vz engine requires a rootfs".to_string())
+            })?;
+            std::fs::create_dir_all(artifact_dir).map_err(LightrError::Io)?;
+            let state_path = artifact_dir.join("vz.state");
+            let instance_id = format!("vz-{}", std::process::id());
+            let release_token = format!("{instance_id}-{}", state_path.display());
+            let cmd_path = rootfs.join(CMD_FILE.trim_start_matches('/'));
+            let gate_path = rootfs.join(SUSPEND_GATE_FILE.trim_start_matches('/'));
+            let ready_path = rootfs.join(SUSPEND_READY_FILE.trim_start_matches('/'));
+            let release_path = rootfs.join(SUSPEND_RELEASE_FILE.trim_start_matches('/'));
+            let pid_path = rootfs.join(WORKLOAD_PID_FILE.trim_start_matches('/'));
+            let _ = std::fs::remove_file(&ready_path);
+            let _ = std::fs::remove_file(&release_path);
+            // A prior guest PID is never proof for this retained session.
+            let _ = std::fs::remove_file(&pid_path);
+            std::fs::write(
+                &cmd_path,
+                InitSpec {
+                    command: spec.command.to_vec(),
+                    cwd: "/".to_string(),
+                    env: vec![("PATH".to_string(), GUEST_PATH.to_string())],
+                    net: spec.net,
+                    suspend_gate: true,
+                }
+                .to_json(),
+            )
+            .map_err(LightrError::Io)?;
+            std::fs::write(
+                gate_path,
+                format!("{{\"version\":1,\"instance_id\":\"{instance_id}\",\"release_token\":\"{release_token}\"}}"),
+            )
+            .map_err(LightrError::Io)?;
+            let kernel_c = path_to_cstr(&pack_dir().join("kernel"))?;
+            let initrd_c = path_to_cstr(&pack_dir().join("initrd"))?;
+            let rootfs_c = path_to_cstr(rootfs)?;
+            let store_c = CString::new("").unwrap();
+            let state_c = path_to_cstr(&state_path)?;
+            let (memory_mb, cpu_count) = vz_caps(&spec.limits);
+            let config_sha256 = lightr_core::Digest::of_bytes(
+                format!(
+                    "{}:{memory_mb}:{cpu_count}:{:?}:{:?}",
+                    rootfs.display(),
+                    spec.net_fd,
+                    spec.net_mac
+                )
+                .as_bytes(),
+            )
+            .to_hex();
+            let mut handle = 0_u64;
+            let created = unsafe {
+                lightr_vz_session_create(
+                    kernel_c.as_ptr(),
+                    initrd_c.as_ptr(),
+                    rootfs_c.as_ptr(),
+                    store_c.as_ptr(),
+                    memory_mb,
+                    cpu_count,
+                    spec.net_fd.unwrap_or(-1),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    &mut handle,
+                )
+            };
+            if created == -2 {
+                return Ok(SuspendResume::Unsupported {
+                    engine: self.kind(),
+                    reason: "vz suspend requires macOS arm64 and macOS 14+".to_string(),
+                });
+            }
+            vz_status(created, "session create")?;
+            // Every failure after create must remove Swift global session state.
+            let mut destroy_guard = SessionDestroyGuard::new(handle);
+            vz_status(unsafe { lightr_vz_session_start(handle) }, "session start")?;
+            wait_for_file(&ready_path, "guest suspend readiness")?;
+            vz_status(
+                unsafe { lightr_vz_session_pause_save(handle, state_c.as_ptr()) },
+                "pause/save",
+            )?;
+            vz_status(unsafe { lightr_vz_session_stop(handle) }, "stop")?;
+            *self.session.lock().expect("vz session mutex poisoned") = Some(RetainedSession {
+                handle,
+                rootfs: rootfs.to_path_buf(),
+                release_token: release_token.clone(),
+                config_sha256: config_sha256.clone(),
+            });
+            destroy_guard.dismiss();
+            Ok(SuspendResume::Suspended(SuspendedArtifact {
+                instance_id,
+                artifact_sha256: lightr_core::Digest::of_file(&state_path)?.to_hex(),
+                snapshot_path: state_path.clone(),
+                state_path,
+                machine_id: "vz-arm64".to_string(),
+                config_sha256,
+                release_token: release_token.clone(),
+                rootfs: rootfs.to_path_buf(),
+            }))
+        }
+
+        fn resume(&self, artifact: &SuspendedArtifact) -> Result<ResumedInstance> {
+            let session = self
+                .session
+                .lock()
+                .expect("vz session mutex poisoned")
+                .take()
+                .ok_or_else(|| {
+                    LightrError::InvalidRef("vz resume has no retained session".to_string())
+                })?;
+            let handle = session.handle;
+            if artifact.machine_id != "vz-arm64"
+                || artifact.config_sha256 != session.config_sha256
+                || artifact.rootfs != session.rootfs
+                || artifact.release_token != session.release_token
+                || lightr_core::Digest::of_file(&artifact.state_path)?.to_hex()
+                    != artifact.artifact_sha256
+            {
+                return Err(LightrError::InvalidRef(
+                    "vz resume artifact identity/configuration mismatch".to_string(),
+                ));
+            }
+            let state_c = path_to_cstr(&artifact.state_path)?;
+            vz_status(
+                unsafe { lightr_vz_session_restore(handle, state_c.as_ptr()) },
+                "restore",
+            )?;
+            write_release_token(&session.rootfs, &session.release_token)?;
+            vz_status(
+                unsafe { lightr_vz_session_resume(session.handle) },
+                "resume",
+            )?;
+            let pid = wait_for_pid(
+                &session
+                    .rootfs
+                    .join(WORKLOAD_PID_FILE.trim_start_matches('/')),
+                &artifact.instance_id,
+                &session.release_token,
+            )?;
+            *self.session.lock().expect("vz session mutex poisoned") = Some(session);
+            Ok(ResumedInstance {
+                instance_id: artifact.instance_id.clone(),
+                artifact_sha256: artifact.artifact_sha256.clone(),
+                pid,
+            })
+        }
+
+        fn teardown(&self) {
+            let _ = self
+                .session
+                .lock()
+                .expect("vz session mutex poisoned")
+                .take();
+        }
+    }
+
+    /// Publish exact retained authority with durable visibility before VM resume.
+    fn write_release_token(rootfs: &std::path::Path, token: &str) -> Result<()> {
+        let release_path = rootfs.join(SUSPEND_RELEASE_FILE.trim_start_matches('/'));
+        let parent = release_path.parent().ok_or_else(|| {
+            LightrError::InvalidRef("vz release gate has no parent directory".to_string())
+        })?;
+        let temp_path = parent.join(format!(
+            ".lightr-release-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("resume")
+        ));
+        let mut gate = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+            .map_err(LightrError::Io)?;
+        use std::io::Write;
+        gate.write_all(token.as_bytes()).map_err(LightrError::Io)?;
+        gate.sync_all().map_err(LightrError::Io)?;
+        std::fs::rename(&temp_path, &release_path).map_err(LightrError::Io)?;
+        std::fs::File::open(&release_path)
+            .map_err(LightrError::Io)?
+            .sync_all()
+            .map_err(LightrError::Io)?;
+        std::fs::File::open(parent)
+            .map_err(LightrError::Io)?
+            .sync_all()
+            .map_err(LightrError::Io)
+    }
+
+    fn vz_status(status: libc::c_int, operation: &str) -> Result<()> {
+        match status {
+            0 => Ok(()),
+            -1 => Err(LightrError::InvalidRef(format!(
+                "vz {operation}: configuration failed"
+            ))),
+            -2 => Err(LightrError::Unsupported(format!(
+                "vz {operation}: unsupported host"
+            ))),
+            -3 => Err(LightrError::Io(std::io::Error::other(format!(
+                "vz {operation}: I/O failed"
+            )))),
+            -4 => Err(LightrError::InvalidRef(format!(
+                "vz {operation}: lifecycle failed"
+            ))),
+            -5 => Err(LightrError::InvalidRef(format!(
+                "vz {operation}: invalid state"
+            ))),
+            -6 => Err(LightrError::Io(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                format!("vz {operation}: timed out"),
+            ))),
+            code => Err(LightrError::InvalidRef(format!(
+                "vz {operation}: unknown status {code}"
+            ))),
+        }
+    }
+
+    fn wait_for_file(path: &std::path::Path, operation: &str) -> Result<()> {
+        for _ in 0..600 {
+            if path.is_file() {
+                return Ok(());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        Err(LightrError::Io(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            format!("vz {operation}: timed out"),
+        )))
+    }
+
+    fn wait_for_pid(path: &std::path::Path, instance_id: &str, release_token: &str) -> Result<u32> {
+        for _ in 0..600 {
+            if let Ok(s) = std::fs::read_to_string(path) {
+                let mut proof = s.split_whitespace();
+                return (proof.next() == Some(instance_id) && proof.next() == Some(release_token))
+                    .then(|| proof.next())
+                    .flatten()
+                    .and_then(|pid| pid.parse::<u32>().ok())
+                    .filter(|pid| *pid != 0)
+                    .ok_or_else(|| {
+                        LightrError::InvalidRef(
+                            "vz resume: missing or malformed workload PID proof".to_string(),
+                        )
+                    });
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        Err(LightrError::InvalidRef(
+            "vz resume: missing or malformed workload PID proof".to_string(),
+        ))
     }
 
     fn path_to_cstr(p: &std::path::Path) -> Result<CString> {
@@ -252,8 +579,9 @@ mod vz_impl {
 
     #[cfg(test)]
     mod tests {
-        use super::vz_caps;
+        use super::{vz_caps, vz_status, write_release_token};
         use lightr_core::ResourceLimits;
+        use lightr_init::SUSPEND_RELEASE_FILE;
 
         #[test]
         fn unlimited_yields_zero_defaults() {
@@ -293,12 +621,39 @@ mod vz_impl {
             assert_eq!(m(512 * 1024 * 1024), 512);
             assert_eq!(m(1), 1);
         }
+
+        #[test]
+        fn frozen_vz_statuses_map_to_distinct_errors() {
+            assert!(vz_status(0, "test").is_ok());
+            for status in [-1, -2, -3, -4, -5, -6] {
+                assert!(
+                    vz_status(status, "test").is_err(),
+                    "status {status} must fail closed"
+                );
+            }
+            assert!(vz_status(-99, "test").is_err());
+        }
+
+        #[test]
+        fn release_gate_contains_exact_retained_token() {
+            let rootfs = tempfile::tempdir().unwrap();
+            write_release_token(rootfs.path(), "retained-token").unwrap();
+            assert_eq!(
+                std::fs::read_to_string(
+                    rootfs
+                        .path()
+                        .join(SUSPEND_RELEASE_FILE.trim_start_matches('/'))
+                )
+                .unwrap(),
+                "retained-token"
+            );
+        }
     }
 }
 
 #[cfg(all(target_os = "macos", feature = "vz"))]
 pub(super) fn vz_engine_box() -> Box<dyn Engine> {
-    Box::new(vz_impl::VzEngine)
+    Box::new(vz_impl::VzEngine::new())
 }
 
 /// Stub for builds without feature "vz" (or non-macOS) — probe gates before
@@ -308,6 +663,10 @@ struct VzEngineStub;
 
 #[cfg(not(all(target_os = "macos", feature = "vz")))]
 impl Engine for VzEngineStub {
+    fn kind(&self) -> super::EngineKind {
+        super::EngineKind::Vz
+    }
+
     fn run(&self, _spec: &ExecSpec) -> lightr_core::Result<i32> {
         Err(lightr_core::LightrError::InvalidRef(
             "vz engine requires macOS + the 'vz' build feature + a linux pack".to_string(),
@@ -381,5 +740,122 @@ mod tests {
             src.contains("GUEST_NO_REPORT_CODE: i32 = 255"),
             "a missing guest exit file must map to 255, not a fabricated 0"
         );
+    }
+
+    #[test]
+    fn swift_shim_exports_frozen_retained_session_abi() {
+        let shim = include_str!("../../shim/vz.swift");
+        for symbol in [
+            "lightr_vz_session_create",
+            "lightr_vz_session_start",
+            "lightr_vz_session_pause_save",
+            "lightr_vz_session_stop",
+            "lightr_vz_session_restore",
+            "lightr_vz_session_resume",
+            "lightr_vz_session_destroy",
+        ] {
+            assert!(
+                shim.contains(symbol),
+                "missing frozen VZ ABI symbol: {symbol}"
+            );
+        }
+        assert!(shim.contains("session.vm.pause(completionHandler:"));
+        assert!(shim.contains("saveMachineStateTo(url:"));
+        assert!(shim.contains("completionHandler: { (error: Error?) in"));
+        assert!(shim.contains("restoreMachineStateFrom(url:"));
+        assert!(shim.contains("#if !arch(arm64)"));
+    }
+
+    #[test]
+    fn legacy_run_stays_independent_from_arm_only_session_abi() {
+        let shim = include_str!("../../shim/vz.swift");
+        let legacy = &shim[..shim
+            .find("// MARK: - Frozen retained-session C ABI")
+            .unwrap()];
+        assert!(legacy.contains("@_cdecl(\"lightr_vz_run\")"));
+        assert!(!legacy.contains("lightr_vz_session_create"));
+    }
+
+    #[test]
+    fn created_session_has_raii_destroy_until_retained_owner_takes_it() {
+        let src = include_str!("vz.rs");
+        let suspend = &src[src.find("fn suspend(").unwrap()..src.find("fn resume(").unwrap()];
+        let create = suspend.find("lightr_vz_session_create").unwrap();
+        let guard = suspend.find("SessionDestroyGuard::new(handle)").unwrap();
+        let retain = suspend.find("Some(RetainedSession {").unwrap();
+        let dismiss = suspend.find("destroy_guard.dismiss()").unwrap();
+        assert!(create < guard && guard < retain && retain < dismiss);
+        let shim = include_str!("../../shim/vz.swift");
+        assert!(shim.contains("sessions.removeValue(forKey: handle)"));
+    }
+
+    #[test]
+    fn suspension_token_stays_private_and_owner_resume_accepts_no_token() {
+        let artifact = include_str!("mod.rs");
+        let owner = include_str!("../../../lightr-run/src/run/suspend.rs");
+        assert!(artifact.contains("pub(crate) release_token: String"));
+        assert!(artifact.contains("pub(crate) rootfs: PathBuf"));
+        assert!(!owner.contains("pub fn artifact("));
+        assert!(owner.contains("pub fn resume(&self) -> Result<ResumedInstance>"));
+        assert!(owner.contains("self.engine.resume(&self.artifact)"));
+    }
+
+    #[test]
+    fn wrong_token_fails_before_restore_gate_or_pid_proof() {
+        let src = include_str!("vz.rs");
+        let implementation = &src[..src.find("\n    #[cfg(test)]").unwrap()];
+        let resume = &implementation[implementation.find("fn resume(&self, artifact").unwrap()..];
+        let token_check = resume
+            .find("artifact.release_token != session.release_token")
+            .expect("resume must compare artifact token with retained session token");
+        let restore = resume
+            .find("lightr_vz_session_restore")
+            .expect("resume must restore only after validation");
+        let gate = resume
+            .find("write_release_token(&session.rootfs, &session.release_token)")
+            .expect("resume must release exact retained token");
+        let pid = resume
+            .find("wait_for_pid(")
+            .expect("resume must require workload PID proof");
+        assert!(token_check < restore && token_check < gate && token_check < pid);
+    }
+
+    #[test]
+    fn resume_order_is_restore_then_durable_gate_then_vm_resume() {
+        let src = include_str!("vz.rs");
+        let implementation = &src[..src.find("\n    #[cfg(test)]").unwrap()];
+        let resume_body =
+            &implementation[implementation.find("fn resume(&self, artifact").unwrap()..];
+        let restore = resume_body.find("lightr_vz_session_restore").unwrap();
+        let gate = resume_body
+            .find("write_release_token(&session.rootfs, &session.release_token)")
+            .unwrap();
+        let resume = resume_body
+            .find("lightr_vz_session_resume(session.handle)")
+            .unwrap();
+        assert!(restore < gate && gate < resume);
+        let gate_body = &src[src.find("fn write_release_token").unwrap()..];
+        assert!(gate_body.contains("gate.sync_all()"));
+        assert!(gate_body.contains("std::fs::rename(&temp_path, &release_path)"));
+        assert!(gate_body.contains("std::fs::File::open(parent)"));
+    }
+
+    #[test]
+    fn resumed_output_retains_artifact_identity_and_token_check_has_teeth() {
+        let src = include_str!("vz.rs");
+        let implementation = &src[..src.find("\n    #[cfg(test)]").unwrap()];
+        assert!(implementation.contains("instance_id: artifact.instance_id.clone()"));
+        assert!(implementation.contains("artifact_sha256: artifact.artifact_sha256.clone()"));
+        assert!(resume_has_retained_token_check(implementation));
+        let mutated =
+            implementation.replace("artifact.release_token != session.release_token", "true");
+        assert!(
+            !resume_has_retained_token_check(&mutated),
+            "removing retained-token comparison must fail this test"
+        );
+    }
+
+    fn resume_has_retained_token_check(src: &str) -> bool {
+        src.contains("artifact.release_token != session.release_token")
     }
 }

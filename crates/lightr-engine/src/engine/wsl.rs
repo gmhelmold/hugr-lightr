@@ -28,6 +28,10 @@ mod wsl_impl {
     pub struct WslEngine;
 
     impl Engine for WslEngine {
+        fn kind(&self) -> crate::engine::EngineKind {
+            crate::engine::EngineKind::Wsl
+        }
+
         /// Run the workload inside the default WSL2 distro and return its REAL
         /// exit code. The exit-code/signal law is the shared `exit_code`
         /// helper: `wsl.exe` propagates the in-distro process's exit status,
@@ -127,6 +131,10 @@ struct WslEngineStub;
 
 #[cfg(not(target_os = "windows"))]
 impl Engine for WslEngineStub {
+    fn kind(&self) -> super::EngineKind {
+        super::EngineKind::Wsl
+    }
+
     fn run(&self, _spec: &ExecSpec) -> Result<i32> {
         Err(LightrError::InvalidRef(
             "wsl engine requires Windows + WSL2".to_string(),

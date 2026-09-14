@@ -5,6 +5,10 @@
 //! filesystem uses its own `TempDir`.
 use super::*;
 use lightr_store::Store;
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
 use tempfile::TempDir;
 
 /// Build a minimal `ServiceSpec` with the given name and `depends_on` edges.
@@ -87,6 +91,175 @@ fn prepare_service_cwd_empty_ref_is_clean() {
     assert!(cwd.is_dir());
     assert_eq!(std::fs::read_dir(&cwd).unwrap().count(), 0);
     let _ = std::fs::remove_dir_all(&cwd);
+}
+
+#[test]
+fn lazy_listener_cannot_fall_back_to_cold_detached_spawn() {
+    let src = include_str!("supervise.rs");
+    let lazy = &src[src.find("for svc_spec in &spec.services").unwrap()..];
+    assert!(lazy.contains("lazy_factory.suspend(stack_dir, svc_spec)?"));
+    assert!(!lazy.contains("start_service_detached("));
+    let mutated = lazy.replace(
+        "lazy_factory.suspend(stack_dir, svc_spec)?",
+        "start_service_detached(",
+    );
+    assert!(!mutated.contains("lazy_factory.suspend(stack_dir, svc_spec)?"));
+}
+
+#[test]
+fn lazy_listener_keeps_accepting_until_ttl_or_stop() {
+    let src = include_str!("supervise.rs");
+    let lazy = &src[src.find("for svc_spec in &spec.services").unwrap()..];
+    assert!(lazy.contains("std::thread::spawn(move || loop"));
+    assert!(lazy.contains("stop_file.exists() || std::time::Instant::now() >= deadline"));
+    assert!(lazy.contains("let lazy = std::sync::Arc::clone(&lazy);"));
+    assert!(lazy.contains("lazy.accept(inbound, container_port)"));
+}
+
+struct CleanupOwner(Arc<AtomicUsize>);
+
+impl Drop for CleanupOwner {
+    fn drop(&mut self) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+impl super::super::lazy::LazyOwner for CleanupOwner {
+    fn identity(&self) -> lightr_run::SuspendedIdentity {
+        lightr_run::SuspendedIdentity {
+            instance_id: "test".into(),
+            artifact_sha256: "test".into(),
+        }
+    }
+
+    fn resume(&self) -> lightr_core::Result<lightr_engine::ResumedInstance> {
+        unreachable!("setup failure must happen before lazy resume")
+    }
+
+    fn guest_ip(&self) -> lightr_core::Result<String> {
+        unreachable!("setup failure must happen before lazy proxy")
+    }
+}
+
+struct CleanupFactory {
+    calls: AtomicUsize,
+    drops: Arc<AtomicUsize>,
+    fail_suspend: bool,
+}
+
+impl super::super::lazy::LazyFactory for CleanupFactory {
+    fn suspend(
+        &self,
+        stack_dir: &std::path::Path,
+        svc: &ServiceSpec,
+    ) -> lightr_core::Result<Box<dyn super::super::lazy::LazyOwner>> {
+        let call = self.calls.fetch_add(1, Ordering::SeqCst);
+        if self.fail_suspend && call == 1 {
+            return Err(lightr_core::LightrError::InvalidRef(
+                "second suspend failed".into(),
+            ));
+        }
+        std::fs::create_dir_all(stack_dir.join("services").join(&svc.name).join("rootfs")).unwrap();
+        Ok(Box::new(CleanupOwner(Arc::clone(&self.drops))))
+    }
+}
+
+fn write_lazy_stack(dir: &std::path::Path, services: Vec<ServiceSpec>) {
+    let spec = StackSpec {
+        ttl_secs: 60,
+        created_at_unix: 0,
+        project: "test".into(),
+        supervisor_pid: None,
+        services,
+    };
+    std::fs::write(dir.join("spec.json"), serde_json::to_vec(&spec).unwrap()).unwrap();
+}
+
+fn unused_port() -> u16 {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.local_addr().unwrap().port()
+}
+
+fn assert_lazy_stack_removed(stack_dir: &std::path::Path) {
+    assert!(!stack_dir.exists());
+    assert!(!stack_dir.join("spec.json").exists());
+    assert!(!stack_dir.join("pid").exists());
+    assert!(!stack_dir.join("services/first/rootfs").exists());
+}
+
+#[test]
+fn second_lazy_suspend_failure_cleans_first_owner_and_listener() {
+    let stack = TempDir::new().unwrap();
+    let first_port = unused_port();
+    let mut first = svc_with_deps("first", vec![]);
+    first.eager = false;
+    first.ports = vec![(first_port, 80)];
+    let mut second = svc_with_deps("second", vec![]);
+    second.eager = false;
+    write_lazy_stack(stack.path(), vec![first, second]);
+    let drops = Arc::new(AtomicUsize::new(0));
+    let factory = CleanupFactory {
+        calls: AtomicUsize::new(0),
+        drops: Arc::clone(&drops),
+        fail_suspend: true,
+    };
+
+    assert!(compose_supervise_with_factory(stack.path(), &factory).is_err());
+    assert_eq!(drops.load(Ordering::SeqCst), 1);
+    assert!(std::net::TcpListener::bind(("127.0.0.1", first_port)).is_ok());
+    assert_lazy_stack_removed(stack.path());
+}
+
+#[test]
+fn second_lazy_port_bind_failure_cleans_first_owner_and_listener() {
+    let stack = TempDir::new().unwrap();
+    let first_port = unused_port();
+    let blocked = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let mut first = svc_with_deps("first", vec![]);
+    first.eager = false;
+    first.ports = vec![(first_port, 80)];
+    let mut second = svc_with_deps("second", vec![]);
+    second.eager = false;
+    second.ports = vec![(blocked.local_addr().unwrap().port(), 80)];
+    write_lazy_stack(stack.path(), vec![first, second]);
+    let drops = Arc::new(AtomicUsize::new(0));
+    let factory = CleanupFactory {
+        calls: AtomicUsize::new(0),
+        drops: Arc::clone(&drops),
+        fail_suspend: false,
+    };
+
+    assert!(compose_supervise_with_factory(stack.path(), &factory).is_err());
+    assert_eq!(drops.load(Ordering::SeqCst), 2);
+    assert!(std::net::TcpListener::bind(("127.0.0.1", first_port)).is_ok());
+    assert_lazy_stack_removed(stack.path());
+}
+
+#[test]
+fn second_lazy_cleanup_failure_still_removes_failed_stack() {
+    let stack = TempDir::new().unwrap();
+    let first_port = unused_port();
+    let mut first = svc_with_deps("cleanup-fail", vec![]);
+    first.eager = false;
+    first.ports = vec![(first_port, 80)];
+    let mut second = svc_with_deps("second", vec![]);
+    second.eager = false;
+    write_lazy_stack(stack.path(), vec![first, second]);
+    let cwd = service_cwd_path("test", "cleanup-fail");
+    let _ = std::fs::remove_file(&cwd);
+    let _ = std::fs::remove_dir_all(&cwd);
+    std::fs::write(&cwd, b"not a directory").unwrap();
+    let drops = Arc::new(AtomicUsize::new(0));
+    let factory = CleanupFactory {
+        calls: AtomicUsize::new(0),
+        drops,
+        fail_suspend: true,
+    };
+
+    let error = compose_supervise_with_factory(stack.path(), &factory).unwrap_err();
+    assert!(error.to_string().contains("lazy compose cleanup failed"));
+    assert_lazy_stack_removed(stack.path());
+    std::fs::remove_file(cwd).unwrap();
 }
 
 #[test]

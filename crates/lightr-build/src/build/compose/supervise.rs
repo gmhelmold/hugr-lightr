@@ -298,6 +298,13 @@ fn start_one_instance(
 
 /// Compose supervisor -- called by `lightr __compose-supervise <stack_dir>`.
 pub fn compose_supervise(stack_dir: &Path) -> Result<()> {
+    compose_supervise_with_factory(stack_dir, &super::lazy::RealLazyFactory)
+}
+
+pub(crate) fn compose_supervise_with_factory(
+    stack_dir: &Path,
+    lazy_factory: &dyn super::lazy::LazyFactory,
+) -> Result<()> {
     use std::time::{Duration, Instant};
 
     let spec_path = stack_dir.join("spec.json");
@@ -359,48 +366,85 @@ pub fn compose_supervise(stack_dir: &Path) -> Result<()> {
         return Err(error);
     }
 
-    let mut threads: Vec<std::thread::JoinHandle<()>> = Vec::new();
+    // Setup is transactional: no accept thread starts until every lazy service
+    // suspended and every listener bound. A later failure then drops all prior
+    // listeners and owners before this function returns.
+    let mut lazy_services = Vec::new();
+    let mut pending_listeners = Vec::new();
+    let lazy_setup = (|| -> Result<()> {
+        for svc_spec in &spec.services {
+            if svc_spec.eager {
+                continue;
+            }
+            let owner = lazy_factory.suspend(stack_dir, svc_spec)?;
+            let lazy = std::sync::Arc::new(super::lazy::LazyService::new(
+                owner,
+                stack_dir,
+                &svc_spec.name,
+            )?);
+            for &(host_port, container_port) in &svc_spec.ports {
+                let addr = format!("127.0.0.1:{host_port}");
+                let listener = std::net::TcpListener::bind(&addr).map_err(|error| {
+                    LightrError::Io(std::io::Error::new(
+                        error.kind(),
+                        format!("bind {addr} for service {} failed: {error}", svc_spec.name),
+                    ))
+                })?;
+                listener.set_nonblocking(true).map_err(LightrError::Io)?;
+                pending_listeners.push((listener, std::sync::Arc::clone(&lazy), container_port));
+            }
+            lazy_services.push(lazy);
+        }
+        Ok(())
+    })();
+    if let Err(error) = lazy_setup {
+        // Drop listeners first, then their retained owners/artifacts. No thread
+        // exists before setup succeeds, so there is nothing left to join.
+        pending_listeners.clear();
+        lazy_services.clear();
+        let cleanup_error = cleanup_stack_services(stack_dir).err();
+        let remove_error = stack_dir
+            .exists()
+            .then(|| std::fs::remove_dir_all(stack_dir))
+            .transpose()
+            .err();
+        if cleanup_error.is_some() || remove_error.is_some() {
+            let mut diagnostic = error.to_string();
+            if let Some(cleanup_error) = cleanup_error {
+                diagnostic.push_str(&format!("; lazy compose cleanup failed: {cleanup_error}"));
+            }
+            if let Some(remove_error) = remove_error {
+                diagnostic.push_str(&format!("; lazy stack removal failed: {remove_error}"));
+            }
+            return Err(LightrError::InvalidManifest(diagnostic));
+        }
+        return Err(error);
+    }
 
-    for svc_spec in &spec.services {
-        if svc_spec.eager {
-            continue;
-        }
-        for &(host_port, container_port) in &svc_spec.ports {
-            let addr = format!("127.0.0.1:{host_port}");
-            let listener = match std::net::TcpListener::bind(&addr) {
-                Ok(l) => l,
-                Err(e) => {
-                    eprintln!(
-                        "lightr compose: bind {addr} for service {} failed: {e}",
-                        svc_spec.name
-                    );
-                    continue;
+    let mut threads = Vec::new();
+    for (listener, lazy, container_port) in pending_listeners {
+        let stop_file = stop_file.clone();
+        let deadline = start + ttl;
+        let jh = std::thread::spawn(move || loop {
+            if stop_file.exists() || std::time::Instant::now() >= deadline {
+                break;
+            }
+            match listener.accept() {
+                Ok((inbound, _)) => {
+                    let lazy = std::sync::Arc::clone(&lazy);
+                    std::thread::spawn(move || {
+                        if let Err(e) = lazy.accept(inbound, container_port) {
+                            eprintln!("lightr compose: lazy VZ resume failed: {e}");
+                        }
+                    });
                 }
-            };
-            let svc_clone = svc_spec.clone();
-            let stack_dir_clone = stack_dir.to_path_buf();
-            let peers_clone = peers.clone();
-            let project_clone = project.clone();
-            let jh = std::thread::spawn(move || {
-                if let Ok((inbound, _)) = listener.accept() {
-                    if let Err(e) = start_service_detached(
-                        &stack_dir_clone,
-                        &svc_clone,
-                        &peers_clone,
-                        &project_clone,
-                    ) {
-                        eprintln!("lightr compose: failed to start {}: {e}", svc_clone.name);
-                        return;
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                    let svc_addr = format!("127.0.0.1:{container_port}");
-                    if let Ok(outbound) = std::net::TcpStream::connect(&svc_addr) {
-                        super::supervise_net::proxy_bidirectional(inbound, outbound);
-                    }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
                 }
-            });
-            threads.push(jh);
-        }
+                Err(_) => break,
+            }
+        });
+        threads.push(jh);
     }
 
     loop {
@@ -409,6 +453,11 @@ pub fn compose_supervise(stack_dir: &Path) -> Result<()> {
         }
         std::thread::sleep(Duration::from_millis(500));
     }
+
+    for thread in threads {
+        let _ = thread.join();
+    }
+    lazy_services.clear();
 
     Ok(())
 }

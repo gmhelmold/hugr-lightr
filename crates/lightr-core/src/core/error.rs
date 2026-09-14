@@ -14,6 +14,8 @@ pub enum LightrError {
     },
     InvalidRef(String),
     InvalidManifest(String),
+    /// Requested runtime capability is unavailable on this engine or host.
+    Unsupported(String),
     /// Registry/network protocol error (OCI pull), with the HTTP status.
     /// Distinct from Io so auth (401/403), not-found (404), rate-limit (429)
     /// and 5xx surface their own message instead of collapsing to "Io".
@@ -40,6 +42,7 @@ impl std::fmt::Display for LightrError {
             }
             LightrError::InvalidRef(n) => write!(f, "invalid ref: {n}"),
             LightrError::InvalidManifest(msg) => write!(f, "invalid manifest: {msg}"),
+            LightrError::Unsupported(msg) => write!(f, "unsupported: {msg}"),
             LightrError::Registry { status, msg } => {
                 write!(f, "registry error (HTTP {status}): {msg}")
             }
