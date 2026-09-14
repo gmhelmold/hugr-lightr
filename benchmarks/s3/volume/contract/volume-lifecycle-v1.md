@@ -49,11 +49,13 @@ fsync completes. Lock loss, write failure, `sync_all` failure, rename failure,
 or parent fsync failure refuses operation; no delete follows failure.
 
 Each run also owns `$LIGHTR_HOME/run/<run_id>/volume-owner.json`. It records
-same pending or active nonce and is fsynced at every transition. Teardown writes
-and fsyncs terminal status before release. Registry is matching only when it is
-readable, well-formed, names same run ID and nonce, and has terminal status.
-This contract leaves terminal-status payload owned by run lifecycle; recovery
-requires its durable terminal marker, not an inferred exit result.
+same pending or active nonce and is fsynced at every transition. For a release,
+matching `registry.active` must precede `registry.terminal`, then
+`registry.sync`, then same-run `owner.remove`. Missing terminal or sync refuses
+release. Registry is matching only when it is readable, well-formed, names same
+run ID and nonce, and has terminal status. This contract leaves terminal-status
+payload owned by run lifecycle; recovery requires its durable terminal marker,
+not an inferred exit result.
 
 ## Acquire And Release
 
@@ -67,9 +69,10 @@ requires its durable terminal marker, not an inferred exit result.
 4. Release child only after active owner and run registry are durable. Barrier
    failure refuses operation and child does not proceed to exec.
 5. Spawn failure removes only exact pending nonce while locked.
-6. After terminal registry status is durable, release removes only active entry
-   matching `(run_id, nonce, process_start_token)`. No broad PID, run ID, or
-   nonce deletion is allowed.
+6. After matching active registry, terminal registry status, and terminal sync
+   are durable in that order, release removes only active entry matching
+   `(run_id, nonce, process_start_token)`. No broad PID, run ID, or nonce
+   deletion is allowed.
 
 ## Recovery, Remove, And Prune
 
@@ -84,7 +87,9 @@ token check and no active owner carries pending nonce. Missing, malformed,
 unreadable, or nonce-mismatched registry is ambiguity. Ambiguity retains owner
 and refuses `rm` and `prune`.
 
-`rm` and `prune` lock, recover, snapshot owners, then delete only empty
+`rm` and `prune` events occur inside their matching actor's
+`lock.acquire`/`lock.release` interval. Trace lock intervals are serial and
+non-overlapping. They lock, recover, snapshot owners, then delete only empty
 snapshot. Non-empty snapshot refuses deletion. Lock loss, fsync/rename failure,
 or barrier failure refuses operation without deletion.
 
@@ -92,8 +97,10 @@ or barrier failure refuses operation without deletion.
 
 `schema.json` is source of truth for fixture fields and event requirements.
 `verify.rb` parses schema, fixtures, and goldens; it fails malformed input,
-unknown events, ordering violations, fault/golden drift, and missing positive
-death proof. `fixtures.json` is typed trace input. Every fixture has `initial`,
+unknown events, ordering violations, fault/golden drift, missing release
+terminal/sync sequence, missing `rm`/`prune` lock coverage, overlapping lock
+intervals, and missing positive death proof. `fixtures.json` is typed trace input.
+Every fixture has `initial`,
 a complete ordered `trace`, and optional terminal `fault`. References such as
 `nonce_a` resolve from top-level fixture values. `goldens.json` maps each
 fixture ID to exact operation outcome, final observable state, and observations.
@@ -118,7 +125,7 @@ Trace event grammar:
 | `process.observe` | `pid`, `token`, `result` | Observe `absent`, `mismatch`, or `matching`. |
 | `registry.observe` | `run_id`, `nonce`, `result` | Observe `terminal`, `readable`, or `unreadable`. |
 | `recover.active` | `nonce` | Start recovery removal after positive death proof. |
-| `rm` / `prune` | none | Request deletion after lock, recovery, and owner snapshot. |
+| `rm` / `prune` | `actor` | Request deletion inside matching actor lock after recovery and owner snapshot. |
 | `fault` | `point`, `operation` | Inject named failure immediately after point; trace stops. |
 
 `owner.pending` and `owner.active` values are candidates only. They become
@@ -145,6 +152,4 @@ volume still remains because caller must refuse deletion. Other durability
 failures retain pre-failure owners. S3-5B tests must execute traces in separate
 processes where stated by Sprint 03 and mutation-probe acquire, release,
 recovery, and refusal edges. Fixtures are protocol goldens, not current-runtime
-tests. `test_gate.sh` runs verifier locally. No existing CI benchmark path is
-within S3-5A owner scope, so this work package does not wire files outside
-`benchmarks/s3/volume/contract/**`.
+tests. `test_gate.sh` runs verifier locally and in benchmark CI.

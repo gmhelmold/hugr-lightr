@@ -24,8 +24,8 @@
     "process.observe": ["pid", "token", "result"],
     "registry.observe": ["run_id", "nonce", "result"],
     "recover.active": ["nonce"],
-    "rm": [],
-    "prune": [],
+    "rm": ["actor"],
+    "prune": ["actor"],
     "fault": ["point", "operation"]
   }
 }

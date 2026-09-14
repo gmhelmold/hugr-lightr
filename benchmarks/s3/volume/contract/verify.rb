@@ -41,8 +41,7 @@ def durable_after?(events, start_index)
   fsync
 end
 
-schema_path, fixtures_path, goldens_path = ARGV
-if schema_path == "--self-test" && fixtures_path.nil? && goldens_path.nil?
+def with_corpus
   Dir.mktmpdir("volume-contract-") do |directory|
     schema = File.join(directory, "schema.json")
     fixtures = File.join(directory, "fixtures.json")
@@ -50,15 +49,42 @@ if schema_path == "--self-test" && fixtures_path.nil? && goldens_path.nil?
     [schema, fixtures, goldens].zip(%w[schema.json fixtures.json goldens.json]).each do |destination, source|
       FileUtils.cp(File.join(ROOT, source), destination)
     end
-    fail_contract("self-test clean corpus failed") unless system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
+    yield schema, fixtures, goldens
+  end
+end
 
+schema_path, fixtures_path, goldens_path = ARGV
+if schema_path == "--self-test" && fixtures_path.nil? && goldens_path.nil?
+  with_corpus do |schema, fixtures, goldens|
+    fail_contract("self-test clean corpus failed") unless system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
+  end
+
+  with_corpus do |schema, fixtures, goldens|
     mutated = load_json(goldens)
     mutated.fetch("goldens").find { |golden| golden.fetch("id") == "lock-loss-refuses-without-deletion" }["outcome"] = "released"
     File.write(goldens, JSON.generate(mutated))
     fail_contract("self-test fault mismatch passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
+  end
 
+  with_corpus do |schema, fixtures, goldens|
     File.write(fixtures, "{")
     fail_contract("self-test malformed fixture passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
+  end
+
+  with_corpus do |schema, fixtures, goldens|
+    mutated = load_json(fixtures)
+    trace = mutated.fetch("fixtures").find { |fixture| fixture.fetch("id") == "normal-teardown" }.fetch("trace")
+    trace.reject! { |event| event["event"] == "registry.terminal" }
+    File.write(fixtures, JSON.generate(mutated))
+    fail_contract("self-test missing terminal passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
+  end
+
+  with_corpus do |schema, fixtures, goldens|
+    mutated = load_json(fixtures)
+    trace = mutated.fetch("fixtures").find { |fixture| fixture.fetch("id") == "concurrent-rm-prune-refuse-active" }.fetch("trace")
+    trace.reject! { |event| event["event"] == "lock.acquire" && event["actor"] == "rm" }
+    File.write(fixtures, JSON.generate(mutated))
+    fail_contract("self-test missing required lock passed") if system(RbConfig.ruby, __FILE__, schema, fixtures, goldens)
   end
   puts "volume contract self-test: OK"
   exit 0
@@ -103,6 +129,33 @@ fixtures.each do |fixture|
     state = golden["state"]
     observations = golden["observations"]
     fail_contract("#{id}: fault deletes volume") unless state && state["volume_exists"] == true && observations && observations["delete_attempted"] == false
+  end
+
+  lock_holder = nil
+  events.each do |event|
+    case event["event"]
+    when "lock.acquire"
+      fail_contract("#{id}: overlapping lock acquire") if lock_holder
+      lock_holder = event.fetch("actor")
+    when "lock.release"
+      fail_contract("#{id}: lock release without matching acquire") unless lock_holder == event.fetch("actor")
+      lock_holder = nil
+    when "lock.loss"
+      fail_contract("#{id}: lock loss without matching acquire") unless lock_holder == event.fetch("actor")
+      lock_holder = nil
+    when "rm", "prune"
+      fail_contract("#{id}: #{event["event"]} outside matching lock interval") unless lock_holder == event.fetch("actor")
+    end
+  end
+
+  events.each_with_index do |event, index|
+    next unless event["event"] == "owner.remove"
+    run_id = event.fetch("run_id")
+    nonce = event.fetch("nonce")
+    active = events.each_index.find { |candidate| candidate < index && events[candidate]["event"] == "registry.active" && events[candidate]["run_id"] == run_id && events[candidate]["nonce"] == nonce }
+    terminal = active && events.each_index.find { |candidate| candidate > active && candidate < index && events[candidate]["event"] == "registry.terminal" && events[candidate]["run_id"] == run_id && events[candidate]["nonce"] == nonce }
+    terminal_sync = terminal && event_index_after(events, "registry.sync", terminal, run_id)
+    fail_contract("#{id}: owner removal lacks active-terminal-sync registry sequence for #{run_id}") unless terminal_sync && terminal_sync < index
   end
 
   events.each_with_index do |event, index|
