@@ -338,9 +338,17 @@ pub fn activate_owner(
         process_start_token: process_start_token(pid)?,
         mount_id: mount_id.to_string(),
     };
+    let pending = owners.owners[index].clone();
     owners.owners[index] = owner.clone();
     write_owners(root, name, &owners, &lock)?;
-    write_run_owner(run_dir, name, &owner, false)?;
+    if let Err(error) = write_run_owner(run_dir, name, &owner, false) {
+        // The old pending witness is still durable. Restore it before returning so
+        // caller-side child teardown can abandon this exact nonce without stranding
+        // an active owner whose witness was never published.
+        owners.owners[index] = pending;
+        write_owners(root, name, &owners, &lock)?;
+        return Err(error);
+    }
     Ok(owner)
 }
 
@@ -389,7 +397,13 @@ pub fn release_owner(root: &Path, name: &str, run_dir: &Path) -> Result<()> {
 /// callers receive refusal.
 pub fn recover(root: &Path, name: &str, home: &Path) -> Result<()> {
     let lock = owner_lock(root, name)?;
-    let mut owners = read_owners(root, name, &lock)?;
+    recover_locked(root, name, home, &lock)
+}
+
+/// Same recovery transition while caller retains the volume flock. Destructive
+/// callers use this to make recovery, empty snapshot, and deletion one interval.
+fn recover_locked(root: &Path, name: &str, home: &Path, lock: &OwnerLock) -> Result<()> {
+    let mut owners = read_owners(root, name, lock)?;
     let mut keep = Vec::with_capacity(owners.owners.len());
     for owner in &owners.owners {
         match owner {
@@ -434,7 +448,7 @@ pub fn recover(root: &Path, name: &str, home: &Path) -> Result<()> {
     }
     if keep != owners.owners {
         owners.owners = keep;
-        write_owners(root, name, &owners, &lock)?;
+        write_owners(root, name, &owners, lock)?;
     }
     Ok(())
 }
@@ -606,14 +620,20 @@ pub fn remove(root: &Path, name: &str, in_use: bool) -> Result<()> {
     let home = root.parent().ok_or_else(|| {
         LightrError::InvalidRef(format!("volume {name}: owner recovery ambiguous"))
     })?;
-    recover(root, name, home)?;
     let lock = owner_lock(root, name)?;
+    recover_locked(root, name, home, &lock)?;
     let owners = read_owners(root, name, &lock)?;
     if !owners.owners.is_empty() {
         return Err(LightrError::InvalidRef(format!("volume is in use: {name}")));
     }
     fs::remove_dir_all(&dir)?;
     Ok(())
+}
+
+/// Check platform primitives before a CLI creates/prints a detached run id.
+/// Linux requires a readable stable process-start token; other targets reject.
+pub fn owner_runtime_supported() -> Result<()> {
+    process_start_token(std::process::id() as i32).map(|_| ())
 }
 
 /// Prune volumes with empty durable ownership snapshots. Busy or ambiguous

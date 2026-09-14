@@ -124,6 +124,11 @@ pub fn run(
         Ok(f) => f,
         Err(code) => return code,
     };
+    if !runflags.named_volumes.is_empty() {
+        if let Err(error) = lightr_store::volume::owner_runtime_supported() {
+            return die_lightr(&error);
+        }
+    }
     // WP-RUNFLAGS: `--name`/`--rm` are detached-only (they need a run dir the
     // detached path creates) — honest exit 2 without `-d` (see policy fn).
     if let Some(code) = policy::detached_only_flags_policy(&runflags, detach) {

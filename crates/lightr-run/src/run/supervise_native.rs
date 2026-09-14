@@ -161,12 +161,23 @@ fn run_supervisor_loop(
                 child_pid,
                 &mount_id,
             ) {
-                let _ = unsafe { libc::kill(child_pid, libc::SIGKILL) };
+                kill_and_reap(&mut child, child_pid);
+                for (name, owner) in &pending {
+                    let _ = lightr_store::volume::abandon_pending(volume_root, name, owner.nonce());
+                }
                 return Err(error);
             }
         }
         if let Some(barrier) = &barrier {
-            barrier.release()?;
+            if let Err(error) = barrier.release() {
+                kill_and_reap(&mut child, child_pid);
+                write_terminal_status(dir, 1)?;
+                for (name, _) in &volumes {
+                    lightr_store::volume::terminal_run_owner(dir)?;
+                    lightr_store::volume::release_owner(volume_root, name, dir)?;
+                }
+                return Err(error);
+            }
         }
 
         // Per-child monitor: serve ctl.sock + poll child + probe health.
@@ -260,9 +271,7 @@ fn run_supervisor_loop(
     // once any reader observes the socket gone (→ not-running), the terminal status
     // is already (about to be) written, so the two are never contradictory.
     let _ = std::fs::remove_file(&sock_path);
-    let status = dir.join("status");
-    std::fs::write(&status, format!("exited {final_exit}")).map_err(LightrError::Io)?;
-    std::fs::File::open(&status).map_err(LightrError::Io)?.sync_all().map_err(LightrError::Io)?;
+    write_terminal_status(dir, final_exit)?;
     for (name, _) in &volumes {
         lightr_store::volume::terminal_run_owner(dir)?;
         lightr_store::volume::release_owner(volume_root, name, dir)?;
@@ -270,6 +279,23 @@ fn run_supervisor_loop(
     // WP-RUNFLAGS: `--rm` auto-clean on final exit (no-op unless `rm`).
     maybe_auto_remove(dir, spec);
     Ok(final_exit)
+}
+
+#[cfg(unix)]
+fn kill_and_reap(child: &mut std::process::Child, pid: i32) {
+    unsafe { libc::kill(-pid, libc::SIGKILL) };
+    unsafe { libc::kill(pid, libc::SIGKILL) };
+    let _ = child.wait();
+}
+
+#[cfg(unix)]
+fn write_terminal_status(dir: &std::path::Path, code: i32) -> Result<()> {
+    let status = dir.join("status");
+    std::fs::write(&status, format!("exited {code}")).map_err(LightrError::Io)?;
+    std::fs::File::open(&status)
+        .map_err(LightrError::Io)?
+        .sync_all()
+        .map_err(LightrError::Io)
 }
 
 #[cfg(windows)] // WIN-PATH: named-pipe control server, identical JSON wire protocol.
@@ -373,3 +399,7 @@ mod win;
 #[cfg(test)]
 #[path = "supervise_native_tests.rs"]
 mod tests;
+
+#[cfg(all(test, target_os = "linux"))]
+#[path = "volume_runtime_tests.rs"]
+mod volume_runtime_tests;

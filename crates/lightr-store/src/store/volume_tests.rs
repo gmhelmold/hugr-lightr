@@ -361,3 +361,31 @@ fn failed_spawn_abandons_only_its_pending_nonce() {
     assert_eq!(owners.owners.len(), 1);
     assert_eq!(owners.owners[0].nonce(), second.nonce());
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn activation_witness_failure_restores_exact_pending_owner() {
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "rollback", &[]).unwrap();
+    let run = home.join("run/r1");
+    let pending = begin_owner(&root, "rollback", &run).unwrap();
+    let nonce = pending.nonce().to_string();
+    fs::remove_file(run.join("volume-owner.json")).unwrap();
+    fs::create_dir(run.join("volume-owner.json")).unwrap();
+    assert!(activate_owner(
+        &root,
+        "rollback",
+        &run,
+        &nonce,
+        "r1",
+        std::process::id() as i32,
+        "rollback:mounted",
+    )
+    .is_err());
+    let lock = owner_lock(&root, "rollback").unwrap();
+    let owners = read_owners(&root, "rollback", &lock).unwrap();
+    assert_eq!(owners.owners, vec![pending]);
+}

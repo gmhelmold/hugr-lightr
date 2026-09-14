@@ -52,6 +52,7 @@ pub fn spawn_detached_engine(
     rootfs_ref: Option<&str>,
     env: &[(String, String)],
 ) -> Result<RunHandle> {
+    ensure_named_volume_capability(spec.named_volumes.len())?;
     // WP-D (create): the atomic spawn is now (prepare → launch). `create_run_prepared`
     // does the dir + spec.json (+ healthcheck) write WITHOUT a supervisor — exactly the
     // "Created" state docker `create` materializes. The spawn path then launches the
@@ -219,6 +220,13 @@ pub fn create_run_prepared(
 /// dir/id without duplicating the detach (setsid / DETACHED_PROCESS) logic.
 /// Behaviour for the spawn path is byte-identical to the inline code it replaced.
 pub(super) fn launch_supervisor(dir: &std::path::Path) -> Result<()> {
+    let spec = super::paths::read_spec_on_disk(dir)?;
+    let named = spec
+        .mounts2
+        .iter()
+        .filter(|mount| matches!(mount, super::types::MountOnDisk2::NamedVolume { .. }))
+        .count();
+    ensure_named_volume_capability(named)?;
     let exe = std::env::current_exe().map_err(LightrError::Io)?;
     let dir_str = dir.to_string_lossy().into_owned();
 
@@ -255,6 +263,13 @@ pub(super) fn launch_supervisor(dir: &std::path::Path) -> Result<()> {
 
     cmd.spawn().map_err(LightrError::Io)?;
     Ok(())
+}
+
+fn ensure_named_volume_capability(count: usize) -> Result<()> {
+    if count == 0 {
+        return Ok(());
+    }
+    lightr_store::volume::owner_runtime_supported()
 }
 
 /// WP-RC-WORKDIR: resolve the directory the run's process must execute in, and

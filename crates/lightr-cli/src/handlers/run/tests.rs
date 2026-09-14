@@ -78,6 +78,44 @@ fn publish_without_detach_exits_2() {
     assert_eq!(code, 2, "-p without -d must exit 2");
 }
 
+#[cfg(not(target_os = "linux"))]
+#[test]
+fn named_volume_capability_fails_before_detached_spawn() {
+    let code = run(
+        ".",
+        &[],
+        &[],
+        &["true".to_string()],
+        false,
+        false,
+        true,
+        &[],
+        false,
+        &[],
+        "native",
+        None,
+        "host",
+        false,
+        None,
+        None,
+        &[],
+        &[],
+        &[],
+        None,
+        None,
+        None,
+        None,
+        None,
+        &HealthFlags::default(),
+        super::RawRcFlags::default(),
+        super::RawRunFlags {
+            volume: vec!["data:mounted".to_string()],
+            ..Default::default()
+        },
+    );
+    assert_eq!(code, 2, "unsupported host must reject before detached spawn");
+}
+
 #[test]
 fn publish_on_engine_path_exits_2() {
     // -p + -d but engine=vz ⇒ exit 2 (guard 2), before the engine early
