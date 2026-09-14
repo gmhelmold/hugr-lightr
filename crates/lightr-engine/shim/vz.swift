@@ -599,12 +599,7 @@ public func lightr_vz_session_resume(_ handle: UInt64) -> Int32 {
     #else
     guard #available(macOS 14.0, *) else { return vzUnsupported }
     return withSession(handle) { session in
-        guard session.vm.state == .paused else { return vzInvalidState }
-        let done = DispatchSemaphore(value: 0); var status = vzLifecycle
-        session.vm.resume { (result: Result<Void, Error>) in
-            switch result { case .success: status = vzOk; case .failure: status = vzLifecycle }; done.signal()
-        }
-        return done.wait(timeout: .now() + 60) == .success ? status : vzTimeout
+        resume(session)
     }
     #endif
 }
@@ -623,6 +618,7 @@ public func lightr_vz_session_destroy(_ handle: UInt64) -> Int32 {
 }
 
 
+#if arch(arm64)
 @available(macOS 14.0, *)
 private func pauseAndSave(_ session: VzSession, statePath: String) -> Int32 {
     guard session.vm.state == .running else { return vzInvalidState }
@@ -649,3 +645,36 @@ private func restore(_ session: VzSession, statePath: String) -> Int32 {
     })
     return done.wait(timeout: .now() + 60) == .success ? status : vzTimeout
 }
+
+@available(macOS 14.0, *)
+private func resume(_ session: VzSession) -> Int32 {
+    guard session.vm.state == .paused else { return vzInvalidState }
+    let done = DispatchSemaphore(value: 0)
+    var status = vzLifecycle
+    session.vm.resume { (result: Result<Void, Error>) in
+        switch result { case .success: status = vzOk; case .failure: status = vzLifecycle }
+        done.signal()
+    }
+    return done.wait(timeout: .now() + 60) == .success ? status : vzTimeout
+}
+#else
+@available(macOS 14.0, *)
+private func pauseAndSave(_ session: VzSession, statePath: String) -> Int32 {
+    _ = session
+    _ = statePath
+    return vzUnsupported
+}
+
+@available(macOS 14.0, *)
+private func restore(_ session: VzSession, statePath: String) -> Int32 {
+    _ = session
+    _ = statePath
+    return vzUnsupported
+}
+
+@available(macOS 14.0, *)
+private func resume(_ session: VzSession) -> Int32 {
+    _ = session
+    return vzUnsupported
+}
+#endif
