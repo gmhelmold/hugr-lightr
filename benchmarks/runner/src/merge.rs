@@ -1,5 +1,5 @@
 use clap::Args;
-use crate::evidence::{RawRecord, SummaryRecord, Phase, Outcome};
+use crate::evidence::{RawRecord, SummaryRecord};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
@@ -57,10 +57,10 @@ pub fn execute(args: MergeArgs) -> anyhow::Result<()> {
         writeln!(jsonl_writer, "{}", record.to_jsonl())?;
     }
 
-    // Validate: check for duplicate (scenario, tool, round) in timed phase
+    // Validate: check for duplicate (scenario, tool, round)
     let mut seen = HashMap::new();
     for r in &all_records {
-        if r.phase == Phase::Timed {
+        if r.outcome != "skipped" {
             let key = (r.scenario_id.clone(), r.tool.clone(), r.round);
             if seen.contains_key(&key) {
                 anyhow::bail!("duplicate record for (scenario={}, tool={}, round={})", key.0, key.1, key.2);
@@ -72,7 +72,7 @@ pub fn execute(args: MergeArgs) -> anyhow::Result<()> {
     // Check for missing rounds per (scenario, tool)
     let mut round_counts: HashMap<(String, String), Vec<u32>> = HashMap::new();
     for r in &all_records {
-        if r.phase == Phase::Timed {
+        if r.outcome != "skipped" {
             round_counts.entry((r.scenario_id.clone(), r.tool.clone()))
                 .or_default()
                 .push(r.round);
@@ -83,7 +83,7 @@ pub fn execute(args: MergeArgs) -> anyhow::Result<()> {
     let mut summaries = Vec::new();
     let mut by_scenario_tool: HashMap<(String, String), Vec<&RawRecord>> = HashMap::new();
     for r in &all_records {
-        if r.phase == Phase::Timed {
+        if r.outcome != "skipped" {
             by_scenario_tool.entry((r.scenario_id.clone(), r.tool.clone()))
                 .or_default()
                 .push(r);
@@ -93,8 +93,8 @@ pub fn execute(args: MergeArgs) -> anyhow::Result<()> {
     for ((scenario_id, tool), recs) in by_scenario_tool {
         let mut durations: Vec<f64> = recs
             .iter()
-            .filter(|r| r.outcome == Outcome::Success)
-            .map(|r| (r.end_ts - r.start_ts) * 1000.0)
+            .filter(|r| r.outcome == "passed")
+            .map(|r| r.elapsed_ms as f64)
             .collect();
 
         let (mean, stddev, p50, p95, min, max) = if durations.is_empty() {
@@ -107,17 +107,17 @@ pub fn execute(args: MergeArgs) -> anyhow::Result<()> {
             let stddev = variance.sqrt();
             let p50 = durations[(n * 50 / 100).min(n - 1)];
             let p95 = durations[(n * 95 / 100).min(n - 1)];
-            (mean, stddev, p50, p95, durations[0], durations[n - 1])
+            (mean, stddev, p50, p95, durations[0] as f64, durations[n - 1] as f64)
         };
 
         let mut outcome_counts = HashMap::new();
         for r in &recs {
-            *outcome_counts.entry(format!("{:?}", r.outcome)).or_insert(0) += 1;
+            *outcome_counts.entry(r.outcome.clone()).or_insert(0) += 1;
         }
 
         summaries.push(SummaryRecord {
             scenario_id,
-            category: "unknown".to_string(), // would need spec to get this
+            category: "unknown".to_string(),
             availability: "unknown".to_string(),
             tool,
             rounds: recs.len() as u32,

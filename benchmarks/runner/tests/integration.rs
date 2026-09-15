@@ -1,5 +1,5 @@
 use bench_runner::spec::{Spec, Scenario, Availability, Assertion, Fixture, ToolCommand};
-use bench_runner::evidence::{RawRecord, Phase, Outcome, SummaryRecord};
+use bench_runner::evidence::{RawRecord, SummaryRecord, AssertionRecord};
 use bench_runner::util::{make_test_spec, write_spec_yaml, make_test_records, write_jsonl};
 use tempfile::TempDir;
 use std::fs::File;
@@ -81,11 +81,9 @@ fn evidence_duplicate_detection() {
     let records = make_test_records();
     let mut seen = std::collections::HashMap::new();
     for r in &records {
-        if r.phase == Phase::Timed {
-            let key = (r.scenario_id.clone(), r.tool.clone(), r.round);
-            assert!(!seen.contains_key(&key));
-            seen.insert(key, ());
-        }
+        let key = (r.scenario_id.clone(), r.tool.clone(), r.round);
+        assert!(!seen.contains_key(&key));
+        seen.insert(key, ());
     }
     // Adding duplicate should be detected
     let dup = records[0].clone();
@@ -98,11 +96,9 @@ fn merge_missing_round_detected() {
     let records = make_test_records();
     let mut by_scenario_tool: std::collections::HashMap<(String, String), Vec<u32>> = std::collections::HashMap::new();
     for r in &records {
-        if r.phase == Phase::Timed {
-            by_scenario_tool.entry((r.scenario_id.clone(), r.tool.clone()))
-                .or_default()
-                .push(r.round);
-        }
+        by_scenario_tool.entry((r.scenario_id.clone(), r.tool.clone()))
+            .or_default()
+            .push(r.round);
     }
     // Each (scenario, tool) should have round 1
     for (_, rounds) in &by_scenario_tool {
