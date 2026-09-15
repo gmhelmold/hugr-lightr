@@ -135,7 +135,7 @@ fn run_scenario(
             lightr_version.to_string(),
             lightr_digest.to_string(),
         );
-        run_command(&mut record, &scenario.docker_cmd, docker_bin, timeout)?;
+        run_command(&mut record, &scenario.docker.command, docker_bin, timeout)?;
         writeln!(writer, "{}", record.to_jsonl())?;
 
         // Lightr command
@@ -153,7 +153,7 @@ fn run_scenario(
             lightr_version.to_string(),
             lightr_digest.to_string(),
         );
-        run_command(&mut record, &scenario.lightr_cmd, lightr_bin, timeout)?;
+        run_command(&mut record, &scenario.lightr.command, lightr_bin, timeout)?;
         writeln!(writer, "{}", record.to_jsonl())?;
 
         // Check assertions for timed rounds only
@@ -296,12 +296,10 @@ fn spec_digest(path: &std::path::Path) -> anyhow::Result<String> {
 }
 
 fn fixture_tree_digest(scenarios: &[&Scenario]) -> anyhow::Result<String> {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
     let mut hasher = Sha256::new();
     for s in scenarios {
-        hasher.update(s.fixture_path.as_bytes());
-        hasher.update(s.context.as_bytes());
+        hasher.update(s.fixture.path.as_bytes());
+        hasher.update(s.fixture.context.as_bytes());
     }
     Ok(format!("{:x}", hasher.finalize()))
 }

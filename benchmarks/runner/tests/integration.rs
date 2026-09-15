@@ -1,27 +1,38 @@
-use bench_runner::spec::{Spec, Scenario, Availability, Assertion};
+use bench_runner::spec::{Spec, Scenario, Availability, Assertion, Fixture, ToolCommand};
 use bench_runner::evidence::{RawRecord, Phase, Outcome, SummaryRecord};
 use bench_runner::util::{make_test_spec, write_spec_yaml, make_test_records, write_jsonl};
 use tempfile::TempDir;
 use std::fs::File;
 use std::io::Write;
 
-#[test]
-fn spec_duplicate_id_fails() {
-    let mut spec = make_test_spec();
-    spec.scenarios.push(Scenario {
+fn make_duplicate_scenario() -> Scenario {
+    Scenario {
         id: "test-supported".to_string(),
         category: "run".to_string(),
         availability: Availability::Supported,
         reason: None,
-        project: "test".to_string(),
-        fixture_path: "test/fixture3".to_string(),
-        context: "test/context3".to_string(),
-        docker_cmd: "echo hello".to_string(),
-        lightr_cmd: "echo hello".to_string(),
+        fixture: Fixture {
+            project: "test".to_string(),
+            path: "test/fixture3".to_string(),
+            context: "test/context3".to_string(),
+        },
+        docker: ToolCommand {
+            command: "echo hello".to_string(),
+        },
+        lightr: ToolCommand {
+            command: "echo hello".to_string(),
+        },
         metrics: vec!["a".to_string(), "b".to_string(), "c".to_string(), "d".to_string()],
         tags: vec!["x".to_string(), "y".to_string()],
         assertions: vec![Assertion::ExitCode { expected: 0 }],
-    });
+        lightr_evidence: None,
+    }
+}
+
+#[test]
+fn spec_duplicate_id_fails() {
+    let mut spec = make_test_spec();
+    spec.scenarios.push(make_duplicate_scenario());
     assert!(spec.validate().is_err());
 }
 
@@ -130,20 +141,7 @@ fn runner_verify_spec_duplicate_fails() {
     let tmp = TempDir::new().unwrap();
     let spec_path = tmp.path().join("spec.yaml");
     let mut spec = make_test_spec();
-    spec.scenarios.push(Scenario {
-        id: "test-supported".to_string(),
-        category: "run".to_string(),
-        availability: Availability::Supported,
-        reason: None,
-        project: "test".to_string(),
-        fixture_path: "test/fixture3".to_string(),
-        context: "test/context3".to_string(),
-        docker_cmd: "echo hello".to_string(),
-        lightr_cmd: "echo hello".to_string(),
-        metrics: vec!["a".to_string(), "b".to_string(), "c".to_string(), "d".to_string()],
-        tags: vec!["x".to_string(), "y".to_string()],
-        assertions: vec![Assertion::ExitCode { expected: 0 }],
-    });
+    spec.scenarios.push(make_duplicate_scenario());
     write_spec_yaml(&spec, &spec_path).unwrap();
 
     let mut cmd = Command::cargo_bin("bench-runner").unwrap();
@@ -200,20 +198,7 @@ fn runner_merge_synthetic() {
 #[test]
 fn mutation_duplicate_id_validation() {
     let mut spec = make_test_spec();
-    spec.scenarios.push(Scenario {
-        id: "test-supported".to_string(),
-        category: "run".to_string(),
-        availability: Availability::Supported,
-        reason: None,
-        project: "test".to_string(),
-        fixture_path: "test/fixture3".to_string(),
-        context: "test/context3".to_string(),
-        docker_cmd: "echo hello".to_string(),
-        lightr_cmd: "echo hello".to_string(),
-        metrics: vec!["a".to_string(), "b".to_string(), "c".to_string(), "d".to_string()],
-        tags: vec!["x".to_string(), "y".to_string()],
-        assertions: vec![Assertion::ExitCode { expected: 0 }],
-    });
+    spec.scenarios.push(make_duplicate_scenario());
     
     // Current implementation should catch duplicate
     assert!(spec.validate().is_err());
