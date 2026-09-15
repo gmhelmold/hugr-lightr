@@ -9,6 +9,23 @@ use lightr_store::{volume, Store};
 use std::fs;
 use std::time::{Duration, Instant};
 
+const GATE_FIXTURE: &str = r#"#!/bin/sh
+[ "$1" = __volume_gate ] || exit 127
+fd="$2"
+[ "$3" = -- ] || exit 127
+shift 3
+[ "$#" -gt 0 ] || exit 127
+: > __LIGHTR_GATE_READY__
+byte=$(dd bs=1 count=1 < "/proc/self/fd/$fd" 2>/dev/null)
+[ "$byte" = "$(printf '\001')" ] || exit 127
+eval "exec $fd<&-"
+exec "$@"
+"#;
+
+fn shell_quote(value: &std::path::Path) -> String {
+    format!("'{}'", value.to_string_lossy().replace('\'', "'\"'\"'"))
+}
+
 fn home() -> (tempfile::TempDir, std::sync::MutexGuard<'static, ()>) {
     let guard = crate::run::tests::ENV_LOCK
         .lock()
@@ -16,20 +33,10 @@ fn home() -> (tempfile::TempDir, std::sync::MutexGuard<'static, ()>) {
     let home = tempfile::tempdir().unwrap();
     std::env::set_var("LIGHTR_HOME", home.path());
     let gate = home.path().join("volume-gate.sh");
+    let ready = home.path().join("gate-ready-$'");
     fs::write(
         &gate,
-        r#"#!/bin/sh
-[ "$1" = __volume_gate ] || exit 127
-fd="$2"
-[ "$3" = -- ] || exit 127
-shift 3
-[ "$#" -gt 0 ] || exit 127
-[ -z "$LIGHTR_GATE_READY" ] || : > "$LIGHTR_GATE_READY"
-byte=$(dd bs=1 count=1 < "/proc/self/fd/$fd" 2>/dev/null)
-[ "$byte" = "$(printf '\001')" ] || exit 127
-eval "exec $fd<&-"
-exec "$@"
-"#,
+        GATE_FIXTURE.replace("__LIGHTR_GATE_READY__", &shell_quote(&ready)),
     )
     .unwrap();
     use std::os::unix::fs::PermissionsExt;
@@ -43,6 +50,14 @@ fn generated_gate_fixture_enforces_marker_and_release_byte() {
     use std::os::fd::{FromRawFd, RawFd};
     let (home, _guard) = home();
     let gate = home.path().join("volume-gate.sh");
+    let emitted = fs::read_to_string(&gate).unwrap();
+    for literal in ["[ \"$1\"", "fd=\"$2\"", "[ \"$3\"", "exec \"$@\""] {
+        assert!(
+            emitted.contains(literal),
+            "fixture lost shell positional parameter: {literal}"
+        );
+    }
+    assert!(!emitted.contains("__LIGHTR_GATE_READY__"));
     let mut fds: [RawFd; 2] = [0; 2];
     assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
     let mut write = unsafe { std::fs::File::from_raw_fd(fds[1]) };
@@ -66,7 +81,7 @@ fn generated_gate_fixture_enforces_marker_and_release_byte() {
         .status()
         .unwrap();
     assert_eq!(no_command.code(), Some(127));
-    let ready = home.path().join("gate-ready");
+    let ready = home.path().join("gate-ready-$'");
     let mut child = std::process::Command::new(&gate)
         .args([
             "__volume_gate",
@@ -76,7 +91,6 @@ fn generated_gate_fixture_enforces_marker_and_release_byte() {
             "-c",
             "exit 23",
         ])
-        .env("LIGHTR_GATE_READY", &ready)
         .spawn()
         .unwrap();
     let deadline = Instant::now() + Duration::from_secs(2);
