@@ -277,11 +277,10 @@ pub fn volume_gate_dispatch() -> bool {
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
     let args: Vec<_> = std::env::args_os().collect();
-    if args.len() < 5 || args[1] != "__volume_gate" || args[3] != "--" {
-        return false;
-    }
-    let Ok(fd) = args[2].to_string_lossy().parse::<libc::c_int>() else {
-        std::process::exit(127)
+    let (fd, user_argv) = match parse_gate_argv(&args) {
+        None => return false,
+        Some(Err(())) => std::process::exit(127),
+        Some(Ok(parsed)) => parsed,
     };
     let mut byte = [0_u8; 1];
     if unsafe { libc::read(fd, byte.as_mut_ptr().cast(), 1) } != 1 || byte[0] != 1 {
@@ -290,7 +289,7 @@ pub fn volume_gate_dispatch() -> bool {
     if unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) } == -1 {
         std::process::exit(127);
     }
-    let argv: Vec<CString> = args[4..]
+    let argv: Vec<CString> = user_argv
         .iter()
         .map(|arg| CString::new(arg.as_bytes()).unwrap())
         .collect();
@@ -300,27 +299,49 @@ pub fn volume_gate_dispatch() -> bool {
     std::process::exit(127);
 }
 
+#[cfg(unix)]
+fn parse_gate_argv(
+    args: &[std::ffi::OsString],
+) -> Option<std::result::Result<(libc::c_int, &[std::ffi::OsString]), ()>> {
+    if args.get(1).is_none_or(|arg| arg != "__volume_gate") {
+        return None;
+    }
+    let fd = match args.get(2)?.to_string_lossy().parse::<libc::c_int>() {
+        Ok(fd) => fd,
+        Err(_) => return Some(Err(())),
+    };
+    if args.get(3).is_none_or(|arg| arg != "--") || args.len() < 5 {
+        return Some(Err(()));
+    }
+    Some(Ok((fd, &args[4..])))
+}
+
 #[cfg(all(test, unix))]
 mod gate_abi_tests {
+    use super::parse_gate_argv;
     #[test]
     fn production_gate_abi_requires_marker_fd_delimiter_and_command() {
-        fn valid(args: &[&str]) -> bool {
-            args.len() >= 5
-                && args[1] == "__volume_gate"
-                && args[2].parse::<libc::c_int>().is_ok()
-                && args[3] == "--"
-        }
-        assert!(!valid(&["gate", "wrong", "4", "--", "/bin/true"]));
-        assert!(!valid(&[
-            "gate",
-            "__volume_gate",
-            "4",
-            "wrong",
-            "/bin/true"
-        ]));
-        assert!(!valid(&["gate", "__volume_gate", "bad", "--", "/bin/true"]));
-        assert!(!valid(&["gate", "__volume_gate", "4", "--"]));
-        assert!(valid(&["gate", "__volume_gate", "4", "--", "/bin/true"]));
+        let args = |items: &[&str]| {
+            items
+                .iter()
+                .map(std::ffi::OsString::from)
+                .collect::<Vec<_>>()
+        };
+        assert!(parse_gate_argv(&args(&["gate", "wrong", "4", "--", "/bin/true"])).is_none());
+        assert!(matches!(
+            parse_gate_argv(&args(&["gate", "__volume_gate", "4", "wrong", "/bin/true"])),
+            Some(Err(()))
+        ));
+        assert!(matches!(
+            parse_gate_argv(&args(&["gate", "__volume_gate", "bad", "--", "/bin/true"])),
+            Some(Err(()))
+        ));
+        assert!(matches!(
+            parse_gate_argv(&args(&["gate", "__volume_gate", "4", "--"])),
+            Some(Err(()))
+        ));
+        let valid = args(&["gate", "__volume_gate", "4", "--", "/bin/true"]);
+        assert!(matches!(parse_gate_argv(&valid), Some(Ok((4, argv))) if argv == &valid[4..]));
     }
 }
 
