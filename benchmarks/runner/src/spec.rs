@@ -98,10 +98,6 @@ impl Spec {
             if s.tags.len() < 2 {
                 anyhow::bail!("scenario {} requires at least 2 taxonomy tags, has {}", s.id, s.tags.len());
             }
-            if s.assertions.is_empty() {
-                anyhow::bail!("scenario {} requires at least one assertion", s.id);
-            }
-            // Validate fixture for supported scenarios
             if matches!(s.availability, Availability::Supported) {
                 if s.fixture.project.is_empty() || s.fixture.path.is_empty() || s.fixture.context.is_empty() {
                     anyhow::bail!("scenario {} supported requires fixture project/path/context", s.id);
@@ -109,6 +105,11 @@ impl Spec {
                 if s.docker.command.is_empty() || s.lightr.command.is_empty() {
                     anyhow::bail!("scenario {} supported requires both docker and lightr commands", s.id);
                 }
+                if s.assertions.is_empty() {
+                    anyhow::bail!("scenario {} supported requires at least one assertion", s.id);
+                }
+            } else {
+                // Non-supported scenarios don't require assertions, but if present they must be valid
             }
             for a in &s.assertions {
                 a.validate()?;
