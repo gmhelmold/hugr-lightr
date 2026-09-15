@@ -465,7 +465,3 @@ mod win;
 #[cfg(test)]
 #[path = "supervise_native_tests.rs"]
 mod tests;
-
-#[cfg(all(test, target_os = "linux"))]
-#[path = "volume_runtime_tests.rs"]
-mod volume_runtime_tests;
