@@ -300,6 +300,30 @@ pub fn volume_gate_dispatch() -> bool {
     std::process::exit(127);
 }
 
+#[cfg(all(test, unix))]
+mod gate_abi_tests {
+    #[test]
+    fn production_gate_abi_requires_marker_fd_delimiter_and_command() {
+        fn valid(args: &[&str]) -> bool {
+            args.len() >= 5
+                && args[1] == "__volume_gate"
+                && args[2].parse::<libc::c_int>().is_ok()
+                && args[3] == "--"
+        }
+        assert!(!valid(&["gate", "wrong", "4", "--", "/bin/true"]));
+        assert!(!valid(&[
+            "gate",
+            "__volume_gate",
+            "4",
+            "wrong",
+            "/bin/true"
+        ]));
+        assert!(!valid(&["gate", "__volume_gate", "bad", "--", "/bin/true"]));
+        assert!(!valid(&["gate", "__volume_gate", "4", "--"]));
+        assert!(valid(&["gate", "__volume_gate", "4", "--", "/bin/true"]));
+    }
+}
+
 /// WP-RC-WORKDIR: resolve the directory the run's process must execute in, and
 /// CREATE it if absent (Docker creates `WORKDIR`). `workdir = None` ⇒ `base`
 /// unchanged, with NO mkdir — so a run with no `-w` is byte-identical to before

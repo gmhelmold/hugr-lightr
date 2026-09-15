@@ -23,6 +23,8 @@ fn home() -> (tempfile::TempDir, std::sync::MutexGuard<'static, ()>) {
 fd="$2"
 [ "$3" = -- ] || exit 127
 shift 3
+[ "$#" -gt 0 ] || exit 127
+[ -z "$LIGHTR_GATE_READY" ] || : > "$LIGHTR_GATE_READY"
 byte=$(dd bs=1 count=1 < "/proc/self/fd/$fd" 2>/dev/null)
 [ "$byte" = "$(printf '\001')" ] || exit 127
 eval "exec $fd<&-"
@@ -59,6 +61,12 @@ fn generated_gate_fixture_enforces_marker_and_release_byte() {
         .status()
         .unwrap();
     assert_eq!(wrong_delimiter.code(), Some(127));
+    let no_command = std::process::Command::new(&gate)
+        .args(["__volume_gate", &fds[0].to_string(), "--"])
+        .status()
+        .unwrap();
+    assert_eq!(no_command.code(), Some(127));
+    let ready = home.path().join("gate-ready");
     let mut child = std::process::Command::new(&gate)
         .args([
             "__volume_gate",
@@ -68,8 +76,17 @@ fn generated_gate_fixture_enforces_marker_and_release_byte() {
             "-c",
             "exit 23",
         ])
+        .env("LIGHTR_GATE_READY", &ready)
         .spawn()
         .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !ready.exists() {
+        assert!(
+            Instant::now() < deadline,
+            "gate did not reach blocking read"
+        );
+        std::thread::yield_now();
+    }
     assert!(
         child.try_wait().unwrap().is_none(),
         "gate must block before release"
