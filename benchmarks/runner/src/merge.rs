@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
+use walkdir::WalkDir;
 
 #[derive(Args, Debug)]
 pub struct MergeArgs {
@@ -21,11 +22,10 @@ pub fn execute(args: MergeArgs) -> anyhow::Result<()> {
     let mut all_records = Vec::new();
     let mut chunk_files = Vec::new();
 
-    for entry in std::fs::read_dir(&args.input)? {
-        let entry = entry?;
+    for entry in WalkDir::new(&args.input).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
         if path.extension().and_then(|s| s.to_str()) == Some("jsonl") {
-            chunk_files.push(path);
+            chunk_files.push(path.to_path_buf());
         }
     }
     chunk_files.sort();
