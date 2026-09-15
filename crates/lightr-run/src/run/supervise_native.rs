@@ -372,6 +372,7 @@ fn run_supervisor_loop(
     health_cfg: Option<crate::healthcheck::Healthcheck>,
     _owners: OwnerSetup<'_>,
 ) -> Result<i32> {
+    let _ = (&_owners.root, &_owners.volumes, &_owners.pending);
     use super::ctl::ctl_pipe_name;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;

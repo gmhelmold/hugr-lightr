@@ -31,7 +31,7 @@ mod flags;
 mod helpers;
 mod parse;
 mod paths;
-mod policy;
+pub(crate) mod policy;
 mod runflags;
 
 // Value parsers (`--tmpfs`/`--ulimit`/`size=`) split to `parse.rs` (godfile cap).

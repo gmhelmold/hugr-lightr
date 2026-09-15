@@ -51,7 +51,7 @@ pub(super) fn detached_only_flags_policy(runflags: &RunFlags, detach: bool) -> O
 
 /// Current owner witness format records one named mount per run and one terminal
 /// lifecycle. Refuse unsupported combinations before any detached run allocation.
-pub(super) fn named_volume_policy(runflags: &RunFlags, restart: Option<&str>) -> Option<i32> {
+pub(crate) fn named_volume_policy(runflags: &RunFlags, restart: Option<&str>) -> Option<i32> {
     if runflags.named_volumes.len() > 1 || (!runflags.named_volumes.is_empty() && restart.is_some())
     {
         eprintln!("lightr: named-volume runtime currently supports one non-restarting mount");

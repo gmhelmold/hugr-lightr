@@ -50,7 +50,6 @@ vz = ["lightr-engine/vz"]
 [[bin]]
 name = "lightr-volume-gate"
 path = "src/bin/volume_gate.rs"
-test = false
 
 # WP-C10: ADR-0018 networking keystone E2E. Boots real alpine microVMs to
 # validate the net_mac registry-MAC seam (DHCP/L2/DNS over the VSwitch). Gated
