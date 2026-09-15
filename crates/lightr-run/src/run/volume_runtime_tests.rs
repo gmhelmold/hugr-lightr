@@ -18,13 +18,42 @@ fn home() -> (tempfile::TempDir, std::sync::MutexGuard<'static, ()>) {
     let gate = home.path().join("volume-gate.sh");
     fs::write(
         &gate,
-        "#!/bin/sh\nfd=\"$1\"\nshift\n[ \"$1\" = -- ] || exit 127\nshift\nbyte=$(dd bs=1 count=1 < \"/proc/self/fd/$fd\" 2>/dev/null)\n[ \"$byte\" = \"$(printf '\\001')\" ] || exit 127\neval \"exec $fd<&-\"\nexec \"$@\"\n",
+        "#!/bin/sh\n[ \"$1\" = __volume_gate ] || exit 127\nfd=\"$2\"\nshift 2\nbyte=$(dd bs=1 count=1 < \"/proc/self/fd/$fd\" 2>/dev/null)\n[ \"$byte\" = \"$(printf '\\001')\" ] || exit 127\neval \"exec $fd<&-\"\nexec \"$@\"\n",
     )
     .unwrap();
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(&gate, fs::Permissions::from_mode(0o700)).unwrap();
     std::env::set_var("LIGHTR_VOLUME_GATE_SHIM", gate);
     (home, guard)
+}
+
+#[test]
+fn generated_gate_fixture_enforces_marker_and_release_byte() {
+    use std::os::fd::{FromRawFd, RawFd};
+    let (home, _guard) = home();
+    let gate = home.path().join("volume-gate.sh");
+    let mut fds: [RawFd; 2] = [0; 2];
+    assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
+    let mut write = unsafe { std::fs::File::from_raw_fd(fds[1]) };
+    let wrong = std::process::Command::new(&gate)
+        .args(["wrong", &fds[0].to_string(), "/bin/true"])
+        .status()
+        .unwrap();
+    assert_eq!(wrong.code(), Some(127));
+    let mut child = std::process::Command::new(&gate)
+        .args([
+            "__volume_gate",
+            &fds[0].to_string(),
+            "/bin/sh",
+            "-c",
+            "exit 23",
+        ])
+        .spawn()
+        .unwrap();
+    use std::io::Write;
+    write.write_all(&[1]).unwrap();
+    assert_eq!(child.wait().unwrap().code(), Some(23));
+    unsafe { libc::close(fds[0]) };
 }
 
 fn start(
