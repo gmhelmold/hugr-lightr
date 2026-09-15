@@ -169,7 +169,7 @@ impl RawRecord {
         self.outcome = "skipped".to_string();
     }
 
-    fn sha256_hex(data: &[u8]) -> String {
+    pub fn sha256_hex(data: &[u8]) -> String {
         let mut hasher = Sha256::new();
         hasher.update(data);
         format!("{:x}", hasher.finalize())

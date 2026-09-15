@@ -116,11 +116,17 @@ fn run_scenario(
     lightr_version: &str,
     lightr_digest: &str,
 ) -> anyhow::Result<()> {
+    let availability = match scenario.availability {
+        Availability::Supported => "supported",
+        Availability::Unsupported => "unsupported",
+        Availability::HardwareGated => "hardware_gated",
+        Availability::OutOfScope => "out_of_scope",
+    };
     for round in 1..=rounds {
         // Docker command
         let mut record = RawRecord::new(
             scenario.id.clone(),
-            "supported".to_string(),
+            availability.to_string(),
             "docker".to_string(),
             round,
             spec_digest.to_string(),
@@ -147,7 +153,7 @@ fn run_scenario(
         // Lightr command
         let mut record = RawRecord::new(
             scenario.id.clone(),
-            "supported".to_string(),
+            availability.to_string(),
             "lightr".to_string(),
             round,
             spec_digest.to_string(),
@@ -176,7 +182,7 @@ fn run_scenario(
 fn record_skip(
     writer: &mut std::fs::File,
     scenario: &Scenario,
-    rounds: u32,
+    _rounds: u32,
     spec_digest: &str,
     fixture_tree_digest: &str,
     source_commit: &str,
@@ -187,9 +193,15 @@ fn record_skip(
     lightr_digest: &str,
 ) -> anyhow::Result<()> {
     // Only emit one skip record per non-supported scenario (round 0)
+    let availability = match scenario.availability {
+        Availability::Supported => "supported",
+        Availability::Unsupported => "unsupported",
+        Availability::HardwareGated => "hardware_gated",
+        Availability::OutOfScope => "out_of_scope",
+    };
     let mut record = RawRecord::new(
         scenario.id.clone(),
-        "unsupported".to_string(),
+        availability.to_string(),
         "skip".to_string(),
         0,
         spec_digest.to_string(),
@@ -202,6 +214,11 @@ fn record_skip(
         lightr_digest.to_string(),
     );
     record.record_skip();
+    // For skip records, provide valid SHA256 hashes (hash of "skip")
+    let skip_hash = RawRecord::sha256_hex("skip".as_bytes());
+    record.command_sha256 = skip_hash.clone();
+    record.stdout_sha256 = skip_hash.clone();
+    record.stderr_sha256 = skip_hash;
     writeln!(writer, "{}", record.to_jsonl())?;
     Ok(())
 }
