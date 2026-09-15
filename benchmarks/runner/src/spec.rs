@@ -41,7 +41,7 @@ pub enum Assertion {
     StderrRegex { pattern: String },
     FileSha256 { path: String, expected: String },
     HttpStatus { expected: u16 },
-    Command { cmd: String, expected_exit: i32 },
+    Command { command: String, expected: i32, #[serde(default)] scope: Option<String> },
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -120,9 +120,9 @@ impl Assertion {
                     anyhow::bail!("http_status expected must be 100-599");
                 }
             }
-            Assertion::Command { cmd, .. } => {
-                if cmd.is_empty() {
-                    anyhow::bail!("command assertion requires non-empty cmd");
+            Assertion::Command { command, .. } => {
+                if command.is_empty() {
+                    anyhow::bail!("command assertion requires non-empty command");
                 }
             }
             _ => {}
