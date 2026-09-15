@@ -18,7 +18,6 @@ shift 3
 : > __LIGHTR_GATE_READY__
 byte=$(dd bs=1 count=1 < "/proc/self/fd/$fd" 2>/dev/null)
 [ "$byte" = "$(printf '\001')" ] || exit 127
-eval "exec $fd<&-"
 exec "$@"
 "#;
 
@@ -58,6 +57,7 @@ fn generated_gate_fixture_enforces_marker_and_release_byte() {
         );
     }
     assert!(!emitted.contains("__LIGHTR_GATE_READY__"));
+    assert!(!emitted.contains("exec $fd<&-"));
     let mut fds: [RawFd; 2] = [0; 2];
     assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
     let mut write = unsafe { std::fs::File::from_raw_fd(fds[1]) };
