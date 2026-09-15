@@ -40,6 +40,7 @@ pub struct Scenario {
     pub lightr: ToolCommand,
     pub metrics: Vec<String>,
     pub tags: Vec<String>,
+    #[serde(default)]
     pub assertions: Vec<Assertion>,
     #[serde(default)]
     pub lightr_evidence: Option<LightrEvidence>,
