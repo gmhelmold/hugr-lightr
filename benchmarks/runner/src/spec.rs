@@ -34,7 +34,7 @@ pub struct Scenario {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(tag = "kind")]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Assertion {
     ExitCode { expected: i32 },
     StdoutRegex { pattern: String },
