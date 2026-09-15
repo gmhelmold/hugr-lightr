@@ -18,7 +18,16 @@ fn home() -> (tempfile::TempDir, std::sync::MutexGuard<'static, ()>) {
     let gate = home.path().join("volume-gate.sh");
     fs::write(
         &gate,
-        "#!/bin/sh\n[ \"$1\" = __volume_gate ] || exit 127\nfd=\"$2\"\n[ \"$3\" = -- ] || exit 127\nshift 3\nbyte=$(dd bs=1 count=1 < \"/proc/self/fd/$fd\" 2>/dev/null)\n[ \"$byte\" = \"$(printf '\\001')\" ] || exit 127\neval \"exec $fd<&-\"\nexec \"$@\"\n",
+        r#"#!/bin/sh
+[ "$1" = __volume_gate ] || exit 127
+fd="$2"
+[ "$3" = -- ] || exit 127
+shift 3
+byte=$(dd bs=1 count=1 < "/proc/self/fd/$fd" 2>/dev/null)
+[ "$byte" = "$(printf '\001')" ] || exit 127
+eval "exec $fd<&-"
+exec "$@"
+"#,
     )
     .unwrap();
     use std::os::unix::fs::PermissionsExt;
@@ -32,6 +41,13 @@ fn generated_gate_fixture_enforces_marker_and_release_byte() {
     use std::os::fd::{FromRawFd, RawFd};
     let (home, _guard) = home();
     let gate = home.path().join("volume-gate.sh");
+    let script = fs::read_to_string(&gate).unwrap();
+    assert!(
+        script.contains("\"$1\"")
+            && script.contains("\"$2\"")
+            && script.contains("\"$3\"")
+            && script.contains("\"$@\"")
+    );
     let mut fds: [RawFd; 2] = [0; 2];
     assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
     let mut write = unsafe { std::fs::File::from_raw_fd(fds[1]) };
