@@ -17,7 +17,12 @@ if [ ! -d "$RAW_DIR" ]; then
 fi
 
 mkdir -p "$MERGED_DIR" "$REPORTS_DIR"
+# Runner merge produces: merged-raw.jsonl, merged.jsonl, summary.csv, summary.json, summary.md
 "$RUNNER" merge --input "$RAW_DIR" --out "$MERGED_DIR"
-python3 "$ROOT/benchmarks/reporter/report.py" \
-    --input "$MERGED_DIR/merged.jsonl" \
-    --out "$REPORTS_DIR"
+# Copy merge outputs to reports dir
+cp -f "$MERGED_DIR/summary.csv" "$REPORTS_DIR/"
+cp -f "$MERGED_DIR/summary.json" "$REPORTS_DIR/"
+cp -f "$MERGED_DIR/summary.md" "$REPORTS_DIR/"
+cp -f "$MERGED_DIR/merged.jsonl" "$REPORTS_DIR/"
+cp -f "$MERGED_DIR/merged-raw.jsonl" "$REPORTS_DIR/"
+printf 'analysis complete, reports in %s\n' "$REPORTS_DIR"
