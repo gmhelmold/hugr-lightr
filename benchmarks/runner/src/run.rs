@@ -122,7 +122,8 @@ fn run_scenario(
         Availability::HardwareGated => "hardware_gated",
         Availability::OutOfScope => "out_of_scope",
     };
-    for round in 1..=rounds {
+    // Use 0-indexed rounds to match validation expectations (0..rounds-1)
+    for round in 0..rounds {
         // Docker command
         let mut record = RawRecord::new(
             scenario.id.clone(),
