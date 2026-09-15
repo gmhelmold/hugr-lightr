@@ -15,6 +15,15 @@ fn home() -> (tempfile::TempDir, std::sync::MutexGuard<'static, ()>) {
         .unwrap_or_else(|poison| poison.into_inner());
     let home = tempfile::tempdir().unwrap();
     std::env::set_var("LIGHTR_HOME", home.path());
+    let gate = home.path().join("volume-gate.sh");
+    fs::write(
+        &gate,
+        "#!/bin/sh\nfd=\"$1\"\nshift\n[ \"$1\" = -- ] || exit 127\nshift\nbyte=$(dd bs=1 count=1 < \"/proc/self/fd/$fd\" 2>/dev/null)\n[ \"$byte\" = \"$(printf '\\001')\" ] || exit 127\neval \"exec $fd<&-\"\nexec \"$@\"\n",
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(&gate, fs::Permissions::from_mode(0o700)).unwrap();
+    std::env::set_var("LIGHTR_VOLUME_GATE_SHIM", gate);
     (home, guard)
 }
 

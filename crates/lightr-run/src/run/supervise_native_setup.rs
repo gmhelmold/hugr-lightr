@@ -137,29 +137,9 @@ fn gate_shim_path() -> std::io::Result<std::path::PathBuf> {
 
 #[cfg(all(unix, test))]
 fn gate_shim_path() -> std::io::Result<std::path::PathBuf> {
-    use std::os::unix::fs::PermissionsExt;
-    let test_exe = std::env::current_exe()?;
-    let debug = test_exe
-        .parent()
-        .and_then(|path| path.parent())
-        .ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "libtest has no target/debug parent",
-            )
-        })?;
-    let helper = debug.join(format!(
-        "lightr-volume-gate{}",
-        std::env::consts::EXE_SUFFIX
-    ));
-    let metadata = std::fs::metadata(&helper)?;
-    if !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            "volume gate helper unavailable",
-        ));
-    }
-    Ok(helper)
+    std::env::var_os("LIGHTR_VOLUME_GATE_SHIM")
+        .map(Into::into)
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "test gate shim unset"))
 }
 
 #[cfg(all(test, unix))]
@@ -167,10 +147,13 @@ mod gate_tests {
     use super::gate_shim_path;
 
     #[test]
-    fn test_selection_derives_existing_helper() {
+    fn test_selection_uses_fixture() {
+        std::env::set_var("LIGHTR_VOLUME_GATE_SHIM", "/tmp/lightr-volume-gate");
         let selected = gate_shim_path().unwrap();
-        assert!(selected.is_file());
-        assert!(selected.ends_with("lightr-volume-gate"));
+        assert_eq!(
+            selected,
+            std::path::PathBuf::from("/tmp/lightr-volume-gate")
+        );
     }
 }
 
