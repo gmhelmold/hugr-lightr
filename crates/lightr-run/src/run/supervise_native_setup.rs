@@ -77,11 +77,7 @@ pub(super) fn spawn_child(
     let argv = crate::run::bindmat::effective_argv(spec.entrypoint.as_deref(), &spec.command);
     #[cfg(unix)]
     let mut cmd = if let Some(barrier) = barrier {
-        #[cfg(test)]
-        let override_path = std::env::var_os("LIGHTR_VOLUME_GATE_SHIM");
-        #[cfg(not(test))]
-        let override_path = None;
-        let shim = gate_shim_path(override_path).map_err(LightrError::Io)?;
+        let shim = gate_shim_path().map_err(LightrError::Io)?;
         let mut shim = std::process::Command::new(shim);
         shim.arg("__volume_gate")
             .arg(barrier.read_fd().to_string())
@@ -134,14 +130,36 @@ pub(super) fn spawn_child(
     Ok((child, pid))
 }
 
-#[cfg(unix)]
-fn gate_shim_path(
-    override_path: Option<std::ffi::OsString>,
-) -> std::io::Result<std::path::PathBuf> {
-    if let Some(path) = override_path {
-        return Ok(path.into());
-    }
+#[cfg(all(unix, not(test)))]
+fn gate_shim_path() -> std::io::Result<std::path::PathBuf> {
     std::env::current_exe()
+}
+
+#[cfg(all(unix, test))]
+fn gate_shim_path() -> std::io::Result<std::path::PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+    let test_exe = std::env::current_exe()?;
+    let debug = test_exe
+        .parent()
+        .and_then(|path| path.parent())
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "libtest has no target/debug parent",
+            )
+        })?;
+    let helper = debug.join(format!(
+        "lightr-volume-gate{}",
+        std::env::consts::EXE_SUFFIX
+    ));
+    let metadata = std::fs::metadata(&helper)?;
+    if !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "volume gate helper unavailable",
+        ));
+    }
+    Ok(helper)
 }
 
 #[cfg(all(test, unix))]
@@ -149,18 +167,10 @@ mod gate_tests {
     use super::gate_shim_path;
 
     #[test]
-    fn production_selection_ignores_test_override() {
-        let selected = gate_shim_path(None).unwrap();
-        assert_eq!(selected, std::env::current_exe().unwrap());
-    }
-
-    #[test]
-    fn test_selection_uses_explicit_helper() {
-        let selected = gate_shim_path(Some("/tmp/lightr-volume-gate".into())).unwrap();
-        assert_eq!(
-            selected,
-            std::path::PathBuf::from("/tmp/lightr-volume-gate")
-        );
+    fn test_selection_derives_existing_helper() {
+        let selected = gate_shim_path().unwrap();
+        assert!(selected.is_file());
+        assert!(selected.ends_with("lightr-volume-gate"));
     }
 }
 
