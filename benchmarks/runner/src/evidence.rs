@@ -4,42 +4,38 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RawRecord {
+    pub schema_version: u32,
     pub scenario_id: String,
+    pub availability: String,
     pub tool: String,
     pub round: u32,
-    pub phase: Phase,
-    pub start_ts: f64,
-    pub end_ts: f64,
-    pub timeout: bool,
+    pub outcome: String,
+    pub started_at_unix_ms: u64,
+    pub ended_at_unix_ms: u64,
+    pub elapsed_ms: u64,
+    pub timeout_secs: u64,
     pub exit_code: Option<i32>,
+    pub command_sha256: String,
     pub stdout_sha256: String,
     pub stderr_sha256: String,
-    pub outcome: Outcome,
-    pub spec_digest: String,
-    pub fixture_tree_digest: String,
+    pub spec_sha256: String,
+    pub fixture_tree_sha256: String,
     pub source_commit: String,
     pub docker_client_version: String,
     pub docker_server_version: String,
     pub docker_api_version: String,
     pub lightr_version: String,
-    pub lightr_digest: String,
-    pub host: HostIdentity,
+    pub lightr_sha256: String,
+    pub host_os: String,
+    pub host_arch: String,
+    pub host_kernel: String,
+    pub assertions: Vec<AssertionRecord>,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Phase {
-    Warmup,
-    Timed,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Outcome {
-    Success,
-    Failed,
-    Skipped,
-    TimedOut,
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AssertionRecord {
+    pub kind: String,
+    pub passed: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -75,9 +71,9 @@ impl HostIdentity {
 impl RawRecord {
     pub fn new(
         scenario_id: String,
+        availability: String,
         tool: String,
         round: u32,
-        phase: Phase,
         spec_digest: String,
         fixture_tree_digest: String,
         source_commit: String,
@@ -87,50 +83,90 @@ impl RawRecord {
         lightr_version: String,
         lightr_digest: String,
     ) -> Self {
-        let now = SystemTime::now()
+        let start_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs_f64();
+            .as_millis() as u64;
+        let host = HostIdentity::current();
         Self {
+            schema_version: 1,
             scenario_id,
+            availability,
             tool,
             round,
-            phase,
-            start_ts: now,
-            end_ts: now,
-            timeout: false,
+            outcome: "failed".to_string(),
+            started_at_unix_ms: start_ms,
+            ended_at_unix_ms: start_ms,
+            elapsed_ms: 0,
+            timeout_secs: 300,
             exit_code: None,
+            command_sha256: String::new(),
             stdout_sha256: String::new(),
             stderr_sha256: String::new(),
-            outcome: Outcome::Failed,
-            spec_digest,
-            fixture_tree_digest,
+            spec_sha256: spec_digest,
+            fixture_tree_sha256: fixture_tree_digest,
             source_commit,
             docker_client_version,
             docker_server_version,
             docker_api_version,
             lightr_version,
-            lightr_digest,
-            host: HostIdentity::current(),
+            lightr_sha256: lightr_digest,
+            host_os: host.os,
+            host_arch: host.arch,
+            host_kernel: host.kernel,
+            assertions: Vec::new(),
         }
     }
 
-    pub fn finish(&mut self, exit_code: Option<i32>, stdout: &[u8], stderr: &[u8], timed_out: bool) {
-        self.end_ts = SystemTime::now()
+    pub fn start_timed(&mut self) {
+        let start_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs_f64();
+            .as_millis() as u64;
+        self.started_at_unix_ms = start_ms;
+    }
+
+    pub fn finish(
+        &mut self,
+        exit_code: Option<i32>,
+        stdout: &[u8],
+        stderr: &[u8],
+        timed_out: bool,
+        command: &str,
+    ) {
+        let end_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        self.ended_at_unix_ms = end_ms;
+        self.elapsed_ms = end_ms.saturating_sub(self.started_at_unix_ms);
         self.exit_code = exit_code;
         self.stdout_sha256 = Self::sha256_hex(stdout);
         self.stderr_sha256 = Self::sha256_hex(stderr);
-        self.timeout = timed_out;
+        self.command_sha256 = Self::sha256_hex(command.as_bytes());
+
         self.outcome = if timed_out {
-            Outcome::TimedOut
+            "timed_out".to_string()
         } else if exit_code == Some(0) {
-            Outcome::Success
+            "passed".to_string()
         } else {
-            Outcome::Failed
+            "failed".to_string()
         };
+    }
+
+    pub fn record_skip(&mut self) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        self.started_at_unix_ms = now;
+        self.ended_at_unix_ms = now;
+        self.elapsed_ms = 0;
+        self.exit_code = None;
+        self.stdout_sha256 = String::new();
+        self.stderr_sha256 = String::new();
+        self.command_sha256 = String::new();
+        self.outcome = "skipped".to_string();
     }
 
     fn sha256_hex(data: &[u8]) -> String {
@@ -166,7 +202,7 @@ impl SummaryRecord {
         use std::collections::HashMap;
         let mut by_scenario_tool: HashMap<(String, String), Vec<&RawRecord>> = HashMap::new();
         for r in records {
-            if r.phase == Phase::Timed {
+            if r.outcome != "skipped" {
                 by_scenario_tool
                     .entry((r.scenario_id.clone(), r.tool.clone()))
                     .or_default()
@@ -178,8 +214,8 @@ impl SummaryRecord {
         for ((scenario_id, tool), recs) in by_scenario_tool {
             let mut durations: Vec<f64> = recs
                 .iter()
-                .filter(|r| r.outcome == Outcome::Success)
-                .map(|r| (r.end_ts - r.start_ts) * 1000.0)
+                .filter(|r| r.outcome == "passed")
+                .map(|r| r.elapsed_ms as f64)
                 .collect();
 
             let (mean, stddev, p50, p95, min, max) = if durations.is_empty() {
@@ -192,12 +228,12 @@ impl SummaryRecord {
                 let stddev = variance.sqrt();
                 let p50 = durations[(n * 50 / 100).min(n - 1)];
                 let p95 = durations[(n * 95 / 100).min(n - 1)];
-                (mean, stddev, p50, p95, durations[0], durations[n - 1])
+                (mean, stddev, p50, p95, durations[0] as f64, durations[n - 1] as f64)
             };
 
             let mut outcome_counts = HashMap::new();
             for r in &recs {
-                *outcome_counts.entry(format!("{:?}", r.outcome)).or_insert(0) += 1;
+                *outcome_counts.entry(r.outcome.clone()).or_insert(0) += 1;
             }
 
             summaries.push(Self {

@@ -1,6 +1,6 @@
 use clap::Args;
 use crate::spec::{Spec, Scenario, Availability};
-use crate::evidence::{RawRecord, Phase, Outcome};
+use crate::evidence::{RawRecord, AssertionRecord};
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -117,15 +117,12 @@ fn run_scenario(
     lightr_digest: &str,
 ) -> anyhow::Result<()> {
     for round in 1..=rounds {
-        // Warmup round (round 1)
-        let phase = if round == 1 { Phase::Warmup } else { Phase::Timed };
-        
         // Docker command
         let mut record = RawRecord::new(
             scenario.id.clone(),
+            "supported".to_string(),
             "docker".to_string(),
             round,
-            phase,
             spec_digest.to_string(),
             fixture_tree_digest.to_string(),
             source_commit.to_string(),
@@ -135,15 +132,24 @@ fn run_scenario(
             lightr_version.to_string(),
             lightr_digest.to_string(),
         );
+        record.start_timed();
         run_command(&mut record, &scenario.docker.command, docker_bin, timeout)?;
+        record.finish(record.exit_code, &[], &[], record.exit_code != Some(0), &scenario.docker.command);
+        // Add assertion record for supported scenario
+        if record.outcome == "passed" {
+            record.assertions.push(AssertionRecord {
+                kind: "exit_code".to_string(),
+                passed: true,
+            });
+        }
         writeln!(writer, "{}", record.to_jsonl())?;
 
         // Lightr command
         let mut record = RawRecord::new(
             scenario.id.clone(),
+            "supported".to_string(),
             "lightr".to_string(),
             round,
-            phase,
             spec_digest.to_string(),
             fixture_tree_digest.to_string(),
             source_commit.to_string(),
@@ -153,13 +159,16 @@ fn run_scenario(
             lightr_version.to_string(),
             lightr_digest.to_string(),
         );
+        record.start_timed();
         run_command(&mut record, &scenario.lightr.command, lightr_bin, timeout)?;
-        writeln!(writer, "{}", record.to_jsonl())?;
-
-        // Check assertions for timed rounds only
-        if phase == Phase::Timed {
-            // Note: assertions evaluated by merge/validation step
+        record.finish(record.exit_code, &[], &[], record.exit_code != Some(0), &scenario.lightr.command);
+        if record.outcome == "passed" {
+            record.assertions.push(AssertionRecord {
+                kind: "exit_code".to_string(),
+                passed: true,
+            });
         }
+        writeln!(writer, "{}", record.to_jsonl())?;
     }
     Ok(())
 }
@@ -177,45 +186,23 @@ fn record_skip(
     lightr_version: &str,
     lightr_digest: &str,
 ) -> anyhow::Result<()> {
-    let reason = scenario.reason.as_deref().unwrap_or("unsupported");
-    for round in 1..=rounds {
-        let phase = if round == 1 { Phase::Warmup } else { Phase::Timed };
-        let mut record = RawRecord::new(
-            scenario.id.clone(),
-            "docker".to_string(),
-            round,
-            phase,
-            spec_digest.to_string(),
-            fixture_tree_digest.to_string(),
-            source_commit.to_string(),
-            docker_client.to_string(),
-            docker_server.to_string(),
-            docker_api.to_string(),
-            lightr_version.to_string(),
-            lightr_digest.to_string(),
-        );
-        record.outcome = Outcome::Skipped;
-        record.exit_code = None;
-        writeln!(writer, "{}", record.to_jsonl())?;
-
-        let mut record = RawRecord::new(
-            scenario.id.clone(),
-            "lightr".to_string(),
-            round,
-            phase,
-            spec_digest.to_string(),
-            fixture_tree_digest.to_string(),
-            source_commit.to_string(),
-            docker_client.to_string(),
-            docker_server.to_string(),
-            docker_api.to_string(),
-            lightr_version.to_string(),
-            lightr_digest.to_string(),
-        );
-        record.outcome = Outcome::Skipped;
-        record.exit_code = None;
-        writeln!(writer, "{}", record.to_jsonl())?;
-    }
+    // Only emit one skip record per non-supported scenario (round 0)
+    let mut record = RawRecord::new(
+        scenario.id.clone(),
+        "unsupported".to_string(),
+        "skip".to_string(),
+        0,
+        spec_digest.to_string(),
+        fixture_tree_digest.to_string(),
+        source_commit.to_string(),
+        docker_client.to_string(),
+        docker_server.to_string(),
+        docker_api.to_string(),
+        lightr_version.to_string(),
+        lightr_digest.to_string(),
+    );
+    record.record_skip();
+    writeln!(writer, "{}", record.to_jsonl())?;
     Ok(())
 }
 
@@ -227,13 +214,6 @@ fn run_command(
 ) -> anyhow::Result<()> {
     use std::io::Read;
 
-    let start = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs_f64();
-    record.start_ts = start;
-
-    // Execute command with timeout
     let mut child = Command::new("sh")
         .arg("-c")
         .arg(cmd)
@@ -265,7 +245,7 @@ fn run_command(
         err.read_to_end(&mut stderr)?;
     }
 
-    record.finish(record.exit_code, &stdout, &stderr, timed_out);
+    record.finish(record.exit_code, &stdout, &stderr, timed_out, cmd);
     Ok(())
 }
 
