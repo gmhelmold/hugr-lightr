@@ -50,6 +50,12 @@ pub fn execute(args: MergeArgs) -> anyhow::Result<()> {
     for record in &all_records {
         writeln!(raw_writer, "{}", record.to_jsonl())?;
     }
+    // Also write merged.jsonl for validation script compatibility
+    let merged_jsonl = args.out.join("merged.jsonl");
+    let mut jsonl_writer = File::create(&merged_jsonl)?;
+    for record in &all_records {
+        writeln!(jsonl_writer, "{}", record.to_jsonl())?;
+    }
 
     // Validate: check for duplicate (scenario, tool, round) in timed phase
     let mut seen = HashMap::new();
