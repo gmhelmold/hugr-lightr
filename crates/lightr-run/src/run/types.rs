@@ -142,6 +142,8 @@ pub struct RunSpec {
     /// empty ⇒ byte-identical to before. Native realization: rw ⇒ a symlink
     /// (live view); ro ⇒ a read-only snapshot copy (no mount namespace on native).
     pub volumes: Vec<VolumeBind>,
+    /// Named-volume mounts. Resolved against local store at runtime, never keyed.
+    pub named_volumes: Vec<NamedVolumeBind>,
     /// WP-RUNFLAGS: Docker `--tmpfs DST` — an empty writable dir at `cwd/<target>`.
     /// RUNTIME ONLY (writable scratch is non-deterministic): never keyed, forces a
     /// memo MISS with no AC write. `Default` ⇒ empty ⇒ byte-identical to before.
@@ -235,6 +237,13 @@ pub struct VolumeBind {
     pub readonly: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NamedVolumeBind {
+    pub name: String,
+    pub target: String,
+    pub readonly: bool,
+}
+
 /// A store-backed file injected into a run. `ref_name` resolves via lightr_index.
 pub struct StoreFile {
     pub name: String,
@@ -304,6 +313,13 @@ pub(super) fn mounts2_from_runspec(spec: &RunSpec) -> Vec<MountOnDisk2> {
     for v in &spec.volumes {
         out.push(MountOnDisk2::HostBind {
             source: v.source.clone(),
+            target: v.target.clone(),
+            readonly: v.readonly,
+        });
+    }
+    for v in &spec.named_volumes {
+        out.push(MountOnDisk2::NamedVolume {
+            source: v.name.clone(),
             target: v.target.clone(),
             readonly: v.readonly,
         });

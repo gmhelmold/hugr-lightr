@@ -100,6 +100,10 @@ fn maybe_dispatch_switch_host() {
 fn maybe_dispatch_switch_host() {}
 
 fn main() {
+    #[cfg(unix)]
+    if lightr_run::volume_gate_dispatch() {
+        return;
+    }
     // WP-NET3 keystone: the switch-host re-exec marker is not a clap subcommand —
     // recognise + route it to `run_switch_host` before clap parses (mirrors the
     // `__supervise` re-exec dispatch + the c9-xproc-switch example). `attach`

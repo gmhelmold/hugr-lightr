@@ -18,7 +18,7 @@
 //! container" is structurally enforced (a 2nd `--network` is last-wins at the
 //! clap layer, exactly like docker).
 
-use lightr_run::{parse_v, MountKind, VolumeBind};
+use lightr_run::{parse_v, MountKind, NamedVolumeBind, VolumeBind};
 
 use crate::cli::cmd::RunArgs;
 
@@ -63,6 +63,7 @@ impl From<&RunArgs> for RawRunFlags {
 #[derive(Clone, Debug, Default)]
 pub struct RunFlags {
     pub volumes: Vec<VolumeBind>,
+    pub named_volumes: Vec<NamedVolumeBind>,
     pub tmpfs: Vec<String>,
     /// `--ulimit` raw strings, carried through (parsed in the handler via
     /// `parse_ulimits`, mirroring `tmpfs`).
@@ -114,6 +115,7 @@ impl RawRunFlags {
         // Named/anon volumes + CAS refs are the WP-VOL ring's job — an honest
         // exit 2 here, never a silent drop.
         let mut volumes: Vec<VolumeBind> = Vec::new();
+        let mut named_volumes: Vec<NamedVolumeBind> = Vec::new();
         for raw in &self.volume {
             let spec = match parse_v(raw) {
                 Ok(s) => s,
@@ -131,7 +133,14 @@ impl RawRunFlags {
                         readonly: spec.readonly,
                     });
                 }
-                MountKind::NamedVolume | MountKind::AnonVolume => {
+                MountKind::NamedVolume => {
+                    named_volumes.push(NamedVolumeBind {
+                        name: spec.source.unwrap_or_default(),
+                        target: spec.target,
+                        readonly: spec.readonly,
+                    });
+                }
+                MountKind::AnonVolume => {
                     eprintln!(
                         "lightr: -v {raw}: named/anonymous volumes are Phase 2 (WP-VOL); use a \
                          host path SRC:DST[:ro] (a bind) on the native engine"
@@ -166,6 +175,7 @@ impl RawRunFlags {
 
         Ok(RunFlags {
             volumes,
+            named_volumes,
             tmpfs: self.tmpfs,
             ulimit: self.ulimit,
             name: self.name,

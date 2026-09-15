@@ -149,6 +149,7 @@ pub(crate) fn run_native_memo(req: NativeRun) -> i32 {
         // RUNTIME ONLY (never keyed). Binds + tmpfs force a memo MISS in
         // `run_memoized_with`; all-default ⇒ no-op (behavior-preserving).
         volumes: runflags.volumes,
+        named_volumes: runflags.named_volumes,
         tmpfs: runflags.tmpfs,
         entrypoint: runflags.entrypoint,
         name: runflags.name.clone(),
@@ -182,6 +183,11 @@ pub(crate) fn run_native_memo(req: NativeRun) -> i32 {
             }
             Err(e) => return die_lightr(&e),
         }
+    }
+
+    if !spec.named_volumes.is_empty() {
+        eprintln!("lightr: named volumes require detached Linux runtime ownership");
+        return 2;
     }
 
     if explain {

@@ -52,6 +52,7 @@ pub fn spawn_detached_engine(
     rootfs_ref: Option<&str>,
     env: &[(String, String)],
 ) -> Result<RunHandle> {
+    ensure_named_volume_capability(spec.named_volumes.len())?;
     // WP-D (create): the atomic spawn is now (prepare → launch). `create_run_prepared`
     // does the dir + spec.json (+ healthcheck) write WITHOUT a supervisor — exactly the
     // "Created" state docker `create` materializes. The spawn path then launches the
@@ -219,6 +220,13 @@ pub fn create_run_prepared(
 /// dir/id without duplicating the detach (setsid / DETACHED_PROCESS) logic.
 /// Behaviour for the spawn path is byte-identical to the inline code it replaced.
 pub(super) fn launch_supervisor(dir: &std::path::Path) -> Result<()> {
+    let spec = super::paths::read_spec_on_disk(dir)?;
+    let named = spec
+        .mounts2
+        .iter()
+        .filter(|mount| matches!(mount, super::types::MountOnDisk2::NamedVolume { .. }))
+        .count();
+    ensure_named_volume_capability(named)?;
     let exe = std::env::current_exe().map_err(LightrError::Io)?;
     let dir_str = dir.to_string_lossy().into_owned();
 
@@ -255,6 +263,86 @@ pub(super) fn launch_supervisor(dir: &std::path::Path) -> Result<()> {
 
     cmd.spawn().map_err(LightrError::Io)?;
     Ok(())
+}
+
+fn ensure_named_volume_capability(count: usize) -> Result<()> {
+    if count == 0 {
+        return Ok(());
+    }
+    lightr_store::volume::owner_runtime_supported()
+}
+
+#[cfg(unix)]
+pub fn volume_gate_dispatch() -> bool {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    let args: Vec<_> = std::env::args_os().collect();
+    let (fd, user_argv) = match parse_gate_argv(&args) {
+        None => return false,
+        Some(Err(())) => std::process::exit(127),
+        Some(Ok(parsed)) => parsed,
+    };
+    let mut byte = [0_u8; 1];
+    if unsafe { libc::read(fd, byte.as_mut_ptr().cast(), 1) } != 1 || byte[0] != 1 {
+        std::process::exit(127);
+    }
+    if unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) } == -1 {
+        std::process::exit(127);
+    }
+    let argv: Vec<CString> = user_argv
+        .iter()
+        .map(|arg| CString::new(arg.as_bytes()).unwrap())
+        .collect();
+    let mut raw: Vec<*const libc::c_char> = argv.iter().map(|arg| arg.as_ptr()).collect();
+    raw.push(std::ptr::null());
+    unsafe { libc::execvp(argv[0].as_ptr(), raw.as_ptr()) };
+    std::process::exit(127);
+}
+
+#[cfg(unix)]
+fn parse_gate_argv(
+    args: &[std::ffi::OsString],
+) -> Option<std::result::Result<(libc::c_int, &[std::ffi::OsString]), ()>> {
+    if args.get(1).is_none_or(|arg| arg != "__volume_gate") {
+        return None;
+    }
+    let fd = match args.get(2)?.to_string_lossy().parse::<libc::c_int>() {
+        Ok(fd) => fd,
+        Err(_) => return Some(Err(())),
+    };
+    if args.get(3).is_none_or(|arg| arg != "--") || args.len() < 5 {
+        return Some(Err(()));
+    }
+    Some(Ok((fd, &args[4..])))
+}
+
+#[cfg(all(test, unix))]
+mod gate_abi_tests {
+    use super::parse_gate_argv;
+    #[test]
+    fn production_gate_abi_requires_marker_fd_delimiter_and_command() {
+        let args = |items: &[&str]| {
+            items
+                .iter()
+                .map(std::ffi::OsString::from)
+                .collect::<Vec<_>>()
+        };
+        assert!(parse_gate_argv(&args(&["gate", "wrong", "4", "--", "/bin/true"])).is_none());
+        assert!(matches!(
+            parse_gate_argv(&args(&["gate", "__volume_gate", "4", "wrong", "/bin/true"])),
+            Some(Err(()))
+        ));
+        assert!(matches!(
+            parse_gate_argv(&args(&["gate", "__volume_gate", "bad", "--", "/bin/true"])),
+            Some(Err(()))
+        ));
+        assert!(matches!(
+            parse_gate_argv(&args(&["gate", "__volume_gate", "4", "--"])),
+            Some(Err(()))
+        ));
+        let valid = args(&["gate", "__volume_gate", "4", "--", "/bin/true"]);
+        assert!(matches!(parse_gate_argv(&valid), Some(Ok((4, argv))) if argv == &valid[4..]));
+    }
 }
 
 /// WP-RC-WORKDIR: resolve the directory the run's process must execute in, and

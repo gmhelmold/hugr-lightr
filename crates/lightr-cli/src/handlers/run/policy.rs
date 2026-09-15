@@ -42,6 +42,21 @@ pub(super) fn detached_only_flags_policy(runflags: &RunFlags, detach: bool) -> O
         eprintln!("lightr: --rm requires -d (a foreground run leaves no run dir to remove)");
         return Some(2);
     }
+    if !runflags.named_volumes.is_empty() && !detach {
+        eprintln!("lightr: named volumes require -d (named-volume ownership needs a detached run)");
+        return Some(2);
+    }
+    None
+}
+
+/// Current owner witness format records one named mount per run and one terminal
+/// lifecycle. Refuse unsupported combinations before any detached run allocation.
+pub(crate) fn named_volume_policy(runflags: &RunFlags, restart: Option<&str>) -> Option<i32> {
+    if runflags.named_volumes.len() > 1 || (!runflags.named_volumes.is_empty() && restart.is_some())
+    {
+        eprintln!("lightr: named-volume runtime currently supports one non-restarting mount");
+        return Some(2);
+    }
     None
 }
 
@@ -318,6 +333,7 @@ pub(super) fn build_detached_spec(
         // fields. Persisted to spec.json; honored on the native supervisor
         // path. RUNTIME-ONLY (never keyed). All-default ⇒ no-op.
         volumes: runflags.volumes.clone(),
+        named_volumes: runflags.named_volumes.clone(),
         tmpfs: runflags.tmpfs.clone(),
         entrypoint: runflags.entrypoint.clone(),
         name: runflags.name.clone(),
