@@ -41,13 +41,6 @@ fn generated_gate_fixture_enforces_marker_and_release_byte() {
     use std::os::fd::{FromRawFd, RawFd};
     let (home, _guard) = home();
     let gate = home.path().join("volume-gate.sh");
-    let script = fs::read_to_string(&gate).unwrap();
-    assert!(
-        script.contains("\"$1\"")
-            && script.contains("\"$2\"")
-            && script.contains("\"$3\"")
-            && script.contains("\"$@\"")
-    );
     let mut fds: [RawFd; 2] = [0; 2];
     assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
     let mut write = unsafe { std::fs::File::from_raw_fd(fds[1]) };
@@ -56,6 +49,11 @@ fn generated_gate_fixture_enforces_marker_and_release_byte() {
         .status()
         .unwrap();
     assert_eq!(wrong.code(), Some(127));
+    let missing_delimiter = std::process::Command::new(&gate)
+        .args(["__volume_gate", &fds[0].to_string()])
+        .status()
+        .unwrap();
+    assert_eq!(missing_delimiter.code(), Some(127));
     let wrong_delimiter = std::process::Command::new(&gate)
         .args(["__volume_gate", &fds[0].to_string(), "wrong", "/bin/true"])
         .status()
@@ -72,6 +70,10 @@ fn generated_gate_fixture_enforces_marker_and_release_byte() {
         ])
         .spawn()
         .unwrap();
+    assert!(
+        child.try_wait().unwrap().is_none(),
+        "gate must block before release"
+    );
     use std::io::Write;
     write.write_all(&[1]).unwrap();
     assert_eq!(child.wait().unwrap().code(), Some(23));
