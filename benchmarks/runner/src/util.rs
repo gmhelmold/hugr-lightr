@@ -1,4 +1,4 @@
-use crate::spec::{Spec, Scenario, Availability, Assertion};
+use crate::spec::{Spec, Scenario, Availability, Assertion, Fixture, ToolCommand};
 use crate::evidence::{RawRecord, Phase, Outcome};
 use tempfile::TempDir;
 use std::fs::File;
@@ -12,28 +12,42 @@ pub fn make_test_spec() -> Spec {
                 category: "run".to_string(),
                 availability: Availability::Supported,
                 reason: None,
-                project: "test".to_string(),
-                fixture_path: "test/fixture".to_string(),
-                context: "test/context".to_string(),
-                docker_cmd: "echo hello".to_string(),
-                lightr_cmd: "echo hello".to_string(),
+                fixture: Fixture {
+                    project: "test".to_string(),
+                    path: "test/fixture".to_string(),
+                    context: "test/context".to_string(),
+                },
+                docker: ToolCommand {
+                    command: "echo hello".to_string(),
+                },
+                lightr: ToolCommand {
+                    command: "echo hello".to_string(),
+                },
                 metrics: vec!["latency".to_string(), "throughput".to_string(), "cpu".to_string(), "mem".to_string()],
                 tags: vec!["linux".to_string(), "container".to_string()],
                 assertions: vec![Assertion::ExitCode { expected: 0 }],
+                lightr_evidence: None,
             },
             Scenario {
                 id: "test-unsupported".to_string(),
                 category: "run".to_string(),
                 availability: Availability::Unsupported,
                 reason: Some("not implemented".to_string()),
-                project: "test".to_string(),
-                fixture_path: "test/fixture2".to_string(),
-                context: "test/context2".to_string(),
-                docker_cmd: "echo hello".to_string(),
-                lightr_cmd: "echo hello".to_string(),
+                fixture: Fixture {
+                    project: "test".to_string(),
+                    path: "test/fixture2".to_string(),
+                    context: "test/context2".to_string(),
+                },
+                docker: ToolCommand {
+                    command: "echo hello".to_string(),
+                },
+                lightr: ToolCommand {
+                    command: "echo hello".to_string(),
+                },
                 metrics: vec!["latency".to_string(), "throughput".to_string(), "cpu".to_string(), "mem".to_string()],
                 tags: vec!["linux".to_string(), "container".to_string()],
                 assertions: vec![Assertion::ExitCode { expected: 0 }],
+                lightr_evidence: None,
             },
         ],
     }

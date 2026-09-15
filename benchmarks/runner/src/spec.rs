@@ -17,20 +17,38 @@ impl Availability {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Fixture {
+    pub project: String,
+    pub path: String,
+    pub context: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ToolCommand {
+    pub command: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Scenario {
     pub id: String,
     pub category: String,
     pub availability: Availability,
     #[serde(default)]
     pub reason: Option<String>,
-    pub project: String,
-    pub fixture_path: String,
-    pub context: String,
-    pub docker_cmd: String,
-    pub lightr_cmd: String,
+    pub fixture: Fixture,
+    pub docker: ToolCommand,
+    pub lightr: ToolCommand,
     pub metrics: Vec<String>,
     pub tags: Vec<String>,
     pub assertions: Vec<Assertion>,
+    #[serde(default)]
+    pub lightr_evidence: Option<LightrEvidence>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LightrEvidence {
+    pub source_file: String,
+    pub help_surface: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -82,6 +100,15 @@ impl Spec {
             }
             if s.assertions.is_empty() {
                 anyhow::bail!("scenario {} requires at least one assertion", s.id);
+            }
+            // Validate fixture for supported scenarios
+            if matches!(s.availability, Availability::Supported) {
+                if s.fixture.project.is_empty() || s.fixture.path.is_empty() || s.fixture.context.is_empty() {
+                    anyhow::bail!("scenario {} supported requires fixture project/path/context", s.id);
+                }
+                if s.docker.command.is_empty() || s.lightr.command.is_empty() {
+                    anyhow::bail!("scenario {} supported requires both docker and lightr commands", s.id);
+                }
             }
             for a in &s.assertions {
                 a.validate()?;
