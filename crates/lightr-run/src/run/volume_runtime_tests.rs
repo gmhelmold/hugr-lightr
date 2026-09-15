@@ -18,7 +18,7 @@ fn home() -> (tempfile::TempDir, std::sync::MutexGuard<'static, ()>) {
     let gate = home.path().join("volume-gate.sh");
     fs::write(
         &gate,
-        "#!/bin/sh\n[ \"$1\" = __volume_gate ] || exit 127\nfd=\"$2\"\nshift 2\nbyte=$(dd bs=1 count=1 < \"/proc/self/fd/$fd\" 2>/dev/null)\n[ \"$byte\" = \"$(printf '\\001')\" ] || exit 127\neval \"exec $fd<&-\"\nexec \"$@\"\n",
+        "#!/bin/sh\n[ \"$1\" = __volume_gate ] || exit 127\nfd=\"$2\"\n[ \"$3\" = -- ] || exit 127\nshift 3\nbyte=$(dd bs=1 count=1 < \"/proc/self/fd/$fd\" 2>/dev/null)\n[ \"$byte\" = \"$(printf '\\001')\" ] || exit 127\neval \"exec $fd<&-\"\nexec \"$@\"\n",
     )
     .unwrap();
     use std::os::unix::fs::PermissionsExt;
@@ -40,10 +40,16 @@ fn generated_gate_fixture_enforces_marker_and_release_byte() {
         .status()
         .unwrap();
     assert_eq!(wrong.code(), Some(127));
+    let wrong_delimiter = std::process::Command::new(&gate)
+        .args(["__volume_gate", &fds[0].to_string(), "wrong", "/bin/true"])
+        .status()
+        .unwrap();
+    assert_eq!(wrong_delimiter.code(), Some(127));
     let mut child = std::process::Command::new(&gate)
         .args([
             "__volume_gate",
             &fds[0].to_string(),
+            "--",
             "/bin/sh",
             "-c",
             "exit 23",
