@@ -1,45 +1,36 @@
-# Snapshot integrity — dispatch receipt
+# Snapshot integrity — planning and dispatch status
 
 **Date:** 2026-09-16  
-**Repository:** `gmhelmold/hugr-lightr`  
-**Campaign:** [execution contract](https://github.com/gmhelmold/hugr-lightr/blob/fix/snapshot-integrity/docs/plans/SNAPSHOT-INTEGRITY-REMEDIATION.md)  
-**Plan commit:** `1ab1fcd638525d824b78137c522305036a6382bd`  
-**Plan blob:** `8e173264b2bd316839dc7b29dc3f548ec8a5891c` (read back and matched to the local deliverable).  
-**Audited code:** `e4a53417f6fe7da8c4f44908af9525536443d0fa`.
+**Current specification:** [SNAPSHOT-INTEGRITY-REMEDIATION.md](../SNAPSHOT-INTEGRITY-REMEDIATION.md), version 2.0.  
+**Current instruction:** revise the PLAN ONLY. No implementation/agent launch was requested in this revision.  
+**Code baseline:** `e4a53417f6fe7da8c4f44908af9525536443d0fa`.  
+**Previous planning head:** `19b28d7ad2ffff66e176b589f75c6592bd47ebe8`.
 
-## Actual result
+## Actual state
 
-Planning and durable task preparation succeeded. **Agent execution did not start.** The campaign is not implemented or qualified by this receipt.
+The v1 plan was adversarially reviewed and replaced by v2. The earlier unconditional READY labels are superseded. Each of SI-00–SI-05 now has explicit Success Criteria, Quality Standards, Completeness Criteria, DoD and Invariants. R01–R14 have design responses and named evidence obligations; their Rust fixes are NOT implemented by this revision.
 
-The session exposes GitHub repository writes but no native subagent-spawn tool. Its container has no Rust/Cargo or Codex/OpenCode/Claude executable on PATH. Plugin discovery did not provide a connected general-purpose coding-agent executor usable for this task. No new service was installed and no billing or permission setting was changed.
+No new dispatch attempt, agent session, source edit, CI/workflow edit, main-branch update, merge, auto-merge, release or permission/billing change is part of this plan-only update. A documentation push may trigger the repository's existing CI automatically; that is not new implementation or qualification evidence.
 
-The documented GitHub cloud-agent route was attempted on the first ready packet, issue #147, through `GitHub.add_issue_assignees` with assignee `copilot-swe-agent[bot]`. The actual response was:
+| Packet | Current readiness | Execution |
+|---|---|---|
+| SI-00 / PR #146 | Awaiting later execution authorization; contract/capability ratification not run | NOT STARTED |
+| SI-01 / #147 | Blocked on authorized SI-00 and accepted shared seam | NOT STARTED |
+| SI-02 / #148 | Pure portion needs SI-00; production integration also needs G-FOUNDATION | NOT STARTED |
+| SI-03 / #149 | Blocked on integrated foundation/capture and accepted pending-protocol ADR | NOT STARTED |
+| SI-04 / #150 | Read-only design can occur earlier; proof runs require SI-03 candidate | NOT STARTED |
+| SI-05 / #151 | Blocked on SI-04, frozen candidate and registered performance budget | NOT STARTED |
 
-```json
-{"message":"Forbidden","status":"403","is_error":true}
-```
+No native capability verification, budget value, ADR approval, independent review or executor availability is implied by this ledger. Historical code/CI failures remain open.
 
-The endpoint documentation returned with the error was `https://docs.github.com/rest/issues/assignees#add-assignees-to-an-issue`. A subsequent issue read confirmed that #147 still had no assignee. No execution/session/agent-PR receipt was returned. The error alone does not establish whether the missing authorization is account eligibility, integration scope or another GitHub restriction. Do not prescribe more permission changes without evidence.
+## Historical dispatch attempt — preserved, not repeated
 
-After that rejection, no speculative assignments were sent for the other packets. An issue existing is not delegation; an accepted assignment without a session receipt is not confirmed execution.
+On 2026-09-16, before v2, assignment of issue #147 to `copilot-swe-agent[bot]` was attempted via `GitHub.add_issue_assignees`. The API returned HTTP 403 Forbidden. A read-back confirmed no assignee and no execution/session receipt. The other packets were not assigned speculatively. This does not identify the exact credential/account eligibility failure and is not a recommendation to change permissions again.
 
-## Task ledger
+The previous authoring environment exposed no native subagent spawn and no Rust/Cargo or coding-agent CLI on PATH. Future executors must inspect their own current capabilities rather than treating that historical observation as a permanent platform fact. There is no background ChatGPT monitor or automatic future dispatcher.
 
-| Packet | Issue | Dependency readiness | Execution state |
-|---|---|---|---|
-| SI-00 | PR #146 / plan | Planning file and packets persisted | Planning complete; dispatch blocked |
-| SI-01 | [#147](https://github.com/gmhelmold/hugr-lightr/issues/147) | READY | BLOCKED: assignment rejected, HTTP 403; unassigned |
-| SI-02 | [#148](https://github.com/gmhelmold/hugr-lightr/issues/148) | READY | Not dispatched; no executor |
-| SI-03 | [#149](https://github.com/gmhelmold/hugr-lightr/issues/149) | READY | Not dispatched; no executor |
-| SI-04 | [#150](https://github.com/gmhelmold/hugr-lightr/issues/150) | BLOCKED on SI-01/02/03 | Not dispatched |
-| SI-05 | [#151](https://github.com/gmhelmold/hugr-lightr/issues/151) | BLOCKED on integrated implementation and SI-04 | Not dispatched |
+## Later authorized handoff
 
-There were no remediation-source edits during this planning step. The new commits contain documentation only. PR #146 remains draft; no main-branch update, merge, auto-merge or release was performed. Existing code-audit and CI failures remain unresolved. The documentation commit is not a newly tested source-code baseline.
+> Work only in gmhelmold/hugr-lightr after a new implementation instruction. Read the v2 specification, this ledger, repository instructions and issues #147–#151. Record the live branch SHA and reconcile changes. Execute SI-00's contract, native-capability, caller-map and test-support prerequisites first. Do not dispatch three implementation workers merely because v1 once called them READY. SI-01 owns the foundation; SI-02 may implement only its isolated capture/oracle portion against the accepted seam in parallel, and integrates after G-FOUNDATION. SI-03 owns references, recovery, GC and snapshot/history/reader callers together. SI-04 proves the integrated behavior; SI-05 qualifies the frozen candidate against registered budgets. Each package must meet all five axioms. Use separate worktrees and draft PRs targeting fix/snapshot-integrity. Report real session IDs/evidence or precise blockers; do not simulate delegation. No main merge, auto-merge, releases, sibling mutations or credential/billing changes.
 
-## Executor handoff
-
-An authorized execution session with real worker tools can resume without repeating the audit. Use this launch brief:
-
-> Work only in gmhelmold/hugr-lightr. Read CLAUDE.md, docs/plans/SNAPSHOT-INTEGRITY-REMEDIATION.md, this dispatch receipt and issues #147–#151. Resolve and record the live fix/snapshot-integrity SHA before editing. Follow the plan's invariants, file ownership and evidence protocol. Dispatch SI-01, SI-02 and SI-03 in isolated branches/worktrees, maximum three concurrent workers. If your runtime has no subagent tool, report that rather than simulate a fleet. Keep each worker PR draft and target fix/snapshot-integrity. Reconcile any moved head and integrate reviewed results only on that branch. Execute SI-04 after dependencies are integrated; qualify with SI-05 against the final exact SHA. Do not merge into main, enable auto-merge, release, weaken tests, hide failures, change billing/permissions or mutate sibling repositories. Report actual worker/session IDs, code SHAs and evidence links. Unknown ENOENT causality remains a blocker until addressed with evidence.
-
-No recurring/background ChatGPT monitoring or automatic future dispatch is configured. Update this receipt only after a real new execution attempt or verified worker transition.
+Issue bodies are routing summaries. The v2 specification is authoritative; historical issue comments and receipts remain evidence of earlier states, not permission to run obsolete packets.
