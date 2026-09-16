@@ -1,7 +1,7 @@
 //! snapshot: SnapshotReport, snapshot.
 
 use super::{codec::Index, scan::scan};
-use lightr_core::{Entry, RefRecord, Result};
+use lightr_core::{Digest, Entry, LightrError, Manifest, RefRecord, Result};
 use lightr_store::Store;
 use rayon::prelude::*;
 use std::{
@@ -19,48 +19,60 @@ pub struct SnapshotReport {
 pub fn snapshot(root: &Path, store: &Store, name: &str) -> Result<SnapshotReport> {
     lightr_core::validate_ref_name(name)?;
 
-    let prev = store.ref_get(name)?;
     let mut index = Index::load_for(root)?;
     let walk = scan(root, &mut index)?;
-    let manifest = walk.manifest;
+    publish_snapshot(root, store, name, walk.manifest)
+}
 
-    // Collect file entries that need ingestion
-    let file_entries: Vec<&Entry> = manifest
+/// Publish a captured manifest only after every required ingestion succeeds.
+/// A live source may change after scan: reject a digest mismatch rather than
+/// publishing a ref whose manifest names bytes we did not preserve. This is not
+/// a point-in-time filesystem snapshot; the caller may retry after a mutation.
+fn publish_snapshot(
+    root: &Path,
+    store: &Store,
+    name: &str,
+    manifest: Manifest,
+) -> Result<SnapshotReport> {
+    // Per-object write guards alone leave a gap before ref publication in which
+    // gc could sweep newly ingested objects. Keep one shared guard across the
+    // whole transaction, including reuse of existing objects and the manifest.
+    let _publication_guard = store.write_guard()?;
+    let prev = store.ref_get(name)?;
+
+    let file_entries: Vec<(&str, Digest)> = manifest
         .entries
         .iter()
-        .filter(|e| matches!(e, Entry::File { .. }))
-        .collect();
-
-    // Parallel ingest of missing objects
-    let ingest_results: Vec<(lightr_core::Digest, bool)> = file_entries
-        .par_iter()
-        .filter_map(|e| {
-            if let Entry::File { digest, .. } = e {
-                if !store.exists(digest) {
-                    // Find the file path on disk
-                    let rel = e.path();
-                    let abs = root.join(rel);
-                    match store.ingest_file(&abs) {
-                        Ok(_) => Some((*digest, true)),
-                        Err(_) => None,
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
+        .filter_map(|entry| match entry {
+            Entry::File { path, digest, .. } => Some((path.as_str(), *digest)),
+            _ => None,
         })
         .collect();
 
-    let objects_new = ingest_results.len() as u64;
+    // Do not filter out ingestion errors: any failure must prevent both the
+    // manifest write and ref advancement. Already ingested, unreferenced objects
+    // may remain on failure; normal gc can reclaim them after the guard drops.
+    let ingest_results: Result<Vec<u64>> = file_entries
+        .par_iter()
+        .map(|(rel, expected)| {
+            if store.exists(expected) {
+                return Ok(0);
+            }
+            let actual = store.ingest_file(&root.join(rel))?;
+            if actual != *expected {
+                return Err(LightrError::Integrity {
+                    expected: *expected,
+                    actual,
+                });
+            }
+            Ok(1)
+        })
+        .collect();
+    let objects_new = ingest_results?.into_iter().sum();
 
-    // Encode and store manifest
     let manifest_bytes = manifest.encode();
-    store.put_bytes(&manifest_bytes)?;
-    let manifest_digest = manifest.digest();
+    let manifest_digest = store.put_bytes(&manifest_bytes)?;
 
-    // Build ref record
     let parent = prev.map(|r| r.root);
     let created_at_unix = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -76,13 +88,14 @@ pub fn snapshot(root: &Path, store: &Store, name: &str) -> Result<SnapshotReport
     };
     store.ref_put(&rec)?;
 
-    let files = file_entries.len() as u64;
-    let bytes_total = manifest.total_size;
-
     Ok(SnapshotReport {
         root: manifest_digest,
-        files,
-        bytes_total,
+        files: file_entries.len() as u64,
+        bytes_total: manifest.total_size,
         objects_new,
     })
 }
+
+#[cfg(test)]
+#[path = "snapshot_tests.rs"]
+mod tests;

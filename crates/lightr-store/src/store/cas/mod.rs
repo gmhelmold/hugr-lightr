@@ -175,25 +175,43 @@ pub fn ingest_file(root: &Path, path: &Path, rung: CowRung) -> Result<Digest> {
     };
     let _ = used_cow; // counted but not surfaced in API
 
-    // fsync the temp file before rename so the data is crash-durable.
-    {
-        let f = File::open(&tmp)?;
+    finish_ingest(&tmp, &dest, &shard, d)
+}
+
+/// Validate the copied bytes, not just the earlier observation of the source.
+/// Kept separate so tests can deterministically model a source mutation between
+/// hashing and copying, without races or hooks in the public API.
+fn finish_ingest(tmp: &Path, dest: &Path, shard: &Path, expected: Digest) -> Result<Digest> {
+    let result = (|| {
+        let actual = Digest::of_file(tmp)?;
+        if actual != expected {
+            return Err(LightrError::Integrity { expected, actual });
+        }
+
+        // The staged file is private to this ingestion. Verify it before making
+        // it visible under a content-addressed name, then preserve durability.
+        let f = File::open(tmp)?;
         #[cfg(unix)]
         f.sync_all()?;
         #[cfg(windows)]
         {
-            // WIN-PATH: FlushFileBuffers on the temp file before rename.
             use std::os::windows::io::AsRawHandle;
             use windows_sys::Win32::Storage::FileSystem::FlushFileBuffers;
             let handle = f.as_raw_handle();
             unsafe { FlushFileBuffers(handle as _) };
         }
+        drop(f);
+        fs::rename(tmp, dest)?;
+        fsync_dir(shard)?;
+        set_mode(dest, 0o444)?;
+        Ok(expected)
+    })();
+    if result.is_err() {
+        // Only remove our unpublished staging file, never a CAS object. If a
+        // later durability step failed after rename, the valid object remains.
+        let _ = fs::remove_file(tmp);
     }
-    fs::rename(&tmp, &dest)?;
-    fsync_dir(&shard)?; // fsync parent dir after rename
-    set_mode(&dest, 0o444)?;
-
-    Ok(d)
+    result
 }
 
 /// Read and verify `d`.  Missing → NotFound.  Hash mismatch → Integrity
@@ -279,3 +297,6 @@ pub fn remove_object(root: &Path, d: &Digest) -> Result<()> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod ingest_tests;
