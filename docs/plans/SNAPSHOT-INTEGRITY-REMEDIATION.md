@@ -1,20 +1,20 @@
-# Snapshot integrity remediation — execution specification v2.1
+# Snapshot integrity remediation — execution specification v2.2
 
 **Repository:** `gmhelmold/hugr-lightr`  
 **Date:** 2026-09-16  
 **Integration branch / PR:** `fix/snapshot-integrity` / [#146](https://github.com/gmhelmold/hugr-lightr/pull/146)  
 **Revision scope:** planning documents and execution packets only. This revision does not implement or validate Rust fixes.  
 **Status:** PUBLISHED FOR PLANNING; implementation NOT STARTED. Campaign #152; SI-00 #153. Read `DISPATCH.md` before acting.
-**Revision base:** v2.0 at `ad9bdcca42a7910f1a7a7513ce719cbb2159aecb`. This publication adopts the prepared v2.1 technical contract and updates tracking only; no runtime qualification is implied.
+**Revision base:** v2.1 at `fda407e11de7516a812c321ed29bd1798fc48edc`. This targeted planning amendment incorporates integrated-review A01–A05; A06 native tracking remains separately verified or blocked in DISPATCH.md. No runtime qualification is implied.
 **Second-review response:** V2-A01–V2-A06 have selected planning dispositions below. Model/document checks are not Rust qualification.  
-**Supersedes:** v2.0 at `ad9bdcca42a7910f1a7a7513ce719cbb2159aecb`; preserves the rejection of v1's unconditional parallel READY states.  
-**Code baseline:** `e4a53417f6fe7da8c4f44908af9525536443d0fa`; pre-fix base `5c5ca00008ed0d22673be79a7b585517527418af`; planning head inspected for this revision `ad9bdcca42a7910f1a7a7513ce719cbb2159aecb`.
+**Supersedes:** v2.1 at `fda407e11de7516a812c321ed29bd1798fc48edc`; preserves earlier technical decisions except the explicit refinements below and rejects v1's unconditional parallel READY states.  
+**Code baseline:** `e4a53417f6fe7da8c4f44908af9525536443d0fa`; pre-fix base `5c5ca00008ed0d22673be79a7b585517527418af`; planning head inspected for this revision `fda407e11de7516a812c321ed29bd1798fc48edc`.
 
 ## 0. Use, authority and meaning of completion
 
 This document specifies the observable behavior first and derives work packages and experiments from it. The protocol below is a selected design for implementation and review, not a menu delegated to competing agents and not an already proven implementation. A demonstrably incompatible primitive blocks the affected package and requires an explicit amendment; it is not permission to invent a different commit protocol locally.
 
-The owner authorized **all corrections from the second review, within the plan-only scope already established**. This authorizes editing the specification and preparing/synchronizing its tracking metadata, not launching workers, editing Rust/CI, creating new execution services, merging, enabling auto-merge, releasing, changing billing/permissions or modifying sibling repositories. Future implementation needs a separate execution instruction and the gates below. Read `CLAUDE.md`, `CONTRIBUTING.md` and applicable accepted ADRs; this plan does not silently change their acceptance status.
+The owner authorized **the integrated-review refinements and tracking synchronization, within the plan-only scope already established**. This authorizes editing the specification and preparing/synchronizing its tracking metadata, not launching workers, editing Rust/CI, creating new execution services, merging, enabling auto-merge, releasing, changing billing/permissions or modifying sibling repositories. Future implementation needs a separate execution instruction and the gates below. Read `CLAUDE.md`, `CONTRIBUTING.md` and applicable accepted ADRs; this plan does not silently change their acceptance status.
 
 Campaign [#152](https://github.com/gmhelmold/hugr-lightr/issues/152) tracks the six work packages. Keep the original five implementation issues, #147–#151; coordinator/bootstrap SI-00 has its own issue [#153](https://github.com/gmhelmold/hugr-lightr/issues/153). PR #146 remains the separate integration deliverable. Native hierarchy/dependency/Project state is recorded in `DISPATCH.md`, not inferred from these links. Each work package contains five distinct, mandatory axioms:
 
@@ -40,7 +40,7 @@ LMF1 and current RefRecord encodings remain unchanged and readable. The selected
 
 [Original audit](https://github.com/gmhelmold/hugr-lightr/pull/146#pullrequestreview-5227371146). Original [CI run 35139596421](https://github.com/gmhelmold/hugr-lightr/actions/runs/35139596421) tested checkout merge `609bbf6ed919a3af56f2345444f55b45d8c0ebb9`, not merely a branch name. The inspected Linux x86_64/macOS arm64 logs showed the 12 added tests passing. Formatting failed. macOS arm64 [job 104940488434](https://github.com/gmhelmold/hugr-lightr/actions/runs/35139596421/job/104940488434) failed in `acceptance_r1::g1::a11_gc` during the FIRST snapshot, before GC, with ENOENT. Windows builds/clippy were not native execution of the new tests. Rust is pinned to `1.96.0` in the baseline.
 
-The plan adversarial review identified R01–R14. Its auxiliary filesystem experiment and two transition models were not Rust or crash-durability tests. The historical ENOENT cause remains unproved. No new passing CI, available executor, platform capability or performance number is asserted by this revision. The second review is `Lightr-Plan-V2-Adversarial-Review.md`; V2-A01–A06 below are planning responses, not closed runtime defects.
+The plan adversarial review identified R01–R14. Its auxiliary filesystem experiment and two transition models were not Rust or crash-durability tests. The historical ENOENT cause remains unproved. No new passing CI, available executor, platform capability or performance number is asserted by this revision. The second review is `Lightr-Plan-V2-Adversarial-Review.md`; V2-A01–A06 below are planning responses, not closed runtime defects. The later integrated review is `Lightr-Revisao-Integrada-v2.1.md`; its A01–A06 IDs are distinct from V2-A01–A06. Its read of CI run `35158370442` / checkout `7c456be923d100f124ec7239612a4d7929284ec6` found configured Linux/macOS acceptance passing, formatting failing, and zero artifacts for the CI benchmark aggregator. The step named Verify no regressions only echoed a manual-review message; this is not performance evidence. The separate benchmark-evidence workflow was not audited. These are historical observations, not a new run or an explanation of the original ENOENT.
 
 ## 2. Selected contracts
 
@@ -69,9 +69,20 @@ A process kill/reopen test establishes process recovery only. File/directory ord
 
 C12 path preflight precedes operation-owned filesystem writes. Top-level operations acquire one store-scoped GC lease: SHARED for capture/publication and materialization; EXCLUSIVE for collection or explicit metadata recovery. Low-level calls borrow that lease rather than reopening/reacquiring the global lock. Parallel child work must finish before its parent lease is released.
 
-Order: **global lease → ref lock(s), sorted by ref key when multiple are needed → digest lock(s), sorted when multiple are needed**. A digest lock must never be held while acquiring a ref lock. Payload preparation may precede ref locking only when all its digest locks are released first. No lock upgrades, recursive acquisition, or call from an exclusive-lease path into a wrapper that takes a shared lease.
+Order: **store-global lease → optional shared-cache resource lock → ref lock(s), sorted by ref key → digest lock(s), sorted when multiple are needed**. The cache section is a leaf: release its resource lock before acquiring any ref/digest lock; never acquire a cache lock while holding either. A digest lock must never be held while acquiring a ref lock. Payload preparation may precede ref locking only when all its digest locks are released first. No lock upgrades, recursive acquisition, or call from an exclusive-lease path into a wrapper that takes a shared lease. Standalone cache operations that have no Store acquire only the cache resource lock and never call into a Store while holding it.
 
 Use store-canonical identity, stable lock files and both thread/process-correct exclusion. Do not delete lock files on unlock: replacing a lock inode can split the lock domain. Prove same-process behavior rather than assuming an OS lock also serializes threads. Keyed in-process mutexes may complement kernel locks. Independent refs must progress concurrently. Lock waits need cancellation/cleanup; correctness tests use bounded watchdogs, not timing assumptions about fairness.
+
+**Resource domains (integrated-review A01):** a Store lease excludes only that Store's participants; it is not proof of quiescence in a shared index. Preserve the existing shared index location, but assign that cache root one stable native-identity-keyed resource lock. All cache loads/publications, initialization/probes that mutate it, and scratch reaping take that resource lock exclusively for their short filesystem section. The lock covers cache staging allocation through install/cleanup, not the source walk, payload hashing or a user command. Build candidate index records outside the cache lock; cache remains non-authoritative and last-writer replacement is not a freshness proof. Store-bound callers acquire the Store lease first; standalone status/index callers use the same cache lock without inventing a Store. Both thread and process exclusion are required. No blanket Store-global mutex is introduced.
+
+| Managed resource | Participants / exclusion | Permitted scratch cleanup |
+|---|---|---|
+| Store-private CAS/ref/receipt/pending metadata and their staging | Same canonical Store identity; its SH/EX lease and existing key locks | That Store's EX lease, limited to its registered owned staging |
+| Shared index cache and its staging | Every Store and standalone cache caller sharing the resolved cache-root identity; the cache resource lock | The cache resource lock held EX, regardless of which Store initiated cleanup |
+| Owned internal workspace staging | Its inventoried owner/resource guard retained by every helper | Only the matching resource domain; no sibling traversal |
+| Unknown, overlapping authoritative roots or legacy scratch with unproved ownership | No inference from path spelling or a foreign Store lease | Reject/skip safely until an explicit ownership rule is accepted |
+
+SI-00 records each namespace's resolved identity, participants, lock identity, allocation lifetime and cleanup boundary, including alias spellings. Same-root aliases must share a lock domain; distinct Stores sharing a cache must share its cache lock. Reaping with Store A's EX alone cannot touch shared-cache or Store B scratch. A cleanup pass acquires each needed resource guard in the order above, never multiple Store leases or multiple cache locks at once; pending inspection requiring ref locks is completed/released before entering the cache section. Stable resource-lock files are never scratch and are not replaced at unlock. Unknown alias equivalence or overlapping authoritative Store roots is UnsupportedTopology, not a guessed domain. This registry is reviewed configuration/ownership information, not a new persistent transaction ledger. [P6–P7]
 
 `PreparedObject` is an internal proof tied to the live lease and digest, produced only after C03 completes. It cannot be forged from `exists`, a stat-index entry or an arbitrary path. The per-lease dedup map contains only completed preparations; failures wake all waiters with an error, not a permanently pending promise. Borrowing/scope prevents use after lease release. Persistent readiness receipts are checked under C03; they are not a substitute for a live lease protecting an object from collection.
 
@@ -151,7 +162,9 @@ History inspection may show raw records with the explicit LegacyUnverified label
 
 ### C06 — Strict root discovery and non-destructive uncertainty
 
-GC takes the EXCLUSIVE lease and completes a full mark phase before deleting anything. Enumerate physical authoritative `refs` shards, decode each record, and verify the ref key/name relationship. ENOENT meaning an absent ref is different from an inaccessible shard or a decode error. Never use an empty `list_refs()` result as proof that all roots are absent.
+GC takes the EXCLUSIVE Store lease and completes a full mark phase before deleting anything. FIRST enumerate the complete pending-operation namespace independently of current refs, names or history. Any valid unresolved operation blocks destructive CAS sweep, including a create with no current, PREPARED untag after physical current removal, and COMMIT_DECIDED untag awaiting retirement. Unreadable/malformed pending, a failed shard iteration or an unknown descriptor layout also blocks sweep. A pending namespace genuinely absent in a legacy/new empty store is not a read failure; absence must be established directly. Do not auto-recover before evaluating this precondition or limit pending checks to names discovered in refs. This is a strict pre-scan of the existing journal plane, not a new root ledger (integrated-review A04).
+
+Only after that pre-scan succeeds, enumerate physical authoritative `refs` shards, decode each record, and verify the ref key/name relationship. ENOENT meaning an absent ref is different from an inaccessible shard or a decode error. Never use an empty `list_refs()` result as proof that all roots are absent.
 
 For each live name, mark the coherent current tuple independently of retained committed/legacy history. Traverse the OCI pointers in each tagged history envelope as well as its tree; current name-indexed sidecars cannot substitute for historical bindings. Also preserve every existing root family: Action Cache records and retained OCI metadata/blobs, plus any additional family found by the SI-00 caller/root inventory. Each family needs a strict collector-facing enumeration path: display APIs may remain fail-soft, but their swallowed errors cannot feed destructive GC. Unknown pointer-bearing record formats, incomplete enumeration, pending ref operations, or unreadable required metadata abort the sweep. Do not silently remove an existing root family to simplify this campaign.
 
@@ -215,24 +228,26 @@ The public path policy is **disjoint, not implicitly ignored**. A filesystem cap
 
 SI-00 inventories the exact configured protected roots, including the CAS/ref/history/pending/receipt/lock families, index cache and each managed scratch area. Run-workspaces are not automatically forbidden just because they are siblings under LIGHTR_HOME; an internal build/hydrate adapter uses a verified owned-workspace capability and remains disjoint from authoritative metadata. Public input strings or an internal-looking prefix cannot mint that capability. Raw CAS/readiness adoption uses its internal digest API, not a public recursive capture of the store.
 
-Resolve component/handle identity and ancestry on the actual supported filesystem: normalize lexical dot segments without lossy string conversion, resolve existing ancestor aliases, and check the actual opened directories using native identities (not string starts-with). Validate a not-yet-created destination against its nearest existing ancestor before creation, then revalidate the created/opened directory. Retain handles or equivalent anchored traversal across the operation so an ordinary alias race cannot redirect writes. If a mount/alias relationship cannot be established on a supported profile, reject as UnsupportedTopology; do not claim all possible mount aliases were verified. Network/unsupported filesystems remain outside scope.
+Resolve public path components with native, anchored filesystem semantics BEFORE deciding identity/ancestry. Never lexically collapse `component/..` before resolving that component: it may be a symlink or mount boundary. Preserve native errors, required directory/trailing-slash semantics and the requested object; validation and use must address the same opened object/anchored parent, not separately reinterpret strings. For example, with `workspace/alias -> store/branch`, `workspace/alias/../payload` resolves through the link to `store/payload`, not lexical `workspace/payload`. Use a native component walker/handle primitive that preserves this meaning, or explicitly reject an unsupported topology before writes. Dot/dot-dot resolution within C07's already restricted in-manifest Windows link subset is a different operation; it does not authorize lexical cleanup of arbitrary public paths. [P6]
+
+Validate a not-yet-created destination against its natively resolved nearest existing ancestor before creation, then revalidate the created/opened directory. Retain handles or equivalent anchored traversal across the operation so an ordinary alias race cannot redirect writes. If a mount/alias relationship cannot be established on a supported profile, reject as UnsupportedTopology; do not claim all possible mount aliases were verified. Network/unsupported filesystems remain outside scope.
 
 CLI orchestration performs configured-root preflight before mutable Store initialization/probing when it owns that initialization. An API given an already-open Store validates before its own capture/preparation/output writes; it cannot undo earlier actions by its caller. Internal owned staging is the only bounded exception to public path disjointness and cannot be selected as user input. No silent ignore insertion, source mutation or deletion of pre-existing user directories to make topology valid.
 
-Required witnesses: equal paths; store/index inside source; source inside store; destination inside/above managed roots; source/destination overlap in a paired operation; symlink/alias spelling; a missing destination under an alias ancestor; harmless sibling-prefix names; allowed isolated internal workspace. Assert rejection before prohibited mutations using independent before/after observations.
+Required witnesses: equal paths; store/index inside source; source inside store; destination inside/above managed roots; source/destination overlap in a paired operation; symlink/alias spelling; `alias/../payload` with distinct native/lexical targets; dot segments without links as a control; a missing destination under a resolved alias ancestor; trailing slash on file versus directory; harmless sibling-prefix names; allowed isolated internal workspace. Use independently opened object identity/content, not the normalizer under test. Assert rejection before prohibited mutations using independent before/after observations.
 
 ### C13 — Resource-bounded recovery and safe interrupted scratch (V2-A02)
 
 **Selected guarantee:** safety is unconditional within the fault model; recovery progress is conditional on resources. This plan does NOT promise recovery with zero free space/quota/inodes and does not add an emergency reserve. When the recorded action cannot allocate/confirm what it needs, return RecoveryBlockedResources with original error, journal phase/operation ID where available, resource domain and a safe next step. Do not repeatedly loop, erase pending or free potentially reachable CAS/history to obtain space.
 
-**Scratch reaping is not full GC.** Every private allocation is made under one of SI-00's finite collector-known staging roots on the destination filesystem (for example a managed parent's dedicated `.lightr-staging/alloc-*` directory), while holding the global lease. New-protocol namespaces contain only owned scratch, never user payloads or committed metadata. Under an EXCLUSIVE global lease, a dedicated synchronous reaper can remove abandoned allocations there without doing CAS root sweeping. All helpers/child processes obey the lease; acquiring EX proves no participating live allocation is active. The reaper rejects symlink traversal and unknown layout/ownership, checks pending descriptors, and skips anything referenced or not provably scratch. C05 recovery data is inline or in ready CAS, never solely in scratch. A malformed/legacy descriptor that prevents this proof blocks that cleanup subset, not permission to guess. Timestamps, age and PID reuse are not ownership proofs. Stable lock files, current/log/sidecars/receipts and CAS payloads are NEVER scratch.
+**Scratch reaping is not full GC.** Every private allocation is made under one of SI-00's finite collector-known staging roots on the destination filesystem (for example a managed parent's dedicated `.lightr-staging/alloc-*` directory), while holding its actual resource-domain guard from C02. New-protocol namespaces contain only owned scratch, never user payloads or committed metadata. A synchronous reaper acquires the matching exclusion before removing abandoned allocations: Store EX for Store-private staging; the shared cache's EX resource lock for cache staging, even when invoked with Store A's EX already held. Store A's lease says nothing about Store B or a standalone cache caller. All helpers/child processes retain the applicable guard for their full allocation lifetime. Quiescence follows only within that proven domain, never from a foreign lock. The reaper rejects symlink traversal and unknown layout/ownership, checks pending descriptors, and skips anything referenced or not provably scratch. C05 recovery data is inline or in ready CAS, never solely in scratch. A malformed/legacy descriptor that prevents this proof blocks that cleanup subset, not permission to guess. Timestamps, age and PID reuse are not ownership proofs. Stable lock files, current/log/sidecars/receipts and CAS payloads are NEVER scratch.
 
 The reaper must not allocate new staging as a prerequisite for starting; deletion can nevertheless fail on a full/broken filesystem and that error remains explicit. Reap only recognized leaves/allocations through anchored paths, confirm removals where supported, and make interruption idempotent. Partial/unknown old `.tmp` layouts are not deleted merely because their names look temporary; SI-00 must either establish a migration-specific ownership rule or leave them for explicit operator handling. No background daemon or relaxed full-GC mode is introduced.
 
 **Operator runbook, required as an executable support surface before qualification:**
 
 1. Stop retrying the failed mutator. Inspect the recorded operation read-only; quiesce participating writers and retain the journal/retained data. If inspection itself lacks memory/descriptor capacity, stop safely and report that prerequisite rather than a fabricated state.
-2. Run only the guarded scratch reaper. Report attempted/removed/skipped/failed items separately. Full CAS GC still requires complete roots and resolved pending.
+2. Run only the resource-domain-guarded scratch reaper. Report attempted/removed/skipped/failed items separately, including inability to acquire the actual shared-cache domain; never substitute a Store lease for it. Full CAS GC still requires complete roots and an independent empty-pending pre-scan.
 3. If resources remain insufficient, free unrelated data OUTSIDE protected namespaces or increase the relevant filesystem/quota/inode allowance. Do not ask the user to delete pending/current/history/CAS by hand. Never choose an arbitrary user file for deletion.
 4. Report a conservative resource estimate before retry: sum of lengths of dependencies needing ordinary requalification (not merely the largest blob), bounded metadata/history/pending temporary writes and the measured profile's directory/inode overhead. Report bytes and inodes/quota separately. This is an estimate, not a guarantee against concurrent external consumption; inability to compute it remains a blocker. SI-00 supplies concrete schema bounds and reproducible per-profile headroom tests, not a made-up universal MiB constant.
 5. With resources restored, run idempotent recovery under EX, verify the complete BEFORE or AFTER tuple/history as dictated by phase, clear/confirm pending, hydrate/check the expected data, then permit ordinary GC. Recurring resource loss returns the same explicit blocker without changing the decision.
@@ -246,12 +261,12 @@ Evidence must exercise synthetic failure at each allocating boundary AND actual 
 | I01 | Stable-source capture is fresh; stat equality never substitutes for this invocation's bytes. |
 | I02 | Published digest/length refer to owned verified bytes; cleanup cannot affect another allocation. |
 | I03 | No readiness receipt/proof before required payload barriers; confirmed objects are immutable to normal writers; existence is not readiness. |
-| I04 | Each operation holds one correctly scoped global lease; no nested global acquisition or reversed key-lock order. |
+| I04 | Each Store operation holds one correctly scoped Store lease; shared resources use their own exclusion domain; no nested global acquisition or reversed resource/ref/digest order. |
 | I05 | PREPARED work is not committed history; rollback restores the complete before tuple and never overwrites another decided operation. |
 | I06 | Current, OCI metadata, parent and version history form one guarded named generation; the explicit journal phase, not current alone, decides recovery. |
-| I07 | Authoritative root discovery is complete before sweeping; no root-family error becomes empty success. |
+| I07 | Independent pending discovery and authoritative root discovery both complete before sweeping; no current-less pending or enumeration error becomes empty success. |
 | I08 | Acknowledged current/history data remain retained while the name is live, except an explicit retention/untag action; active materialization stays protected. |
-| I09 | Names, link representation/capability and public namespace topology are preserve-or-reject; no lossy success or writes redirected into managed metadata. |
+| I09 | Names, links and topology are preserve-or-reject; public path resolution preserves native symlink/parent semantics and validation/use identity; no lossy or redirected success. |
 | I10 | Evidence identifies the code, binaries, tests and platform actually exercised. |
 | I11 | Resource/performance acceptance is decided from preregistered measurements; no optimization weakens integrity to pass. |
 | I12 | Scope, ownership and authorization remain explicit; no source execution or merge is implied by this plan. |
@@ -265,7 +280,7 @@ SI-00: contract ratification + caller inventory + platform/test capability
    ├── SI-01: shared CAS/lease/result foundation ── G-FOUNDATION ──┐
    └── SI-02: pure capture/oracle work against frozen seam ──────┤
                                                               v
-            SI-03: ref/history/GC + publisher/readers integrated together
+            SI-03: ref/history/GC + callers/readers → G-ACTIVATION
                                                               v
                      SI-04: integrated adversarial proof suite
                                                               v
@@ -275,6 +290,16 @@ SI-00: contract ratification + caller inventory + platform/test capability
 ```
 
 SI-02 may implement its pure traversal/oracle portion in parallel with SI-01 only after SI-00 accepts the seam. Its production integration and DoD depend on G-FOUNDATION. SI-03 does not start implementation against changing CAS/lock semantics. Ref locking and the snapshot caller are integrated in SI-03, not deferred to a later test-only package. SI-04 may review/design experiments from SI-00 onward, but cannot qualify nonexistent integrated behavior. Test infrastructure is delivered in SI-00, not postponed to SI-05.
+
+### Activation boundary — foundation is not product enablement (integrated-review A03)
+
+The selected transition is **additive, inert foundation followed by one coordinated source-level activation**. SI-01 adds new lease/preparation/receipt primitives; SI-02 adds capture/path primitives. Before activation they are exercised only through controlled tests on isolated disposable fixtures. Existing public dispatch/wrappers remain on the old path; no new readiness/history/pending data is emitted into a real store, no real-store adoption occurs, and no environment flag or partial adapter silently enables the protocol. Existing legacy defects are not declared fixed by keeping that path unchanged. Intermediate integration binaries are not qualified for real data. CI still exercises required old-path regression coverage plus the isolated new primitives.
+
+**G-FOUNDATION** certifies the accepted seam and isolated primitive evidence only. Its acceptance explicitly records `production_protocol_enabled=false`; it neither satisfies whole-product invariants nor permits migration. SI-02 may close its primitive package after real prepare/capture tests, while every publishing caller remains an explicit SI-03 integration obligation.
+
+**G-ACTIVATION**, owned by SI-03 and approved by the coordinator after contract review, requires one exact integrated source identity containing every participating writer, public wrapper/caller, reader, root-family adapter, pending pre-scan, scratch-domain rule and recovery path. SI-03 flips public routing only in the final coordinated integration slice, with public CLI/API tests proving borrowed single leases, zero recursive global acquisition, strict current-less-pending handling, full tuple coherence and refusal of recognized incompatible/partial protocol states before mutation. Activation is first exercised against disposable stores. It is not SI-05 qualification or permission to migrate the owner's data. Whole-product invariants become acceptance obligations at this gate; their real evidence is then challenged by SI-04/05.
+
+Keep one SI-03 acceptance responsibility, with ordered reviewable slices: codecs/decision; producers and callers; readers/history; GC/recovery/reaping; final activation. Slices may use separate PRs targeting the integration branch but cannot change the shared protocol independently or close the WP early. Review required changeover callsites in SI-00 and recheck them at G-ACTIVATION. A partial/new-format encounter returns an explicit incompatibility/recovery error, never legacy fallback. No new activation ledger or store-format flag is introduced by this planning amendment; the accepted schema/compatibility ADR must define detectable states and offline upgrade/downgrade handling. Old processes cannot be assumed to obey a new refusal rule: mixed writers remain unsupported and operationally excluded before later authorized adoption. Failure to demonstrate safe coordinated activation blocks SI-03 rather than relaxing invariants.
 
 At most two implementation workers run in the initial wave; read-only review can be a third role. One writable worktree/branch per worker. Every worker targets a draft PR at `fix/snapshot-integrity`, never main. Coordinator integrates one reviewed change at a time after checking the exact expected head; no force-push. Rebase/reconcile moved inputs and rerun affected tests. Package artifacts stay isolated; issue prose cannot override this specification.
 
@@ -288,13 +313,13 @@ At most two implementation workers run in the initial wave; read-only review can
 - SC00.1: C01–C08 and C12/C13 map to named functions/types and callers, with no conflict between helper and transaction outcomes.
 - SC00.2: each required native platform executes a smoke witness and returns readable logs/results before its dependent implementation claims readiness.
 - SC00.3: incident diagnostics, test-oracle recipes and performance methodology are available to implementers from the start. The accepted foundation seam includes bounded receipt and pending-descriptor formats, not just Rust signatures.
-- SC00.4: ratify the full named-version tuple, decision phase/history schema, legacy adoption/navigation boundary, link-class table, AttributionUnknown axis and path/resource preconditions before affected implementation.
+- SC00.4: ratify the full named-version tuple, decision phase/history schema, legacy adoption/navigation boundary, link-class table, AttributionUnknown axis and path/resource preconditions before affected implementation. Also freeze namespace/lock/cleanup domains, native public-path semantics, G-FOUNDATION versus G-ACTIVATION and the independent pending pre-scan.
 
 #### Quality Standards
 
 - QS00.1: read applicable ADRs; record acceptance of the readiness-receipt, fixed-tuple pending/decision protocol and tagged history envelopes, including intentional semantic changes before implementation. No silent format/dependency promotion.
 - QS00.2: add narrowly scoped CI/support only; preserve unrelated workflows, security boundaries, tests and failure visibility. Historical skips are inventoried, not copied into causal suites.
-- QS00.3: capabilities require receipts, not runner labels or API permissions. Pin the baseline toolchain; resource costs are disclosed.
+- QS00.3: capabilities require receipts, not runner labels or API permissions. Pin the baseline toolchain; resource costs are disclosed. Do not infer shared-cache quiescence from a Store lock or treat a green echo-only comparison as evidence.
 - QS00.4: extend existing protocol planes only; no new request ledger, emergency reserve or hidden link encoding. Any simplification must still satisfy the six V2-A oracles.
 
 #### Completeness Criteria
@@ -303,20 +328,20 @@ At most two implementation workers run in the initial wave; read-only review can
 - CC00.2: include snapshot, build snapshotting, tag/import metadata, history/undo/bisect, hydrate, AC and image sidecars. Out-of-scope consumer behavior still receives regression coverage if a shared helper affects it.
 - CC00.3: deliver `platforms`, `seams`, `caller-map`, `expected-tests`, incident hypothesis table and fixture hashes as compact evidence records. All relevant CI/bootstrap paths have an owner.
 - CC00.4: establish privilege-aware Windows symlink and Unix permission tests, actual CoW/fallback reporting, artifact collection, exact-SHA checkout verification and a nonzero-test smoke run. Create the performance baseline and budget-registration step in C10.
-- CC00.5: include OCI sidecar-only readers and all mutators, profile-specific resource headroom/runbook, native link-type inspection, alias identity APIs, legacy raw/envelope fixtures and the matching semantic reference for EACH performance fixture (especially F6).
+- CC00.5: include OCI sidecar-only readers and all mutators, profile-specific resource headroom/runbook, native link-type inspection, alias identity APIs, legacy raw/envelope fixtures and the matching semantic reference for EACH performance fixture (especially F6). Add a resource-domain map covering standalone index callers, an activation/caller map, two-Store shared-cache fixtures, symlink/parent fixtures and pending-without-current fixtures; inventory the observed CI aggregator defect.
 
 #### DoD
 
 - DOD00.1: contract/compatibility review is recorded; mandatory profiles have capability receipts or clearly blocked downstream work. An unavailable platform is not a pass.
 - DOD00.2: inventory and test identifiers are reviewed; evidence-validator negative fixtures reject wrong SHA, empty suite and missing artifacts.
 - DOD00.3: coordinator publishes one exact foundation input SHA and accepts the seam definitions. Only then can SI-01 and SI-02's isolated portion become READY. Nothing is marked implemented by SI-00 alone.
-- DOD00.4: V2-A01–A06 each have an accepted policy, owner and E17–E22 recipe; descriptor/envelope bounds, migration entry and safe support commands are specified. Approval is planning approval, not a claimed executed prerequisite.
+- DOD00.4: V2-A01–A06 each have an accepted policy, owner and E17–E22 recipe; descriptor/envelope bounds, migration entry and safe support commands are specified. Approval is planning approval, not a claimed executed prerequisite. Integrated-review A01–A05 must map to these gates and existing E08/E11/E15/E18/E22; native tracking A06 remains separate from runtime acceptance.
 
 #### Invariants
 
 - INV00.1: I10/I12; no credentials, sibling changes, invented runners or fictitious agents.
 - INV00.2: authoring the plan is distinct from executing this bootstrap; current capability entries remain NOT VERIFIED until measured.
-- INV00.3: shared semantics do not change while independent workers consume them; an amendment invalidates affected readiness/evidence.
+- INV00.3: shared semantics do not change while independent workers consume them; an amendment invalidates affected readiness/evidence. G-FOUNDATION is explicitly inert; no issue/PR status authorizes protocol activation or real-store migration.
 - INV00.4: I13/I14; unavailable evidence remains unavailable, and neither legacy history nor absent request identity is certified by inference.
 
 ### Work package SI-01 — CAS, staging, lease and phase-result foundation
@@ -328,13 +353,13 @@ At most two implementation workers run in the initial wave; read-only review can
 
 - SC01.1: a collision or failing copy cannot touch another operation's staging, and the public entry point cannot bypass staged verification.
 - SC01.2: a failed post-install barrier cannot become a later successful existence-only reuse; C03 requalification or an explicit failure occurs.
-- SC01.3: checked native flushing, single-lease composition and concurrent same-digest publication satisfy C01–C03 without changing payload encoding; confirmed objects cannot be replaced by later writers.
+- SC01.3: checked native flushing, single-lease composition and concurrent same-digest publication satisfy C01–C03 without changing payload encoding; confirmed objects cannot be replaced by later writers. These are additive primitive guarantees at G-FOUNDATION, not enabled public routing; actual shared-resource guards follow C02.
 - SC01.4: every scratch allocation is in a known managed namespace; resource failures preserve evidence and wake waiters without retry loops. Preparation never publishes OCI named pointers.
 
 #### Quality Standards
 
 - QS01.1: RAII ownership, atomic reservation, bounded retries, streaming buffers and typed contextual errors; no full-file memory buffer, unsafe destination unlink, hardlink to live input or fsync-only recovery.
-- QS01.2: no process-global failure hooks. Use scoped test seams sharing the production path and retain original error kind/phase. New unsafe or platform-specific code receives line-level review.
+- QS01.2: no process-global failure hooks. Use scoped test seams sharing the production path and retain original error kind/phase. New unsafe or platform-specific code receives line-level review. No source switch or configuration shortcut activates the new protocol before G-ACTIVATION; cache guards obey the resource-domain order.
 - QS01.3: native clone and copy-fallback outcomes are reported separately; Windows source read-only attributes and flush-handle rights are exercised, not inferred from a build.
 - QS01.4: scratch is not a recovery data source; allocation/cleanup are lease-scoped and compatible with C13 EX reaping. Do not reserve emergency storage or invent a guaranteed zero-space path.
 
@@ -344,18 +369,18 @@ At most two implementation workers run in the initial wave; read-only review can
 - CC01.2: E01–E04 and E09: forced allocation collision, threads/processes, failed fallback, source/staged mutation, wrong digest/length, zero/large/read-only files, valid/missing/malformed readiness receipts, existing valid/corrupt destinations, immutable confirmed-object reuse, post-rename failure/retry, flush failure and nested-lease negative controls.
 - CC01.3: mechanical rustfmt fixes and diagnostics-only incident probes are separately attributable. Preserve original fixture; use C09 to distinguish the ENOENT hypotheses.
 - CC01.4: test lease-local dedup failure wake-up, cancellation, object count semantics and progress across distinct digests. Orphan cleanup must not require a new daemon.
-- CC01.5: E18 resource failures and pre-journal killed-worker scratch; bounded streaming requalification headroom, clone/copy partial failures, known/unknown staging layouts and live-child lease ownership. C12 guards all public source paths.
+- CC01.5: E18 resource failures and pre-journal killed-worker scratch; bounded streaming requalification headroom, clone/copy partial failures, known/unknown staging layouts and live-child lease ownership. C12 guards all public source paths. Exercise distinct Stores sharing an index, aliases of one Store/cache root and standalone cache writers; EX on a foreign Store must never authorize cache scratch collection.
 
 #### DoD
 
 - DOD01.1: targeted store tests/formatter/clippy and required native witnesses pass at the exact worker SHA; mutants have their specified dispositions.
 - DOD01.2: independent or explicitly labeled self-review checks phase propagation and lock lifetime, including shared helper consumers. No surviving causal mutant is ignored.
-- DOD01.3: coordinator integrates the reviewed foundation, verifies its seam matches SI-00, and records G-FOUNDATION. Incident status may remain unresolved, but must remain an explicit final gate; no false causal closure.
+- DOD01.3: coordinator integrates the reviewed foundation, verifies its seam matches SI-00, and records G-FOUNDATION. Incident status may remain unresolved, but must remain an explicit final gate; no false causal closure. The receipt must state production_protocol_enabled=false and list every caller still awaiting SI-03 conversion; no real store is adopted.
 - DOD01.4: give SI-03 the actual scratch inventory and phase-aware primitives; show data/journal preservation for allocation failures and that candidate cleanup does not reclaim a live helper allocation. Final reaper/runbook qualification remains SI-03/04/05, not falsely completed here.
 
 #### Invariants
 
-- INV01.1: I02/I03/I04; a proof is issued only for fully prepared bytes and cannot outlive its lease.
+- INV01.1: I02/I03/I04; a proof is issued only for fully prepared bytes and cannot outlive its lease. Resource proofs never outlive or cross their actual lock domain, and primitive availability is not product activation.
 - INV01.2: errors after visibility are not rewritten as no-effect failures; already committed user refs are untouched by CAS cleanup.
 - INV01.3: platform failures propagate; no performance shortcut reintroduces stat/existence trust across operations.
 - INV01.4: I13; insufficient space never turns an unconfirmed object into ready data or erases a pending operation.
@@ -370,25 +395,25 @@ At most two implementation workers run in the initial wave; read-only review can
 - SC02.1: warmed-index AAAA→BBBB with restored stat fields captures BBBB on a stable source; all snapshot identities come from this invocation's captured bytes.
 - SC02.2: selected traversal/read/metadata/link failures cannot yield a successful incomplete capture; correcting the cause permits a fresh retry.
 - SC02.3: supported names/types are preserved exactly; invalid/unrepresentable paths are rejected rather than silently normalized.
-- SC02.4: C12 rejects overlapping protected paths; C07 differentiates link representation from native privilege. No source tree is silently changed to fit support.
+- SC02.4: C12 rejects overlapping protected paths; C07 differentiates link representation from native privilege. No source tree is silently changed to fit support. Public alias/../path follows native resolution or explicit refusal; it cannot be validated or executed as its lexical substitute.
 
 #### Quality Standards
 
 - QS02.1: stage-derived length/digest, bounded memory and one-attempt changed-source policy; no blanket retries or special-casing fixtures.
 - QS02.2: preserve explicit ignore rules. Permission tests run under an identity proven unable to read the target; root bypass is not success evidence.
 - QS02.3: the oracle uses independent filesystem observations and bytes, not the implementation's index/codec as its only truth source.
-- QS02.4: infer any supported Windows link kind only from the full captured manifest and verified source kind, not a later target lookup; no reinterpretation of LMF1 reserved fields or prefix-only path checks.
+- QS02.4: infer any supported Windows link kind only from the full captured manifest and verified source kind, not a later target lookup; no reinterpretation of LMF1 reserved fields or prefix-only path checks. Do not collapse component/.. across an unresolved link; preserve trailing-slash/errors and use the object or anchored parent that preflight actually validated.
 
 #### Completeness Criteria
 
 - CC02.1: E05/E06/E12 and capture parts of E03: restored mtime/inode/size, stale/corrupt cache, failed cache save/retry, vanished entry, unreadable subtree, failed read-link, valid/dangling links, empty directories and source changes.
 - CC02.2: Unix literal backslashes, UTF-8 rejection, alias collisions, path traversal/ancestor conflicts, codec length limits and intentionally ignored files are explicit tests.
 - CC02.3: produce a verified capture result against the real SI-01 seam plus compatibility tests for existing scan/status consumers. Pure seam doubles are not final production-path evidence.
-- CC02.4: E20/E22 include native file/dir links, both dangling kinds, direct in-tree versus external/chained targets, enabled/disabled capability, source/store/index overlap and alias spellings; failed preparation leaves no named state.
+- CC02.4: E20/E22 include native file/dir links, both dangling kinds, direct in-tree versus external/chained targets, enabled/disabled capability, source/store/index overlap and alias spellings; failed preparation leaves no named state. Add two targets with different bytes for native-versus-lexical resolution, dot-only controls, missing descendants and trailing-slash cases; shared-index publication uses C02 resource exclusion.
 
 #### DoD
 
-- DOD02.1: pure tests may be reviewed early; package closure waits for G-FOUNDATION integration and real prepare/capture tests on supported profiles.
+- DOD02.1: pure tests may be reviewed early; package closure waits for G-FOUNDATION integration and real prepare/capture tests on supported profiles. These witnesses use controlled fixtures and do not enable production routing; SI-03 owns G-ACTIVATION.
 - DOD02.2: removing freshness/error propagation must fail the designated negative witnesses or receive a justified equivalent-mutant classification after redesign.
 - DOD02.3: coordinator records the integrated capture SHA and hands the actual function/call-site list to SI-03. No source-data identity decision remains implicit.
 - DOD02.4: support/rejection and topology oracles pass against real capture APIs; a fixture not created is NOT_EXERCISED. Record producer-level validation needed by SI-03 before any snapshot commit.
@@ -397,7 +422,7 @@ At most two implementation workers run in the initial wave; read-only review can
 
 - INV02.1: I01/I02/I09; the index never certifies a snapshot's bytes, and a failed read never becomes an ignore rule.
 - INV02.2: no silent change of filename, link kind or target text; unsupported metadata is not advertised as preserved.
-- INV02.3: failed capture does not mutate ref/history; unrelated concurrent commits are not rolled back.
+- INV02.3: failed capture does not mutate ref/history; unrelated concurrent commits are not rolled back. Index scratch is protected by the shared-cache resource lock, not a guessed Store identity; public caller activation is not performed here.
 - INV02.4: I09/I13; unsupported representation and resource exhaustion cannot become partial successful capture.
 
 ### Work package SI-03 — one coherent ref/history/GC and reader integration
@@ -408,7 +433,7 @@ At most two implementation workers run in the initial wave; read-only review can
 #### Success Criteria
 
 - SC03.1: current/parent/history implement C05/C08, including interrupted updates and untag/recreation. A failed prepared B never turns `[A,P]` into a false history `[B,A,P]`.
-- SC03.2: authoritative refs cannot disappear from GC because a name index was omitted or unreadable; no destructive sweep follows incomplete root discovery.
+- SC03.2: authoritative refs cannot disappear from GC because a name index was omitted or unreadable; no destructive sweep follows incomplete root discovery. Pending discovery is independent of current/names/history, including interrupted create and both untag phases with no current.
 - SC03.3: the real snapshot entry point uses verified capture/preparation; active hydrate survives concurrent untag+GC under C07.
 - SC03.4: readers obtain a coherent tree/config/manifest generation or an explicit error after every interrupted publication, including metadata-only changes. Recovery either progresses under C13 resources or reports the actionable blocker without deleting retained evidence.
 
@@ -416,7 +441,7 @@ At most two implementation workers run in the initial wave; read-only review can
 
 - QS03.1: one bounded per-ref journal, explicit outcomes and fixed lock order; no generic WAL/database or silent on-disk migration. All consumers obey pending-state checks.
 - QS03.2: preserve original error and operation identity; legacy ambiguity is explicit. Do not invent chronology, reinterpret attempted versions as committed, or resurrect untagged roots.
-- QS03.3: keep unrelated ref progress and existing AC/image-root retention. Names/log display conveniences never determine destructive authority.
+- QS03.3: keep unrelated ref progress and existing AC/image-root retention. Names/log display conveniences never determine destructive authority. Every reaper uses its actual namespace guard; G-ACTIVATION is a coordinated source transition, not mixed new primitives with old wrappers/GC.
 - QS03.4: PREPARED/COMMIT_DECIDED is the single decision rule for the fixed tuple; all sidecar APIs participate. LegacyUnverified and AttributionUnknown remain distinct from corruption, and no extra request ledger is added.
 
 #### Completeness Criteria
@@ -425,18 +450,18 @@ At most two implementation workers run in the initial wave; read-only review can
 - CC03.2: include `ref_put`, removal, same-name recreation, snapshot parent read, tag/import root publication, history/undo/bisect, hydrate, names-index discovery, all existing GC root-family adapters and legacy fixture decoding.
 - CC03.3: verify log gaps/overflow/exclusive allocation, pending checksum/path validation, PREPARED/COMMIT_DECIDED recovery and unrelated-component rejection, interrupted retirement, missing names, malformed current/log/sidecars and incomplete shard enumeration.
 - CC03.4: implement targeted recovery entry/diagnostics and demonstrate that recovery itself is idempotent after interruption; no manual deletion of pending files is presented as recovery.
-- CC03.5: E17–E22 cover failures before/after each OCI pointer/current/decision write, same-root metadata updates, tag over existing destination, historical tuple undo, full/zero-scratch recovery, quota/inodes, interrupted recovery/reaping, interior legacy ambiguity, lost replies and caller topology.
+- CC03.5: E17–E22 cover failures before/after each OCI pointer/current/decision write, same-root metadata updates, tag over existing destination, historical tuple undo, full/zero-scratch recovery, quota/inodes, interrupted recovery/reaping, interior legacy ambiguity, lost replies and caller topology. Run GC immediately after restart BEFORE manual recovery with current-less pending; exercise shared-index reaping across two Stores and verify all public lease/caller routes at activation.
 
 #### DoD
 
 - DOD03.1: no partial integration declares ref serialization complete while its snapshot caller still reads parent outside the protocol. All affected consumer tests accompany the same reviewed integration unit.
 - DOD03.2: each C08 row has an observed correct result/recovery; old/new trees are compared against independent fixture bytes, not merely return codes.
-- DOD03.3: coordinator reviews compatibility, recovery and caller/root completeness, integrates the unit and publishes the candidate SHA for SI-04. Known unresolved integrity failures block this transition.
+- DOD03.3: coordinator reviews compatibility, recovery and caller/root completeness, integrates the unit and publishes the candidate SHA for SI-04. Known unresolved integrity failures block this transition. Record G-ACTIVATION and its exact source identity only after the final coordinated slice passes public-path tests; earlier slice integration cannot close SI-03 or authorize real-data use.
 - DOD03.4: compare the COMPLETE named tuple/history on rollback and rollforward; demonstrate safe operator-assisted no-space recovery, old-name metadata retirement, verified-suffix navigation and blocked legacy selections. Lost request attribution cannot trigger replay. These adapters ship with the protocol, not deferred as documentation.
 
 #### Invariants
 
-- INV03.1: I03–I09; prepared logs are never visible committed versions and current remains an independent GC root.
+- INV03.1: I03–I09; prepared logs are never visible committed versions and current remains an independent GC root. Strict pending pre-scan precedes all CAS deletion even when refs is empty; Store EX never substitutes for exclusion of shared-cache users.
 - INV03.2: no ref-level error handling undoes another writer's commit; uncertain visibility is never reported as guaranteed rollback.
 - INV03.3: a reader's lease covers its last required read, not an arbitrary external command; untag defines an explicit retention boundary.
 - INV03.4: I06/I13/I14; no hybrid named state, no unsafe resource escape, no retroactive history/request certification.
@@ -450,12 +475,12 @@ At most two implementation workers run in the initial wave; read-only review can
 
 - SC04.1: each invariant has a witness capable of distinguishing the candidate from a relevant faulty implementation.
 - SC04.2: tests prove contenders reached the intended boundary without requiring a correct implementation to enter a mutually excluded region.
-- SC04.3: process-death/retry/reader scenarios match C08 and exact output-tree checks, not just helper behavior.
+- SC04.3: process-death/retry/reader scenarios match C08 and exact output-tree checks, not just helper behavior. Include GC-before-recovery current-less pending, cross-Store resource contention and the post-G-ACTIVATION public entry point.
 - SC04.4: E17–E22 distinguish complete-tuple consistency from root-only checks, real resource progress from return codes, and classified unknown information from fabricated success.
 
 #### Quality Standards
 
-- QS04.1: scoped seams, barriers/channels and nonblocking acquisition probes; sleeps are not scheduling proof. Watchdogs bound failures but do not by themselves establish mutant causality.
+- QS04.1: scoped seams, barriers/channels and nonblocking acquisition probes; sleeps are not scheduling proof. Watchdogs bound failures but do not by themselves establish mutant causality. Prove which lock namespace is contested; an EX probe on an unrelated Store is not evidence of shared-cache exclusion.
 - QS04.2: classify every mutant as KILLED_CAUSALLY, SURVIVED, EQUIVALENT_WITH_PROOF, NOT_EXERCISED or INVALID_TEST. Do not weaken redundant protections to force a kill.
 - QS04.3: no global environment mutation hooks, leaked children, dirty mutant delivery tree or production-only bypasses hidden behind mocks.
 - QS04.4: constrained-resource tests use disposable capacity, not the host disk; models stay labeled models. Link tests establish native kind/capability premises and attribution controls do not inject a fake persistent request ID.
@@ -465,19 +490,19 @@ At most two implementation workers run in the initial wave; read-only review can
 - CC04.1: execute E01–E22, using real implementations/public paths where specified, and cover every C08 failure row. Any equivalent control gets an alternate causal witness for the invariant.
 - CC04.2: separately remove the relevant verification path, freshness rule, lease interval, history filtering/recovery and strict-root behavior; verify intended assertions, then restore and rerun the candidate.
 - CC04.3: exercise multiple writers and processes, independent refs, failure cancellation, exact old/new bytes, bounded retries and no source mutation after successful preservation affecting CAS.
-- CC04.4: interrupt both transaction phases and recovery; cover tuple component mixes, same-current metadata-only transitions, legacy equal-tip ambiguity, no-scratch operator intervention, Windows ambiguous links, pending absent/present lost replies and filesystem-alias topology.
+- CC04.4: interrupt both transaction phases and recovery; cover tuple component mixes, same-current metadata-only transitions, legacy equal-tip ambiguity, no-scratch operator intervention, Windows ambiguous links, pending absent/present lost replies and filesystem-alias topology. E08/E11 add no-current journal phases; E18/E22 add multi-Store shared cache and native symlink/parent identity; no new experiment family is needed.
 
 #### DoD
 
 - DOD04.1: the reviewer inspects each oracle and actual synchronization trace. Empty/filtered-away suites, compilation failures and unrelated test failures do not qualify.
 - DOD04.2: no unexplained surviving causal mutant; all execution receipts identify source/binary hashes and restored-tree checks. Production defects reopen SI-01/02/03 and invalidate dependent evidence.
-- DOD04.3: coordinator integrates only test/support/evidence changes, revalidates the full integrated candidate and hands SI-05 a frozen code/test/workflow identity.
+- DOD04.3: coordinator integrates only test/support/evidence changes, revalidates the full integrated candidate and hands SI-05 a frozen code/test/workflow identity. Confirm the candidate includes G-ACTIVATION; primitive-only receipts do not establish public behavior.
 - DOD04.4: reviewers trace all six V2-A obligations through the corresponding axiom/test/result, including correct refusal paths. Additive envelopes must pass legacy decode/provenance checks and composite history/GC oracles before handoff.
 
 #### Invariants
 
 - INV04.1: I05/I10/I12; test controls cannot become delivered production behavior or harm real user data.
-- INV04.2: a correct lock design must terminate under the test harness; causality is established by checkpoints, not guessed timing.
+- INV04.2: a correct lock design must terminate under the test harness; causality is established by checkpoints, not guessed timing. Test oracles compare the natively opened target and the actual resource domain, not the implementation normalizer or a foreign lock.
 - INV04.3: independent review is not claimed when the implementation author reviewed itself.
 - INV04.4: I13/I14; no unsafe deletion or reconstructed-but-unproved chronology in fixtures or delivered helpers.
 
@@ -488,7 +513,7 @@ At most two implementation workers run in the initial wave; read-only review can
 
 #### Success Criteria
 
-- SC05.1: mandatory native profiles execute the expected causal/acceptance tests at the actual candidate identity; qualified claims match platform capability.
+- SC05.1: mandatory native profiles execute the expected causal/acceptance tests at the actual candidate identity; qualified claims match platform capability. The frozen identity must include G-ACTIVATION, not merely G-FOUNDATION.
 - SC05.2: C09 incident disposition and C10 performance acceptance are explicit, supported and reviewed; no unexplained candidate snapshot failure is ignored.
 - SC05.3: a fresh checkout can reproduce recovery/materialization and reject invalid evidence using the documented commands.
 - SC05.4: qualification reproduces complete named-generation recovery and the C13 operator path; unsupported link classes, legacy boundaries and unknown request attribution have verified user-visible outcomes.
@@ -496,7 +521,7 @@ At most two implementation workers run in the initial wave; read-only review can
 #### Quality Standards
 
 - QS05.1: pinned toolchain, exact checkout and binary hashes; distinguish tested PR merge from branch head. Existing failing baselines remain visible.
-- QS05.2: no blanket skips, `continue-on-error`, retrospective budget relaxation or benchmark claims from missing artifacts. Physical power-loss guarantees are not inferred from process kills.
+- QS05.2: no blanket skips, `continue-on-error`, retrospective budget relaxation or benchmark claims from missing artifacts. Physical power-loss guarantees are not inferred from process kills. A performance verdict requires complete artifacts and an executed numeric comparison; an echo, skipped producer or zero-artifact aggregate cannot pass.
 - QS05.3: review residual risk, performance and backward compatibility, not only build/check statuses. Self-review cannot be labeled independent.
 - QS05.4: F6/composite-history budgets use a correct reference with SI-03 semantics, not a partial CAS foundation. Recovery headroom is per profile and not advertised as a universal free-space guarantee.
 
@@ -504,12 +529,12 @@ At most two implementation workers run in the initial wave; read-only review can
 
 - CC05.1: targeted store/index tests; real CLI acceptance; pinned formatting/clippy; impacted consumer regressions; E01–E22 dispositions; Linux x86_64/aarch64, macOS x86_64/arm64 and native Windows store/index execution with capability-specific rows.
 - CC05.2: compare base, audited patch and final candidate fixtures; include checked failure/recovery, native CoW versus copy and the existing macOS failure reproducer. Execute full workspace checks on supported feature/target combinations established in SI-00.
-- CC05.3: fill evidence schema, retention/expiry, independent review identity, budget verdict, incident disposition and all R01–R14 and V2-A01–A06 implementation-evidence links. Design closure is not implementation closure.
+- CC05.3: fill evidence schema, retention/expiry, independent review identity, budget verdict, incident disposition and all R01–R14 and V2-A01–A06 implementation-evidence links. Design closure is not implementation closure. Include integrated-review A01–A05 execution evidence; A06 tracking status is reported separately and never substituted for technical gates.
 - CC05.4: require V2-A01–A06 disposition/evidence in addition to R01–R14; include real constrained-resource coverage, all supported/rejected Windows link-class rows, complete tuple import/tag/export/undo, legacy adoption, lost reply and disjoint-path CLI tests.
 
 #### DoD
 
-- DOD05.1: all mandatory rows have valid evidence, no unresolved integrity blocker or causal survivor remains, and the fresh-checkout reproduction passes.
+- DOD05.1: all mandatory rows have valid evidence, no unresolved integrity blocker or causal survivor remains, and the fresh-checkout reproduction passes. Verify independent journal discovery, shared-resource safety, native path identity and coordinated activation, plus actual budget comparison rather than its step label.
 - DOD05.2: performance thresholds registered before final candidate measurement are met; otherwise BLOCKED_PERFORMANCE or an explicit owner-reviewed plan amendment followed by new measurements.
 - DOD05.3: coordinator records QUALIFIED for that exact identity only. PR remains draft until the owner decides it is ready for review; main merge/release require separate owner action. No automatic merge.
 - DOD05.4: no V2-A planning disposition is mistaken for code closure. Missing mandatory resource/tuple/provenance evidence blocks qualification; only the validated candidate and explicit profile limits may be accepted.
@@ -518,7 +543,7 @@ At most two implementation workers run in the initial wave; read-only review can
 
 - INV05.1: I01–I14; qualification cannot weaken any contract to create a green status.
 - INV05.2: missing native capability/evidence is not cross-compilation success, and an expected Unsupported test is not an exercised feature.
-- INV05.3: later code/test/workflow changes invalidate affected qualification; documentation-only provenance is handled explicitly under C11.
+- INV05.3: later code/test/workflow changes invalidate affected qualification; documentation-only provenance is handled explicitly under C11. An activation/caller change invalidates public-path evidence even if primitive tests remain unchanged.
 - INV05.4: I13/I14; safety persists when progress is resource-blocked, and accurate refusal/unknown outcomes are not relabeled feature successes.
 
 ## 5. Experiments and causal oracles
@@ -534,21 +559,21 @@ Each E-row is a required experiment family. SI-00 resolves it to exact test name
 | E05 | Warm index with AAAA; rewrite BBBB at same length/inode and restore mtime before capture. Decode via independent oracle and hydrate BBBB. | Stat-only digest reuse; SI-02 |
 | E06 | Select unreadable/unhashable file/subtree, vanished entry and failed read-link. Public capture/snapshot fails; fix cause and recover previous then new tree. Verify permission premise under actual identity. | Swallowed-IO/empty-link controls; SI-02/03 |
 | E07 | Begin with coherent tuple A/history [A,P]; fail B under PREPARED before OR after physically replacing current. Normal readers refuse; recovery restores the full A tuple/[A,P], and undo targets P. | Expose prepared history or use current-only recovery; SI-03 |
-| E08 | Fail before/after COMMIT_DECIDED installation/confirmation and at every cleanup/retirement boundary. Resume from the valid journal phase; no double undo, ghost version or old metadata resurrection. | Ignore decision phase / treat all errors as rollback; SI-03 |
+| E08 | Fail before/after COMMIT_DECIDED installation/confirmation and at every cleanup/retirement boundary. Resume from the valid journal phase; no double undo, ghost version or old metadata resurrection. Also restart interrupted create/PREPARED untag/COMMIT_DECIDED untag with no current; attempt GC before manual recovery and require zero required-blob deletion. | Ignore decision phase / treat all errors as rollback; SI-03 |
 | E09 | Pause publication after readiness but before ref commit. Collector signals its attempt OUTSIDE the guarded region, performs a nonblocking EX probe and reports WouldBlock. Release writer, then collector completes; hydrate exact bytes. | Shorten every effective protection of interval; redundant guard removal may be equivalent; SI-01/03/04 |
 | E10 | Force history allocation contention; B reports a failed nonblocking ref-lock probe rather than being required to enter A's region. After A releases, both complete with distinct history slots and parent order. | Remove serialization/allocation exclusion; SI-03 |
-| E11 | Current A with legacy log B or a matching tip with unverified interior; missing/bad names index; failed authoritative shard/root-family iteration; unreadable current/log/AC/image metadata. No destructive sweep on uncertain reachability; retain decodable legacy roots without certifying chronology. | Names-only/skip-error/current-not-marked controls; SI-03 |
+| E11 | Current A with legacy log B or a matching tip with unverified interior; missing/bad names index; failed authoritative shard/root-family iteration; unreadable current/log/AC/image metadata. No destructive sweep on uncertain reachability; retain decodable legacy roots without certifying chronology. Independently enumerate pending with refs/names empty; reject unreadable pending shards and all current-less phases. A refs-derived-only pending mutant must fail. | Names-only/skip-error/current-not-marked controls; SI-03 |
 | E12 | Fixtures with links, empty dirs, literal backslashes, case/Unicode aliases and invalid paths. lstat/readlink/raw-byte comparator checks preservation or explicit preflight rejection. | Lossy normalize/follow-link comparator controls; SI-02/03 |
 | E13 | Reader resolves A and pauses before final object read; untag commits; collector nonblocking probe is excluded until reader completes. Future new reader sees absence. | Drop reader lease; SI-03 |
 | E14 | Existing tag/import/build/history/undo/bisect and root-family fixtures run through changed helpers; repeated snapshot/no-op and recreate-after-untag policy are explicit. | Consumer-bypass/missing-root fixtures; SI-03 |
-| E15 | Give evidence validator a wrong checkout/binary, zero tests, skipped required test, absent artifact, dirty mutant or stale workflow. Each is rejected; valid receipt accepted. | Permissive evidence gate; SI-00/05 |
+| E15 | Give evidence validator a wrong checkout/binary, zero tests, skipped required test, absent artifact, dirty mutant or stale workflow. Each is rejected; valid receipt accepted. Include the observed zero-artifact/echo-only benchmark aggregate: missing required profile, duplicate/malformed/nonfinite metric or absent numeric comparison fails; baseline evidence validity and final budget acceptance remain distinct. | Permissive evidence gate; SI-00/05 |
 | E16 | Bounded seeded stress complements deterministic schedules; record concurrency, operations, seed and output trees. Compare incident diagnostic/control variants under C09. | Original faulty fixture/control where applicable; SI-04/05 |
 | E17 | Prepare image B while A is live; fail at every pointer/current/log/decision boundary. Guarded tree/config/export readers observe A, B or explicit pending error, never a hybrid. Include same-root metadata-only update, tag over B, historical tuple undo, untag/recreate and two same-name writers. | Publish named sidecars outside journal / root-only no-op / history without metadata; SI-03/04 |
-| E18 | PREPARED and COMMIT_DECIDED recovery exhaust bytes/quota/inodes; full GC remains blocked. Exercise killed pre-journal scratch, live helper exclusion, no reclaimable scratch, safe external headroom intervention, interrupted reaping/recovery and retry. | Delete pending to gain space / incomplete-root sweep / age-only scratch deletion; SI-01/03/04/05 |
+| E18 | PREPARED and COMMIT_DECIDED recovery exhaust bytes/quota/inodes; full GC remains blocked. Exercise killed pre-journal scratch, live helper exclusion, no reclaimable scratch, safe external headroom intervention, interrupted reaping/recovery and retry. Two distinct Stores share the index; keep B or a standalone cache writer active, prove A reaper waits on the CACHE domain or safely skips it, then cleans only after exclusion. Store-private scratch remains scoped; alias identities share a domain. | Delete pending to gain space / incomplete-root sweep / age-only scratch deletion; SI-01/03/04/05 |
 | E19 | Two legacy execution histories leave identical raw records (tip matches; one interior attempt was never committed). Both classify LegacyUnverified. Explicit adoption adds a present-day baseline without rewriting old history; undo/bisect only traverse the verified suffix. | Tip equality certifies all history / silently drops suspected entries; SI-03/04 |
 | E20 | Actual native Windows file/dir links and both dangling kinds, direct captured targets versus ambiguous targets; test capable/incapable profiles. Prove class/capability refusal separately and exact supported link reconstruction from manifest, not live target guessing. | Erase type information then guess / copy fallback / mark uncreated fixture passed; SI-02/03/04/05 |
 | E21 | Lose reply with matching PREPARED/COMMIT_DECIDED present, then with no pending, and after another writer updates state. Inspection separates recovered effect from AttributionUnknown; no automatic repeat/rollback is executed. | Root/record equality proves request ID / replay unknown undo; SI-03/04 |
-| E22 | Capture with store/index inside source, source inside store, paired source/destination overlap, managed destination, aliases/missing descendants, and harmless sibling-prefix control. Assert rejection before prohibited writes and allow isolated internal owned-workspace adapters. | String-prefix-only checks / implicit ignore or caller-forged internal capability; SI-00/02/03/04 |
+| E22 | Capture with store/index inside source, source inside store, paired source/destination overlap, managed destination, aliases/missing descendants, and harmless sibling-prefix control. Assert rejection before prohibited writes and allow isolated internal owned-workspace adapters. Include native alias/../payload versus lexical substitute with distinct bytes, dot-only and trailing-slash controls, and missing descendants. Assert opened-object identity, not string normalization; repeat shared-cache and Store alias domains. | String-prefix-only checks / implicit ignore or caller-forged internal capability; SI-00/02/03/04 |
 
 Every concurrent experiment has: fixture identity; checkpoint outside/inside the relevant critical section; proof of contender arrival; expected observations before release; explicit release; bounded join; owned cleanup. Never wait for a correct contender to enter a region the lock intentionally excludes. Nonblocking probes demonstrate exclusion; watchdog timeouts only report harness/system failure until a trace explains causality.
 
@@ -591,7 +616,7 @@ Each receipt must identify:
 
 ```yaml
 packet: SI-NN
-plan_version: '2.1'
+plan_version: '2.2'
 status: EVIDENCE_READY
 requested_head_sha: actual-head
 checkout_sha: actual-tested-commit
@@ -611,11 +636,15 @@ review: {identity: actual, independent: false, findings: []}
 resource_recovery: {} # actual failure profile, phase, headroom estimate, intervention, result
 legacy_and_attribution: {} # classified raw/adopted/verified segments and lost-reply outcome
 support_and_topology: [] # representation and capability separately; alias/path cases
-review_findings: [] # R01-R14 and V2-A01-A06 design versus implementation status
+review_findings: [] # R01-R14, V2-A01-A06 and integrated-review A01-A06; design versus execution status
+activation: {} # G-FOUNDATION inert receipt or G-ACTIVATION exact source identity; not production rollout
+resource_domains: [] # namespace identity, participants, actual lock and permitted cleanup boundary
 residual_limits: []
 ```
 
 Placeholders above are schema examples, never acceptable results. A small validator checks exact checkout/parents, build-before-run ordering and binary path/hash; nonzero expected named-test execution; required profile/capability rows; artifact presence/checksums; mutant restoration; and matching frozen budget. Cargo exit 0 with every causal test filtered out fails validation.
+
+**Observed aggregator correction (integrated-review A05):** SI-00 must replace the zero-artifact/echo-only path observed in CI run 35158370442 with an actual evidence-validation gate before that check is used. Bootstrap validates the exact required producer/profile artifact inventory, source identity, checksums, schema, finite metrics/units and missing/duplicate rows. It reports incomplete/failure when a required producer skipped or artifacts are absent. Valid baseline evidence is not a no-regression verdict. SI-05 additionally executes the registered numeric budget comparison and retains its inputs/results; an echo or a success step label never satisfies that contract. Missing final budgets block performance acceptance without preventing SI-00 from validating baseline fixtures. E15 deliberately supplies an empty artifact set, missing profile, malformed metric, stale identity and an omitted comparison. The unrelated benchmark-evidence workflow is assessed on its own artifacts; no inference is made from the defective CI aggregate. No workflow is modified by publication of this specification.
 
 A GitHub PR merge checkout is a separate commit; compare its tree/parents with the intended candidate rather than relabeling it the branch head. Later source, test, dependency, build-script or workflow changes invalidate affected evidence. Documentation-only additions may inherit execution evidence only after a reviewed path-diff plus code-input fingerprint proves those inputs unchanged; record both SHAs. Do not demand a self-referential commit hash in its own evidence file.
 
@@ -657,11 +686,24 @@ No row below is a claim of code remediation or native execution. The previously 
 
 The review's two non-finding observations are also incorporated: F6 uses a semantically complete SI-03 reference, and schema/caller review must justify the maintenance cost of the EXISTING protocol planes. The tuple/history extension is not disguised as unchanged format. No permanent protocol is added for resource headroom, request deduplication, link type or path disjointness.
 
+### Integrated review A01–A06 — targeted amendment, not new runtime evidence
+
+| Finding | Selected planning response | Owner / existing acceptance witness |
+|---|---|---|
+| A01 shared scratch versus Store locks | C02 resource-domain table; shared cache has its own short EX sections; C13 reaper uses that actual domain | SI-00/01/02/03; E18/E22, two Stores plus standalone cache writer |
+| A02 lexical parent across symlink | C12 native anchored component resolution or explicit rejection; same validated/used object | SI-02/03; E22 distinct-target and trailing-slash controls |
+| A03 intermediate protocol activation | Additive inert SI-01/02, G-FOUNDATION is not product enablement; final coordinated SI-03 slice establishes G-ACTIVATION | SI-00/01/03/04/05; public entrypoint lease/caller coverage, exact activation SHA |
+| A04 pending without current | C06 independent strict pending pre-scan before root collection/sweep | SI-03/04; E08/E11, GC immediately after restart before recovery |
+| A05 benchmark false assurance | C11 bootstrap artifact validation plus real SI-05 numeric comparison; preserve historical CI failure context | SI-00/05; E15 and budget receipts, not an echo |
+| A06 native issue hierarchy/dependencies/Project | Existing campaign and issues are retained; only verified native mutations count | Coordinator; current DISPATCH.md states completed/blocked facts, not runtime qualification |
+
+This amendment preserves six WPs, all five axioms per WP, existing criterion IDs and E01–E22. It does not execute bootstrap, accept ADRs, activate/migrate any store or close implementation findings. Earlier 278 abstract scenarios remain historical model evidence, not newly executed or sufficient proof of these refinements.
+
 ## 10. Exit decision
 
 Design review may accept this specification without asserting runtime correctness. Implementation cannot be dispatched merely because R01–R14 and V2-A01–V2-A06 have design responses. SI-00's ADR/compatibility, platform, seam and evidence prerequisites must be real; future execution must be explicitly authorized.
 
-Campaign qualification requires all six packages' Success Criteria, Quality Standards, Completeness Criteria, DoD and Invariants satisfied; all mandatory C08/E-rows, C12 topology and C13 resource-recovery profiles present; all six V2-A implementation dispositions supported; no unreviewed causal survivor or integrity failure; C09/C10 dispositions accepted; and current-head evidence validated under C11. Main merge/release remains the owner's separate decision.
+Campaign qualification requires all six packages' Success Criteria, Quality Standards, Completeness Criteria, DoD and Invariants satisfied; all mandatory C08/E-rows, C12 topology and C13 resource-recovery profiles present; all six V2-A and integrated-review A01–A05 implementation obligations supported, including G-ACTIVATION; native tracking A06 reported separately; no unreviewed causal survivor or integrity failure; C09/C10 dispositions accepted; and current-head evidence validated under C11. Main merge/release remains the owner's separate decision.
 
 ## Primary sources and code anchors
 
@@ -674,4 +716,6 @@ Design decisions above are proposed here; sources document the underlying constr
 - P3: [Linux fsync file versus directory barriers](https://man7.org/linux/man-pages/man2/fsync.2.html).
 - P4: [Rebello et al., Can Applications Recover from fsync Failures?, USENIX ATC 2020](https://www.usenix.org/conference/atc20/presentation/rebello).
 - P5: [Microsoft CreateSymbolicLinkW: directory/file flags and privilege are separate](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createsymboliclinkw). The Windows subset is a chosen support policy, not a Microsoft guarantee for this manifest format.
+- P6: [Linux path_resolution(7): native component/symlink/parent semantics](https://man7.org/linux/man-pages/man7/path_resolution.7.html).
+- P7: [Linux flock(2): lock identity and open-file-description semantics](https://man7.org/linux/man-pages/man2/flock.2.html). These references constrain native witnesses; the resource-domain protocol above remains a design requiring native qualification.
 - [Rust rename platform behavior](https://doc.rust-lang.org/std/fs/fn.rename.html), [SQLite atomic-commit explanation](https://www.sqlite.org/atomiccommit.html), [Git Racy Git](https://git-scm.com/docs/racy-git). These are constraints/precedents, not mandates to replace the store with another system.
