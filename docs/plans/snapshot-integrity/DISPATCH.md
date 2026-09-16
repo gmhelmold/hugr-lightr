@@ -1,36 +1,44 @@
-# Snapshot integrity — planning and dispatch status
+# Snapshot integrity — publication and execution state
 
 **Date:** 2026-09-16  
-**Current specification:** [SNAPSHOT-INTEGRITY-REMEDIATION.md](../SNAPSHOT-INTEGRITY-REMEDIATION.md), version 2.0.  
-**Current instruction:** revise the PLAN ONLY. No implementation/agent launch was requested in this revision.  
-**Code baseline:** `e4a53417f6fe7da8c4f44908af9525536443d0fa`.  
-**Previous planning head:** `19b28d7ad2ffff66e176b589f75c6592bd47ebe8`.
+**Specification:** [SNAPSHOT-INTEGRITY-REMEDIATION.md](../SNAPSHOT-INTEGRITY-REMEDIATION.md), version 2.1.  
+**Campaign:** [#152](https://github.com/gmhelmold/hugr-lightr/issues/152).  
+**Bootstrap:** [SI-00 #153](https://github.com/gmhelmold/hugr-lightr/issues/153).  
+**Integration branch / PR:** `fix/snapshot-integrity` / [#146](https://github.com/gmhelmold/hugr-lightr/pull/146).  
+**Previous published planning head:** `ad9bdcca42a7910f1a7a7513ce719cbb2159aecb`.  
+**Unchanged audited Rust baseline:** `e4a53417f6fe7da8c4f44908af9525536443d0fa`.
 
-## Actual state
+## Authorized operation
 
-The v1 plan was adversarially reviewed and replaced by v2. The earlier unconditional READY labels are superseded. Each of SI-00–SI-05 now has explicit Success Criteria, Quality Standards, Completeness Criteria, DoD and Invariants. R01–R14 have design responses and named evidence obligations; their Rust fixes are NOT implemented by this revision.
+The owner approved publishing v2.1 and organizing the campaign in GitHub. This is documentation and issue-tracking setup, NOT implementation authorization or execution of SI-00. No agents are launched, no source/workflows are edited, and no main merge, release, auto-merge, billing or permission change is authorized here.
 
-No new dispatch attempt, agent session, source edit, CI/workflow edit, main-branch update, merge, auto-merge, release or permission/billing change is part of this plan-only update. A documentation push may trigger the repository's existing CI automatically; that is not new implementation or qualification evidence.
+The prepared v2.1 technical contract is adopted by this documentation commit. Only publication/issue routing metadata was adjusted: SI-00 has its own issue and the campaign has its own tracker. The original six work packages, 30 axiom sections, 123 numbered criteria, 14 global invariants and 22 experiment families are preserved. The published specification's Git blob is `ba085ba46426f4f2eb3030f02eff403f86a1a2ce` (SHA-256 `ba833101fabbc56ea98d0d53c4ec495957f312741d9706cb708adf715dc6f741`). The commit containing this file provides its version identity; no self-referential commit hash is required.
 
-| Packet | Current readiness | Execution |
-|---|---|---|
-| SI-00 / PR #146 | Awaiting later execution authorization; contract/capability ratification not run | NOT STARTED |
-| SI-01 / #147 | Blocked on authorized SI-00 and accepted shared seam | NOT STARTED |
-| SI-02 / #148 | Pure portion needs SI-00; production integration also needs G-FOUNDATION | NOT STARTED |
-| SI-03 / #149 | Blocked on integrated foundation/capture and accepted pending-protocol ADR | NOT STARTED |
-| SI-04 / #150 | Read-only design can occur earlier; proof runs require SI-03 candidate | NOT STARTED |
-| SI-05 / #151 | Blocked on SI-04, frozen candidate and registered performance budget | NOT STARTED |
+## Tracking and limitations
 
-No native capability verification, budget value, ADR approval, independent review or executor availability is implied by this ledger. Historical code/CI failures remain open.
+The issue-mother #152 and SI-00 #153 were created successfully. Existing #147–#151 are retained and synchronized to exact v2.1 criteria; their live bodies and campaign receipt record completion of that synchronization. Every issue points to a pinned specification commit, not a floating branch as its only contract reference. PR #146 remains draft.
 
-## Historical dispatch attempt — preserved, not repeated
+**Native sub-issue relationships, native Blocked by edges, and a GitHub Project/board have NOT been created by this setup.** The connected GitHub actions expose document/issue writes but no hierarchy, dependency or Projects mutations; installed-provider discovery returned no usable additional executor for those operations. The current container also has no authenticated GitHub CLI route. This is a missing action surface, not a new 403 or a diagnosis of the user's permissions. Textual parent/dependency links and task lists below do not constitute native GitHub relationships.
 
-On 2026-09-16, before v2, assignment of issue #147 to `copilot-swe-agent[bot]` was attempted via `GitHub.add_issue_assignees`. The API returned HTTP 403 Forbidden. A read-back confirmed no assignee and no execution/session receipt. The other packets were not assigned speculatively. This does not identify the exact credential/account eligibility failure and is not a recommendation to change permissions again.
+## Work ledger
 
-The previous authoring environment exposed no native subagent spawn and no Rust/Cargo or coding-agent CLI on PATH. Future executors must inspect their own current capabilities rather than treating that historical observation as a permanent platform fact. There is no background ChatGPT monitor or automatic future dispatcher.
+| Packet | Issue | Delivery prerequisites | Execution |
+|---|---|---|---|
+| SI-00 | #153 | Later implementation authorization; accepted contract/capability bootstrap | NOT STARTED |
+| SI-01 | #147 | SI-00 accepted | NOT STARTED |
+| SI-02 | #148 | Pure portion: SI-00; production integration/DoD: SI-01 G-FOUNDATION | NOT STARTED |
+| SI-03 | #149 | SI-01 and SI-02 integrated; accepted composite protocol | NOT STARTED |
+| SI-04 | #150 | Integrated SI-03 candidate | NOT STARTED |
+| SI-05 | #151 | SI-04, frozen candidate and registered fixture-matched performance budgets | NOT STARTED |
 
-## Later authorized handoff
+Desired native hierarchy: #152 has children #153, #147, #148, #149, #150, #151. Desired delivery-blocking edges (dependent -> prerequisite): #147 -> #153; #148 -> #153 and #147; #149 -> #147 and #148; #150 -> #149; #151 -> #150. The #148 -> #147 edge governs production integration/closure, not the explicitly allowed pure portion after SI-00. Closing an issue is not sufficient proof of these gates: record reviewed evidence and the integrated commit.
 
-> Work only in gmhelmold/hugr-lightr after a new implementation instruction. Read the v2 specification, this ledger, repository instructions and issues #147–#151. Record the live branch SHA and reconcile changes. Execute SI-00's contract, native-capability, caller-map and test-support prerequisites first. Do not dispatch three implementation workers merely because v1 once called them READY. SI-01 owns the foundation; SI-02 may implement only its isolated capture/oracle portion against the accepted seam in parallel, and integrates after G-FOUNDATION. SI-03 owns references, recovery, GC and snapshot/history/reader callers together. SI-04 proves the integrated behavior; SI-05 qualifies the frozen candidate against registered budgets. Each package must meet all five axioms. Use separate worktrees and draft PRs targeting fix/snapshot-integrity. Report real session IDs/evidence or precise blockers; do not simulate delegation. No main merge, auto-merge, releases, sibling mutations or credential/billing changes.
+Desired Project stages are Backlog, Ready, In progress, Review, Integrated and Done, with explicit blockers. Do not create a duplicate board or overwrite an existing Project's fields just to match this suggestion. Native setup remains a separate incomplete operation until read-back confirms it. No milestone or schedule is invented.
 
-Issue bodies are routing summaries. The v2 specification is authoritative; historical issue comments and receipts remain evidence of earlier states, not permission to run obsolete packets.
+## Handoff and truthfulness
+
+A WP issue is an executable extract, not a second independently edited specification. Change technical contracts in the plan first, then synchronize affected issue criteria and record the plan commit. One WP may have multiple reviewable PRs. Future worker PRs target `fix/snapshot-integrity`; use `Part of #...` rather than relying on closing keywords for a non-default target. Close a WP only after its own DoD, review, evidence and integration are recorded; global qualification remains SI-05/#152 and main merge remains the owner's separate action.
+
+Before later execution, read the live plan, campaign, issues and actual integration SHA. Reconcile drift; verify prerequisites, ownership and native capability. No issue assignment or documentation publication implies an agent session. Historical CI/ENOENT and code-audit findings remain unresolved by this setup. Existing CI may trigger on a documentation push; that is not new implementation evidence.
+
+The earlier pre-v2 Copilot assignment returned 403 and produced no executor receipt. It was not retried. No recurring/background monitor or automatic future dispatch is configured.
