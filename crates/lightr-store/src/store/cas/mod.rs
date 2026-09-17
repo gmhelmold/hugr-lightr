@@ -13,7 +13,8 @@ use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+mod owned_temp;
+use owned_temp::OwnedTemp;
 
 // ── path helpers ──────────────────────────────────────────────────────────────
 
@@ -27,16 +28,6 @@ pub(crate) fn object_path(root: &Path, d: &Digest) -> PathBuf {
     let hex = d.to_hex();
     let (pre, rest) = shard_parts(&hex);
     root.join("objects").join(pre).join(rest)
-}
-
-/// A cheap nonce for temp file names: PID + digest-hex-prefix + nanos.
-pub(super) fn temp_suffix(hint: &str) -> String {
-    let pid = std::process::id();
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.subsec_nanos())
-        .unwrap_or(0);
-    format!("{pid}-{hint}-{nanos}")
 }
 
 /// fsync the parent directory so the rename (directory entry change) is
@@ -67,7 +58,8 @@ pub(super) fn fsync_dir(dir: &Path) -> std::io::Result<()> {
 /// crash-durable.
 pub(super) fn atomic_write(parent: &Path, dest: &Path, data: &[u8]) -> Result<()> {
     fs::create_dir_all(parent)?;
-    let tmp = parent.join(format!(".tmp-{}", temp_suffix("w")));
+    let staging = OwnedTemp::new(parent, "w")?;
+    let tmp = staging.payload();
     {
         let mut f = File::create(&tmp)?;
         f.write_all(data)?;
@@ -121,8 +113,8 @@ pub fn put_bytes(root: &Path, bytes: &[u8]) -> Result<Digest> {
     let shard = root.join("objects").join(pre);
     fs::create_dir_all(&shard)?;
 
-    let tmp_name = format!(".tmp-{}", temp_suffix(&hex[..8]));
-    let tmp = shard.join(tmp_name);
+    let staging = OwnedTemp::new(&shard, &hex[..8])?;
+    let tmp = staging.payload();
     {
         let mut f = File::create(&tmp)?;
         f.write_all(bytes)?;
@@ -160,8 +152,8 @@ pub fn ingest_file(root: &Path, path: &Path, rung: CowRung) -> Result<Digest> {
     let shard = root.join("objects").join(pre);
     fs::create_dir_all(&shard)?;
 
-    let tmp_name = format!(".tmp-{}", temp_suffix(&hex[..8]));
-    let tmp = shard.join(tmp_name);
+    let staging = OwnedTemp::new(&shard, &hex[..8])?;
+    let tmp = staging.payload();
 
     // Try CoW into a temp, then rename+chmod.
     // On failure fall through to fs::copy.

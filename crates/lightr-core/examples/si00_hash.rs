@@ -23,7 +23,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut bytes = Vec::with_capacity(line.len() / 2);
         for pair in line.chunks_exact(2) {
             let text = std::str::from_utf8(pair)?;
-            if !text.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+            if !text
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            {
                 return Err("noncanonical hex input".into());
             }
             bytes.push(u8::from_str_radix(text, 16)?);

@@ -37,7 +37,10 @@ fn staged_bytes_must_match_the_pre_copy_digest() {
     }
     assert!(!dest.exists());
     assert!(!tmp.exists(), "rejected staging file must be cleaned up");
-    assert!(!store.exists(&actual), "a mismatch must not silently re-key");
+    assert!(
+        !store.exists(&actual),
+        "a mismatch must not silently re-key"
+    );
 }
 
 #[test]
@@ -63,13 +66,19 @@ fn verified_staging_bytes_are_published_and_read_back() {
     let expected = Digest::of_bytes(bytes);
     let (tmp, dest, shard) = stage(&store, expected, bytes);
 
-    assert_eq!(finish_ingest(&tmp, &dest, &shard, expected).unwrap(), expected);
+    assert_eq!(
+        finish_ingest(&tmp, &dest, &shard, expected).unwrap(),
+        expected
+    );
     assert!(!tmp.exists());
     assert_eq!(store.get_bytes(&expected).unwrap(), bytes);
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        assert_eq!(fs::metadata(dest).unwrap().permissions().mode() & 0o777, 0o444);
+        assert_eq!(
+            fs::metadata(dest).unwrap().permissions().mode() & 0o777,
+            0o444
+        );
     }
 }
 
