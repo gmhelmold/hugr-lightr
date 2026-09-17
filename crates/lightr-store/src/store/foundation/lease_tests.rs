@@ -244,8 +244,12 @@ fn lease_digest_set_is_sorted_and_failed_partial_acquisition_is_released() {
     let low_guard = third.digests(&[low], Wait::Try).unwrap();
     drop(low_guard);
     drop(high_guard);
-    let all = second.digests(&[high, low, high], Wait::Try).unwrap();
+    // Observe sorting independently of nonadjacent duplicate-key exclusion.
+    let all = second.digests(&[high, low], Wait::Try).unwrap();
     assert_eq!(all.keys(), &[low, high]);
+    drop(all);
+    let deduplicated = second.digests(&[high, low, low, high], Wait::Try).unwrap();
+    assert_eq!(deduplicated.keys(), &[low, high]);
 }
 
 #[test]
