@@ -13,15 +13,15 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'si01-evidence' / 'negative-controls'
 OUT.mkdir(parents=True, exist_ok=False)
-PREFIX = 'store::cas::foundation::'
+PREFIX = 'store::foundation::metadata::'
 CASES = [
-    ('checksum', 'readiness.rs', 'checksum(&bytes[..end]).0 != bytes[end..]', 'false',
+    ('checksum', 'crates/lightr-store/src/store/foundation/ready.rs', 'Digest::of_bytes(&input).0.as_slice() != &tail[length..]', 'false',
      PREFIX + 'readiness_tests::every_wire_byte_participates_in_validation'),
-    ('ignored-flush', 'publish.rs', 'ops.sync_file(&file)', 'ops.sync_file(&file).or(Ok(()))',
+    ('ignored-flush', 'crates/lightr-store/src/store/foundation/metadata/publish.rs', 'ops.sync_file(&file)', 'ops.sync_file(&file).or(Ok(()))',
      PREFIX + 'publish_tests::checked_metadata_flush_failure_preserves_prior_destination'),
-    ('wrong-visibility', 'publish.rs', 'Visible::InstalledUnconfirmed', 'Visible::Unchanged',
+    ('wrong-visibility', 'crates/lightr-store/src/store/foundation/metadata/publish.rs', 'Visible::InstalledUnconfirmed', 'Visible::Unchanged',
      PREFIX + 'publish_tests::directory_failure_keeps_installed_bytes_and_reports_uncertainty'),
-    ('unchecked-staging', 'publish.rs', 'bytes[offset..offset + count] != buffer[..count]', 'false',
+    ('unchecked-staging', 'crates/lightr-store/src/store/foundation/metadata/publish.rs', 'bytes[offset..offset + count] != buffer[..count]', 'false',
      PREFIX + 'publish_tests::checked_metadata_verifies_actual_staged_bytes'),
 ]
 
@@ -53,7 +53,7 @@ try:
                     target.chmod((entry.external_attr >> 16) & 0o777 or 0o644)
         cargo = ['cargo', '+1.96.0', 'test', '--locked', '-p', 'lightr-store', '--lib']
         for name, filename, old, new, witness in CASES:
-            path = root / 'crates/lightr-store/src/store/cas/foundation' / filename
+            path = root / filename
             original = path.read_text()
             assert original.count(old) == 1, f'{name}: mutation anchor drift'
             pristine = run(cargo + [witness, '--', '--exact', '--test-threads=1'], root, OUT / (name + '-pristine.log'))

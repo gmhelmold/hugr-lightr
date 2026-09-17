@@ -2,7 +2,11 @@
 //! reference transaction's commit outcome: the SI-03 caller owns that mapping.
 
 use lightr_core::LightrError;
-use std::{error::Error, fmt, io, path::{Path, PathBuf}};
+use std::{
+    error::Error,
+    fmt, io,
+    path::{Path, PathBuf},
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InstallStage {
@@ -37,14 +41,32 @@ pub struct InstallFailure {
 }
 
 impl InstallFailure {
-    pub(super) fn new(stage: InstallStage, visibility: InstallVisibility, path: &Path, cause: io::Error) -> Self {
-        Self { stage, visibility, path: path.to_owned(), cause }
+    pub(super) fn new(
+        stage: InstallStage,
+        visibility: InstallVisibility,
+        path: &Path,
+        cause: io::Error,
+    ) -> Self {
+        Self {
+            stage,
+            visibility,
+            path: path.to_owned(),
+            cause,
+        }
     }
 
-    pub fn stage(&self) -> InstallStage { self.stage }
-    pub fn visibility(&self) -> InstallVisibility { self.visibility }
-    pub fn path(&self) -> &Path { &self.path }
-    pub fn io_error(&self) -> &io::Error { &self.cause }
+    pub fn stage(&self) -> InstallStage {
+        self.stage
+    }
+    pub fn visibility(&self) -> InstallVisibility {
+        self.visibility
+    }
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+    pub fn io_error(&self) -> &io::Error {
+        &self.cause
+    }
 
     /// Preserve the frozen outer error variant without flattening the OS cause.
     /// The outer io::Error's raw_os_error may be None; downcast its payload to
@@ -56,10 +78,19 @@ impl InstallFailure {
 
 impl fmt::Display for InstallFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "metadata install {:?} ({:?}) at {}: {}", self.stage, self.visibility, self.path.display(), self.cause)
+        write!(
+            f,
+            "metadata install {:?} ({:?}) at {}: {}",
+            self.stage,
+            self.visibility,
+            self.path.display(),
+            self.cause
+        )
     }
 }
 
 impl Error for InstallFailure {
-    fn source(&self) -> Option<&(dyn Error + 'static)> { Some(&self.cause) }
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(&self.cause)
+    }
 }

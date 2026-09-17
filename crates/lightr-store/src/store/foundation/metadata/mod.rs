@@ -9,9 +9,10 @@ mod failure;
 mod publish;
 mod readiness;
 
+pub use crate::store::foundation::{Assurance, Readiness};
 pub use failure::{InstallFailure, InstallStage, InstallVisibility};
 pub use publish::{install_metadata, MetadataInstall, MAX_METADATA_BYTES};
-pub use readiness::{Assurance, ReadinessFrame, ReadinessRecord, MAX_READY_BODY};
+pub use readiness::{ReadinessFrame, MAX_READY_BODY};
 
 #[cfg(test)]
 mod failure_tests;

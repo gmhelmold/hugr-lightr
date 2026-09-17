@@ -11,12 +11,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static NEXT: AtomicU64 = AtomicU64::new(0);
 const ATTEMPTS: usize = 32;
 
-pub(super) struct OwnedTemp {
+pub(crate) struct OwnedTemp {
     dir: PathBuf,
 }
 
 impl OwnedTemp {
-    pub(super) fn new(parent: &Path, hint: &str) -> io::Result<Self> {
+    pub(crate) fn new(parent: &Path, hint: &str) -> io::Result<Self> {
         Self::reserve(parent, || {
             format!(
                 ".tmp-{}-{hint}-{}",
@@ -50,11 +50,11 @@ impl OwnedTemp {
 
     /// Complete cleanup explicitly after a new checked writer installed payload.
     /// Legacy callers keep their existing best-effort Drop behavior.
-    pub(super) fn finish(self) -> io::Result<()> {
+    pub(crate) fn finish(self) -> io::Result<()> {
         fs::remove_dir(&self.dir)
     }
 
-    pub(super) fn payload(&self) -> PathBuf {
+    pub(crate) fn payload(&self) -> PathBuf {
         self.dir.join("payload")
     }
 }
