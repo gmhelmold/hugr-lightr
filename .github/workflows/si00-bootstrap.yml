@@ -59,14 +59,20 @@ jobs:
       CARGO_TERM_COLOR: never
       RUST_BACKTRACE: '1'
     steps:
+      # Hosted runners are disposable. Set this before checkout, not after
+      # Windows has materialized CRLF bytes under another configuration.
+      - name: Preserve repository bytes in the initial checkout
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
           fetch-depth: 2
-      - name: Keep identical source bytes across native profiles
+      - name: Require pristine tracked inputs before any build
         run: |
-          git config core.autocrlf false
-          git checkout-index --force --all
+          git status --porcelain --untracked-files=no
+          test -z "$(git status --porcelain --untracked-files=no)"
+          git diff --exit-code
+          git diff --cached --exit-code
       - name: Install repository-pinned toolchain
         run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt,clippy
       - name: Execute native tests and retain independently checkable evidence
