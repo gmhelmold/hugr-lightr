@@ -36,6 +36,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     expected = {'checkout_sha': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
                 'input_fingerprint': fingerprint(ROOT),
+                'source_tree': subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], cwd=ROOT, text=True).strip(),
                 'checkout_parents': subprocess.check_output(['git', 'show', '-s', '--format=%P', 'HEAD'], cwd=ROOT, text=True).split()}
     policy = load_json(ROOT/'docs/plans/snapshot-integrity/bootstrap/expected-tests.json')
     result = aggregate(args.artifacts, expected, policy)

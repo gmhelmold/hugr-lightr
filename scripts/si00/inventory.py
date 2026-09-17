@@ -31,9 +31,14 @@ def tracked(root: Path) -> list[str]:
 
 
 def input_manifest(root: Path) -> list[dict]:
-    paths = [p for p in tracked(root) if p and (
-        p.endswith(('.rs', '.toml', '.lock')) or p.startswith(('.github/workflows/', 'scripts/si00/'))
-        or p == 'docs/plans/snapshot-integrity/bootstrap/expected-tests.json')]
+    # Include embedded JSON/Swift/C/shell/fixtures too, not only Rust extensions.
+    # Only data-only SI00 review/receipt files are excluded from execution inputs.
+    def receipt_only(path: str) -> bool:
+        return (path.startswith('docs/plans/snapshot-integrity/evidence/') or
+                path == 'docs/plans/snapshot-integrity/DISPATCH.md' or
+                path == 'docs/adr/0020-snapshot-integrity-activation.md' or
+                (path.startswith('docs/plans/snapshot-integrity/bootstrap/') and path.endswith('.md')))
+    paths = [p for p in tracked(root) if p and not receipt_only(p)]
     return [{'path': p, 'sha256': hashlib.sha256((root/p).read_bytes()).hexdigest()} for p in sorted(paths)]
 
 

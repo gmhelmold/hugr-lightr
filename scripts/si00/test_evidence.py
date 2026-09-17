@@ -15,7 +15,7 @@ class NativeEvidenceTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.policy = {'plan_commit': 'c'*40, 'profiles': {'native': {'host': 'test-host', 'machines': ['test-machine']}},
                        'required_tests': {'store': ['test_one'], 'index': ['test_two']}, 'allowed_ignored': {}}
-        self.expected = {'checkout_sha': 'a'*40, 'input_fingerprint': 'b'*64, 'profile': 'native', 'checkout_parents': ['d'*40]}
+        self.expected = {'checkout_sha': 'a'*40, 'input_fingerprint': 'b'*64, 'profile': 'native', 'checkout_parents': ['d'*40], 'source_tree': 'e'*40}
         self.record = dict(self.expected, schema=2, stage='SI00_NATIVE_BASELINE', status='EXECUTED',
                            production_protocol_enabled=False, rust_host='test-host', machine='test-machine',
                            toolchain='1.96.0', tracked_dirty_before=False, tracked_dirty_after=False,
@@ -45,7 +45,7 @@ class NativeEvidenceTests(unittest.TestCase):
         self.assertFalse(self.validate()['runtime_qualified'])
 
     def test_wrong_identity_axes(self):
-        for key, value in [('checkout_sha', 'f'*40), ('input_fingerprint', 'f'*64), ('profile', 'other'),
+        for key, value in [('checkout_sha', 'f'*40), ('source_tree', 'f'*40), ('input_fingerprint', 'f'*64), ('profile', 'other'),
                            ('rust_host', 'foreign'), ('machine', 'foreign'), ('toolchain', 'stable'), ('plan_commit', 'f'*40), ('checkout_parents', ['f'*40])]:
             with self.subTest(key=key):
                 old = self.record[key]; self.record[key] = value
@@ -105,7 +105,7 @@ class NativeEvidenceTests(unittest.TestCase):
 class BenchmarkEvidenceTests(unittest.TestCase):
     def setUp(self):
         self.budget = {'status':'REGISTERED', 'approver':'test-only', 'registered_at':1, 'candidate_sha':'a'*40,
-                       'limits':[{'profile':'test', 'fixture':'F0', 'metric':'wall', 'unit':'ms', 'maximum':10, 'min_samples':2}]}
+                       'limits':[{'profile':'test', 'fixture':'F0', 'metric':'wall','unit':'ms','maximum':10,'min_samples':2}]}
         self.result = {'checkout_sha':'a'*40, 'measured_at':2, 'measurements':[
             {'profile':'test','fixture':'F0','metric':'wall','unit':'ms','samples':[1,2]}]}
 
@@ -138,6 +138,20 @@ class BenchmarkEvidenceTests(unittest.TestCase):
                 if change=='unit': self.result['measurements'][0]['unit']='seconds'
                 if change=='duplicate': self.result['measurements']*=2
                 with self.assertRaises(InvalidEvidence): self.verify('f'*64 if change=='hash' else None)
+
+
+class AggregateEvidenceTests(unittest.TestCase):
+    def test_empty_policy_cannot_pass(self):
+        from aggregate import aggregate
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(InvalidEvidence, 'empty required'):
+                aggregate(Path(tmp), {}, {'profiles': {}})
+
+    def test_missing_profile_artifacts_cannot_pass(self):
+        from aggregate import aggregate
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(InvalidEvidence, 'missing or duplicate'):
+                aggregate(Path(tmp), {}, {'profiles': {'native': {}}})
 
 
 if __name__ == '__main__':

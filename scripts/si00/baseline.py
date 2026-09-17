@@ -47,16 +47,22 @@ def main() -> int:
         env=dict(os.environ, LIGHTR_HOME=str(home), RAYON_NUM_THREADS='4'); started=time.perf_counter_ns()
         timefile=out/(label+'.resources.json')
         launch=['/usr/bin/time','-f','{"max_rss_kib":%M,"fs_inputs":%I,"fs_outputs":%O}', '-o',str(timefile),str(binary),'--json',*argv]
-        p=subprocess.run(launch,cwd=ROOT,env=env,capture_output=True,timeout=120)
+        p=subprocess.Popen(launch,cwd=ROOT,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True)
+        try:
+            stdout,stderr=p.communicate(timeout=120); code=p.returncode
+        except subprocess.TimeoutExpired:
+            import signal
+            os.killpg(p.pid, signal.SIGKILL)
+            stdout,stderr=p.communicate(timeout=30); code=124
         elapsed=(time.perf_counter_ns()-started)/1_000_000
-        (out/(label+'.stdout')).write_bytes(p.stdout); (out/(label+'.stderr')).write_bytes(p.stderr)
-        row={'argv':[str(binary),'--json',*argv], 'exit':p.returncode,'wall_ms':elapsed,'log':label}
-        if p.returncode == 0:
+        (out/(label+'.stdout')).write_bytes(stdout); (out/(label+'.stderr')).write_bytes(stderr)
+        row={'argv':[str(binary),'--json',*argv], 'exit':code,'wall_ms':elapsed,'log':label}
+        if code == 0:
             row['resources']=json.loads(timefile.read_text())
-            try: row['report']=json.loads(p.stdout)
+            try: row['report']=json.loads(stdout)
             except ValueError: row['invalid_json']=True
         commands.append(row)
-        require(p.returncode == 0 and not row.get('invalid_json'), 'CLI baseline failed: '+label)
+        require(code == 0 and not row.get('invalid_json'), 'CLI baseline failed: '+label)
         return row
     failed=False
     try:

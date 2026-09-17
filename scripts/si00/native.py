@@ -37,10 +37,10 @@ def main() -> int:
     (out / 'binaries').mkdir()
     policy = load_json(POLICY)
     require(args.profile in policy['profiles'], 'unknown native profile')
-    expected = {'checkout_sha': git('rev-parse', 'HEAD'), 'input_fingerprint': fingerprint(ROOT), 'profile': args.profile, 'checkout_parents': git('show', '-s', '--format=%P', 'HEAD').split()}
+    expected = {'checkout_sha': git('rev-parse', 'HEAD'), 'input_fingerprint': fingerprint(ROOT), 'profile': args.profile, 'checkout_parents': git('show', '-s', '--format=%P', 'HEAD').split(), 'source_tree': git('rev-parse', 'HEAD^{tree}')}
     receipt = dict(expected, schema=2, stage='SI00_NATIVE_BASELINE', status='STARTED',
                    plan_commit=policy['plan_commit'],
-                   source_tree=git('rev-parse', 'HEAD^{tree}'), production_protocol_enabled=False,
+                   production_protocol_enabled=False,
                    machine=platform.machine(), os=platform.platform(), toolchain='1.96.0',
                    run_id=os.environ.get('GITHUB_RUN_ID'), event=os.environ.get('GITHUB_EVENT_NAME'),
                    requested_sha=os.environ.get('GITHUB_SHA'), commands=[], binaries=[], artifacts=[])

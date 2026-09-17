@@ -76,7 +76,7 @@ def validate_native(receipt: dict, root: Path, expected: dict, policy: dict) -> 
             'unknown evidence schema/stage (not a campaign qualifier)')
     require(receipt.get('status') == 'EXECUTED', 'execution not successful')
     require(receipt.get('production_protocol_enabled') is False, 'bootstrap activated protocol')
-    for key in ('checkout_sha', 'input_fingerprint', 'profile'):
+    for key in ('checkout_sha', 'source_tree', 'input_fingerprint', 'profile'):
         require(receipt.get(key) == expected.get(key), f'wrong {key}')
     require(re.fullmatch(r'[0-9a-f]{40}', receipt['checkout_sha']) is not None, 'bad SHA')
     profile = policy['profiles'][receipt['profile']]
