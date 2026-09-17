@@ -14,6 +14,8 @@ use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 pub(crate) mod owned_temp;
+/// Additive private-file preparation; no existing Store route is changed.
+pub mod preparation;
 use owned_temp::OwnedTemp;
 
 // ── path helpers ──────────────────────────────────────────────────────────────
