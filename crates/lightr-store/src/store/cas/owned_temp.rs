@@ -48,6 +48,12 @@ impl OwnedTemp {
         ))
     }
 
+    /// Complete cleanup explicitly after a new checked writer installed payload.
+    /// Legacy callers keep their existing best-effort Drop behavior.
+    pub(super) fn finish(self) -> io::Result<()> {
+        fs::remove_dir(&self.dir)
+    }
+
     pub(super) fn payload(&self) -> PathBuf {
         self.dir.join("payload")
     }
