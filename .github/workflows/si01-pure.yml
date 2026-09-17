@@ -2,7 +2,7 @@ name: SI01 foundation controls
 on:
   pull_request:
     branches: [fix/snapshot-integrity]
-    paths: ['crates/lightr-store/src/store/foundation/**', 'crates/lightr-core/src/core/digest.rs', 'scripts/si01/**', '.github/workflows/si01-pure.yml']
+    paths: ['crates/lightr-store/src/store/foundation/**', 'crates/lightr-store/src/store/cas/**', 'crates/lightr-core/src/core/digest.rs', 'scripts/si01/**', '.github/workflows/si01-pure.yml']
 permissions:
   contents: read
 concurrency:
@@ -46,5 +46,27 @@ jobs:
         with:
           name: si01-leases-${{ github.sha }}
           path: si01-lease-evidence/
+          if-no-files-found: error
+          retention-days: 30
+
+  publication-controls:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Pinned compiler
+        run: rustup toolchain install 1.96.0 --profile minimal
+      - name: Verify publication failures and proof lifetime in disposable source
+        run: python3 scripts/si01/publication_controls.py --out si01-publication-evidence
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: si01-publication-${{ github.sha }}
+          path: si01-publication-evidence/
           if-no-files-found: error
           retention-days: 30

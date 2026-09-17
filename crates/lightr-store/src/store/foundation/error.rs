@@ -52,6 +52,10 @@ impl PublicationFailure {
         }
     }
 
+    pub(crate) fn into_cause(self) -> io::Error {
+        self.cause
+    }
+
     pub fn original_io(&self) -> &io::Error {
         &self.cause
     }
@@ -60,9 +64,20 @@ impl PublicationFailure {
         LightrError::Io(io::Error::new(self.cause.kind(), self))
     }
 
+    pub fn into_shared_legacy(self: std::sync::Arc<Self>) -> LightrError {
+        LightrError::Io(io::Error::new(self.cause.kind(), self))
+    }
+
     pub fn from_legacy(error: &LightrError) -> Option<&Self> {
         match error {
-            LightrError::Io(io) => io.get_ref()?.downcast_ref(),
+            LightrError::Io(io) => {
+                let payload = io.get_ref()?;
+                payload.downcast_ref::<Self>().or_else(|| {
+                    payload
+                        .downcast_ref::<std::sync::Arc<Self>>()
+                        .map(AsRef::as_ref)
+                })
+            }
             _ => None,
         }
     }

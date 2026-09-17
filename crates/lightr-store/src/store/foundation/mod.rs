@@ -1,8 +1,8 @@
 //! Additive SI-01 foundations. Existing Store routing remains unchanged.
 //!
 //! Readiness is persistent metadata, not proof that an object is safe to publish.
-//! Leases protect staged work, not final payload readiness. Receipt publication
-//! and a lease-bound PreparedObject are still separate implementation work.
+//! Explicit publication returns a lease-bound proof after checked payload and
+//! receipt barriers. Existing Store/CLI routes do not use these additive APIs.
 
 mod error;
 mod ready;
@@ -15,6 +15,7 @@ mod ready_tests;
 
 mod lease;
 mod lease_io;
+pub(crate) use lease_io::verify_file_path;
 mod leased_stage;
 pub use lease::{
     CacheLease, CacheLocks, Cancellation, DigestLocks, ExclusiveStoreLease, LeaseWorker,
@@ -26,3 +27,18 @@ pub use leased_stage::LeasedStagedFile;
 mod lease_process_tests;
 #[cfg(test)]
 mod lease_tests;
+
+mod preparation_cache;
+mod publication;
+mod publication_io;
+pub use publication::{PreparationResult, PreparationWork, PreparedObject};
+
+#[cfg(test)]
+mod publication_concurrency_tests;
+#[cfg(test)]
+mod publication_failure_tests;
+#[cfg(test)]
+mod publication_tests;
+
+#[cfg(test)]
+mod publication_process_tests;

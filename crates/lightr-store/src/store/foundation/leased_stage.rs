@@ -34,9 +34,9 @@ use std::io::{self, Read};
 /// }
 /// ```
 pub struct LeasedStagedFile<'a> {
-    stage: StagedFile,
-    _parent: Directory,
-    _lease: &'a StoreLease,
+    pub(super) stage: StagedFile,
+    pub(super) _parent: Directory,
+    pub(super) _lease: &'a StoreLease,
 }
 impl<'a> LeasedStagedFile<'a> {
     /// The managed staging family is selected internally; no arbitrary parent

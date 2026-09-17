@@ -81,6 +81,7 @@ impl StoreLocks {
         Ok(StoreLease {
             _guard: guard,
             domain: self.clone(),
+            preparations: super::preparation_cache::PreparationCache::default(),
         })
     }
     pub fn exclusive(&self, wait: Wait<'_>) -> io::Result<ExclusiveStoreLease> {
@@ -98,10 +99,14 @@ impl StoreLocks {
 pub struct StoreLease {
     _guard: NativeLock,
     pub(super) domain: StoreLocks,
+    pub(super) preparations: super::preparation_cache::PreparationCache,
 }
 impl StoreLease {
     pub fn belongs_to(&self, domain: &StoreLocks) -> bool {
         self.domain.same_store(domain)
+    }
+    pub(super) fn directory(&self) -> &Directory {
+        &self.domain.0
     }
     pub(super) fn staging(&self) -> io::Result<Directory> {
         self.domain.0.child(".si01-staging")

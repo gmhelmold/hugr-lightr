@@ -1,4 +1,5 @@
-//! Explicit private-file preparation; no CAS installation or receipt publication.
+//! Explicit private-file preparation with a crate-private installation seam.
+//! Only the foundation publisher uses that seam; existing Store routing is unchanged.
 //!
 //! The caller supplies an already resolved, managed staging parent and retains
 //! its operation lease. This helper does not create that parent, resolve public
@@ -90,6 +91,47 @@ impl StagedFile {
             digest,
             length,
         })
+    }
+
+    pub(crate) fn staged_path(&self) -> PathBuf {
+        self._owned.payload()
+    }
+
+    /// Internal install seam only; public readers cannot alter staged bytes.
+    pub(crate) fn verify_again(&mut self) -> io::Result<()> {
+        crate::store::foundation::verify_file_path(&self.file, &self._owned.payload())?;
+        self.file.rewind()?;
+        let actual = Digest::of_reader(&mut self.file)?;
+        if actual != (self.digest, self.length) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "staged bytes changed",
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn sync_for_install(
+        &self,
+        payload: bool,
+        sync: impl FnOnce(&File) -> io::Result<()>,
+    ) -> io::Result<()> {
+        #[cfg(unix)]
+        if payload {
+            use std::os::unix::fs::PermissionsExt;
+            self.file
+                .set_permissions(std::fs::Permissions::from_mode(0o444))?;
+        }
+        // Windows uses the retained writable handle and the private file's own
+        // attributes; source read-only attributes are never inherited or edited.
+        #[cfg(windows)]
+        let _ = payload;
+        sync(&self.file)
+    }
+
+    pub(crate) fn install(&mut self, destination: &Path) -> io::Result<()> {
+        crate::store::foundation::verify_file_path(&self.file, &self._owned.payload())?;
+        std::fs::rename(self._owned.payload(), destination)
     }
 
     pub fn digest(&self) -> Digest {

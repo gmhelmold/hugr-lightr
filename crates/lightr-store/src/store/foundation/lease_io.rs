@@ -11,14 +11,14 @@ use std::time::Duration;
 pub(super) struct Identity(u64, u64);
 
 #[cfg(unix)]
-fn identity(file: &File) -> io::Result<Identity> {
+pub(super) fn identity(file: &File) -> io::Result<Identity> {
     use std::os::unix::fs::MetadataExt;
     let m = file.metadata()?;
     Ok(Identity(m.dev(), m.ino()))
 }
 
 #[cfg(windows)]
-fn identity(file: &File) -> io::Result<Identity> {
+pub(super) fn identity(file: &File) -> io::Result<Identity> {
     use std::os::windows::io::AsRawHandle;
     use windows_sys::Win32::Storage::FileSystem::{
         GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
@@ -121,6 +121,34 @@ impl Directory {
         Ok(())
     }
 
+    /// Checked namespace barrier on the declared native profile. Windows has
+    /// no portable directory-entry durability promise in ADR-0020.
+    pub(super) fn sync_using(&self, sync: &dyn Fn(&File) -> io::Result<()>) -> io::Result<()> {
+        self.verify()?;
+        #[cfg(unix)]
+        sync(&self._handle)?;
+        #[cfg(windows)]
+        let _ = sync;
+        Ok(())
+    }
+
+    pub(super) fn same_filesystem(&self, other: &Self) -> bool {
+        self.id.0 == other.id.0
+    }
+
+    pub(super) fn open_file(&self, name: &str) -> io::Result<Option<File>> {
+        self.verify()?;
+        let path = self.path.join(name);
+        let file = match options(false).open(&path) {
+            Ok(file) => file,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(e),
+        };
+        check_type(&file, false)?;
+        self.verify()?;
+        Ok(Some(file))
+    }
+
     pub(super) fn child(&self, name: &str) -> io::Result<Self> {
         self.verify()?;
         let path = self.path.join(name);
@@ -214,4 +242,15 @@ impl NativeLock {
             }
         }
     }
+}
+
+/// Verify the owned staging name still denotes the retained regular-file handle.
+/// Managed ancestor stability is a precondition; this is not hostile-path confinement.
+pub(crate) fn verify_file_path(expected: &File, path: &Path) -> io::Result<()> {
+    let observed = options(false).open(path)?;
+    check_type(&observed, false)?;
+    if identity(expected)? != identity(&observed)? {
+        return Err(invalid("staged file identity changed"));
+    }
+    Ok(())
 }
