@@ -176,11 +176,28 @@ impl Directory {
     }
 }
 
-/// Closing this sole private handle releases the lock even during unwinding.
+/// Owns one acquired lock; aliases of the OS descriptor do not own this guard.
 /// Stable lock files are never unlinked, truncated, or treated as scratch.
 #[derive(Debug)]
 pub(super) struct NativeLock {
     _file: File,
+    #[cfg(unix)]
+    owner_process: u32,
+}
+
+#[cfg(unix)]
+impl Drop for NativeLock {
+    fn drop(&mut self) {
+        // Only the acquiring process releases this lock. A forked child's
+        // inherited destructor must not unlock its still-active parent's guard.
+        // Forked leases are not valid for work; acquire a new lease after exec.
+        if self.owner_process == std::process::id() {
+            // Closing alone waits for every duplicated descriptor. Drop cannot
+            // report unlock errors; close remains a conservative fallback, not
+            // a guarantee of progress on an OS failure. No retries or unlink.
+            let _ = File::unlock(&self._file);
+        }
+    }
 }
 
 impl NativeLock {
@@ -219,7 +236,11 @@ impl NativeLock {
             };
             match result {
                 Ok(()) => {
-                    let locked = Self { _file: file };
+                    let locked = Self {
+                        _file: file,
+                        #[cfg(unix)]
+                        owner_process: std::process::id(),
+                    };
                     wait.check()?;
                     dir.verify()?;
                     let observed = options(false).open(&path)?;
@@ -284,3 +305,7 @@ mod release_tests {
         drop(inherited);
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "lease_release_tests.rs"]
+mod owner_release_tests;
