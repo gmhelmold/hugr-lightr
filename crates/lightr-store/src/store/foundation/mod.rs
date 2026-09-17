@@ -5,6 +5,7 @@
 //! receipt barriers. Existing Store/CLI routes do not use these additive APIs.
 
 mod error;
+pub mod metadata;
 mod ready;
 
 pub use error::{Phase, PublicationFailure, PublicationOutcome};

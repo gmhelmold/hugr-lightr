@@ -102,3 +102,23 @@ fn concurrent_atomic_metadata_writes_own_different_staging() {
     }
     assert_eq!(fs::read_dir(root.path()).unwrap().count(), 16);
 }
+
+#[test]
+fn successful_explicit_cleanup_does_not_clean_a_successor_allocation() {
+    let parent = tempfile::TempDir::new().unwrap();
+    let owned = super::OwnedTemp::new(parent.path(), "finish-witness").unwrap();
+    let location = owned.dir.clone();
+    owned
+        .finish_with(|dir| {
+            std::fs::remove_dir(dir)?;
+            // Deterministic interleaving: a new owner reserves the retired name
+            // after successful cleanup, but before the old guard's Drop runs.
+            std::fs::create_dir(dir)?;
+            std::fs::write(dir.join("payload"), b"belongs-to-successor")
+        })
+        .unwrap();
+    assert_eq!(
+        std::fs::read(location.join("payload")).unwrap(),
+        b"belongs-to-successor"
+    );
+}
