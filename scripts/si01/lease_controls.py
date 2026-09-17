@@ -83,7 +83,7 @@ def main() -> int:
                 z.extractall(root)
             suite = ['cargo', '+1.96.0', 'test', '--locked', '-p', 'lightr-store', '--lib', PREFIX, '--', '--test-threads=1']
             code, text = run(suite, root, 'pristine')
-            need(code == 0 and '13 passed; 0 failed' in text, 'pristine lease suite missing/failed')
+            need(code == 0 and re.search(r'^test result: ok\. 13 passed; 0 failed; 0 ignored; 0 measured; \d+ filtered out', text, re.M), 'pristine lease suite missing/failed')
             for label, file, old, new, test, assertion in CASES:
                 path = root/BASE/file
                 original = path.read_text()
@@ -100,17 +100,22 @@ def main() -> int:
                 finally:
                     path.write_text(original)
             code, text = run(suite, root, 'restored')
-            need(code == 0 and '13 passed; 0 failed' in text, 'restored lease suite failed')
+            need(code == 0 and re.search(r'^test result: ok\. 13 passed; 0 failed; 0 ignored; 0 measured; \d+ filtered out', text, re.M), 'restored lease suite failed')
             code, text = run(['cargo', '+1.96.0', 'build', '--locked', '-p', 'lightr-store', '--message-format=json'], root, 'borrow-library')
             need(code == 0, 'borrow-check library build failed')
-            libs = []
+            libs, dependencies = [], set()
             for line in text.splitlines():
                 try: item = json.loads(line)
                 except ValueError: continue
-                if item.get('reason') == 'compiler-artifact' and item.get('target', {}).get('name') == 'lightr_store':
-                    libs.extend(Path(f) for f in item['filenames'] if f.endswith('.rlib'))
+                if item.get('reason') == 'compiler-artifact':
+                    dependencies.update(Path(f).parent for f in item['filenames'] if f.endswith(('.rlib', '.rmeta', '.so')))
+                    if item.get('target', {}).get('name') == 'lightr_store':
+                        libs.extend(Path(f) for f in item['filenames'] if f.endswith('.rlib'))
             need(len(libs) == 1, 'missing/ambiguous compiled Store library')
             lib = libs[0]
+            search = [arg for directory in sorted(dependencies) for arg in ('-L', 'dependency='+str(directory))]
+            receipt['borrow_library_sha256'] = hashlib.sha256(lib.read_bytes()).hexdigest()
+            receipt['borrow_dependency_dirs'] = [str(d) for d in sorted(dependencies)]
             for name, release, expected in [
                 ('valid-borrow', 'assert!(!staged.is_empty()); drop(staged); drop(lease);', 0),
                 ('invalid-early-release', 'drop(lease); assert!(!staged.is_empty());', 1),
@@ -120,7 +125,7 @@ def main() -> int:
                 (out/(name+'.rs')).write_text(source.read_text())
                 code, text = run(['rustc', '+1.96.0', '--crate-name', 'lease_borrow_witness', '--crate-type=lib', '--edition=2021',
                                   '--emit=metadata', '--error-format=json', '--extern', 'lightr_store='+str(lib),
-                                  '-L', 'dependency='+str(lib.parent), str(source)], root, name)
+                                  *search, str(source)], root, name)
                 errors = []
                 for line in text.splitlines():
                     try: d = json.loads(line)
