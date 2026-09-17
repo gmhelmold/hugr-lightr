@@ -32,8 +32,7 @@ fn normal_allocations_are_distinct_and_payloads_start_absent() {
         assert!(!allocation.payload().exists());
         allocations.push(allocation);
     }
-    let paths: std::collections::HashSet<_> =
-        allocations.iter().map(OwnedTemp::payload).collect();
+    let paths: std::collections::HashSet<_> = allocations.iter().map(OwnedTemp::payload).collect();
     assert_eq!(paths.len(), 64);
     drop(allocations);
     assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);

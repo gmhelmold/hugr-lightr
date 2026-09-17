@@ -62,6 +62,18 @@ pub(super) fn stat_fields(meta: &std::fs::Metadata) -> (u64, u64, u64, u32) {
     (mtime_ns, ino, size, mode)
 }
 
+/// Convert native separators without altering literal Unix filename bytes.
+fn manifest_relative_path(relative: &Path) -> Result<String> {
+    let raw_relative = relative
+        .to_str()
+        .ok_or_else(|| LightrError::InvalidManifest("selected path is not valid UTF-8".into()))?;
+    #[cfg(windows)]
+    let rel = raw_relative.replace('\\', "/");
+    #[cfg(not(windows))]
+    let rel = raw_relative.to_owned();
+    Ok(rel)
+}
+
 pub fn scan(root: &Path, index: &mut Index) -> Result<WalkReport> {
     use ignore::WalkBuilder;
 
@@ -106,15 +118,7 @@ pub fn scan(root: &Path, index: &mut Index) -> Result<WalkReport> {
 
         let (mtime_ns, ino, size, raw_mode) = stat_fields(&meta);
 
-        // Normalize only native Windows separators; a Unix backslash is data.
-        let relative = abs_path.strip_prefix(&canonical_root).unwrap();
-        let raw_relative = relative.to_str().ok_or_else(|| {
-            LightrError::InvalidManifest("selected path is not valid UTF-8".into())
-        })?;
-        #[cfg(windows)]
-        let rel = raw_relative.replace('\\', "/");
-        #[cfg(not(windows))]
-        let rel = raw_relative.to_owned();
+        let rel = manifest_relative_path(abs_path.strip_prefix(&canonical_root).unwrap())?;
 
         if meta.is_symlink() {
             // Targets are stored text, not manifest paths. Rewriting or resolving
