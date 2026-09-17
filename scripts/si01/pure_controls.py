@@ -29,8 +29,8 @@ CASES = [
     ('unknown-fields', 'crates/lightr-store/src/store/foundation/ready.rs',
      '#[serde(deny_unknown_fields)]', '', 'readiness_rejects_resigned_semantic_corruption'),
     ('error-payload', 'crates/lightr-store/src/store/foundation/error.rs',
-     'LightrError::Io(io::Error::new(self.cause.kind(), self))',
-     'LightrError::Io(io::Error::new(self.cause.kind(), self.cause))',
+     'pub fn into_legacy(self) -> LightrError {\n        LightrError::Io(io::Error::new(self.cause.kind(), self))',
+     'pub fn into_legacy(self) -> LightrError {\n        LightrError::Io(io::Error::new(self.cause.kind(), self.cause))',
      'structured_failure_survives_legacy_wrapper_and_source_chain'),
 ]
 
