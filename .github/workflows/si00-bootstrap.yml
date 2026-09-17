@@ -127,9 +127,13 @@ jobs:
       - name: Install pinned toolchain
         run: rustup toolchain install 1.96.0 --profile minimal
       - name: Build baseline CLI without enabling a new protocol
+        id: cli-build
         run: cargo +1.96.0 build --locked --release --bin lightr
       - name: Measure F0-F5 and compare materialized bytes
         run: python3 scripts/si00/baseline.py --binary target/release/lightr --out si00-baseline
+      - name: Preserve bounded real-CLI incident observations
+        if: ${{ always() && steps.cli-build.outcome == 'success' }}
+        run: python3 scripts/si00/diagnose_capture.py --binary target/release/lightr --out si00-baseline/diagnostic
       - name: Preserve all samples and failures (not a no-regression verdict)
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
