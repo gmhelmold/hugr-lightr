@@ -254,3 +254,33 @@ pub(crate) fn verify_file_path(expected: &File, path: &Path) -> io::Result<()> {
     }
     Ok(())
 }
+
+#[cfg(all(test, unix))]
+mod release_tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn lease_drop_releases_even_with_a_duplicated_os_handle() {
+        let root = TempDir::new().unwrap();
+        let directory = Directory::open(root.path()).unwrap();
+        let lock = NativeLock::acquire(&directory, ".gc.lock", true, Wait::Try).unwrap();
+        // Models the duplicated open-file description that fork can retain
+        // temporarily before exec. The production API never exposes cloning.
+        let inherited = lock._file.try_clone().unwrap();
+        assert_eq!(
+            NativeLock::acquire(&directory, ".gc.lock", false, Wait::Try)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::WouldBlock
+        );
+        drop(lock);
+        let exclusive = NativeLock::acquire(&directory, ".gc.lock", false, Wait::Try);
+        assert!(
+            exclusive.is_ok(),
+            "owner Drop must explicitly release its lock despite a duplicated descriptor"
+        );
+        drop(exclusive);
+        drop(inherited);
+    }
+}

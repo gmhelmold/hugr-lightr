@@ -90,3 +90,21 @@ Remaining obligations include full C12 source topology, CoW/fallback behavior,
 cooperative copy cancellation, broader resource/metadata-writer integration,
 phase-aware recovery/reaping consumers and the complete package DoD. No issue
 closure, real-store migration, public activation or merge follows from this doc.
+
+## Newly reproduced lock-release blocker — unresolved
+
+The full parallel native Store suite failed two existing release-after-drop
+assertions at candidate ff65fa2. A separate deterministic test then retained a
+duplicated OS file description, dropped NativeLock and required a new exclusive
+acquisition: that assertion fails with the present close-only destructor. The
+test is committed without ignore/exception so acceptance cannot overlook it.
+This is a lifecycle counterexample, not a traced attribution of the two original
+parallel failures. Native process termination and publication tests remain
+separate from this drop-release invariant.
+
+The attempted correction was rejected by the tool's indeterminate safety check
+before execution. Read-back confirmed no owner_pid field or explicit unlock
+implementation was installed. No alternate tool/route was used to perform that
+rejected correction. It remains unresolved; this draft must not merge or claim
+G-FOUNDATION from the passing publication-only suite. The initial full-suite
+and deterministic negative logs are retained in the execution delivery.
