@@ -33,6 +33,29 @@ CI (`.github/workflows/ci.yml`) additionally enforces:
 - **Windows cross-clippy** (`--target x86_64-pc-windows-gnu -D warnings`) —
   catches cfg-gated dead code on the platform you didn't build.
 
+## Integration and aggregate gate
+
+The same `.github/workflows/ci.yml` runs for PRs targeting `main` and
+`fix/snapshot-integrity`. `Required CI` fails unless all eight mandatory job
+results are exactly `success`; a failed, skipped, cancelled or missing job is
+not acceptance. The intentionally disabled release job is not a verification
+job and remains outside this aggregate. Existing native/campaign controls are
+additional evidence, not a substitute for the complete CI configuration.
+
+The integration branch requires `Required CI` from GitHub Actions, strict
+up-to-date checks and administrator enforcement. Never bypass this rule,
+remove a failing target, suppress warnings, or merge from old check results.
+Read the exact PR head and tested merge before integration; confirm the parent
+PR's new checks afterwards. An in-scope repair PR may fix an already-red
+integration branch only after the repair candidate's full gates succeed.
+
+Reproduce the Windows cross-check with the pinned compiler:
+
+```sh
+RUSTFLAGS="-D warnings" cargo +1.96.0 check --locked --workspace --target x86_64-pc-windows-gnu
+python3 -m unittest discover -s scripts/ci -p 'test_*.py' -v
+```
+
 ## The ADR rule
 
 Code is written **only against Accepted ADRs** (`docs/adr/`). If your change

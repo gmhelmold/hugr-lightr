@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, fix/snapshot-integrity]
   workflow_dispatch:
 
 env:
@@ -460,6 +460,27 @@ jobs:
       - name: Verify no regressions vs baseline
         run: |
           echo "Baseline comparison - manual review needed for now"
+
+  # One required status for the SAME gates on main and campaign PRs.
+  # Always runs: skipped/cancelled/missing mandatory jobs must not look green.
+  required-ci:
+    name: Required CI
+    needs: [linux-x86_64, linux-aarch64, macos-x86_64, macos-arm64, windows, cross-compile, docs-spec, benchmark-report]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Test failure, cancellation and missing-job controls
+        run: python3 -m unittest discover -s scripts/ci -p 'test_*.py' -v
+      - name: Require every mandatory CI job to succeed
+        env:
+          CI_NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci/required_ci.py
 
   # ============================================================
   # RELEASE (manual trigger only, after GTW gate)
