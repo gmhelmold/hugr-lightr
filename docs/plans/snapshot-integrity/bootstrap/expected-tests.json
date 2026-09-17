@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "scope": "SI00 native baseline, never final remediation qualification",
+  "plan_commit": "e30811971f6a1c2a1e2fdb0a91dc8ccf9a06879d",
+  "toolchain": "1.96.0",
+  "profiles": {
+    "linux-x86_64": {
+      "runner": "ubuntu-24.04",
+      "host": "x86_64-unknown-linux-gnu",
+      "machines": [
+        "x86_64",
+        "amd64"
+      ]
+    },
+    "linux-aarch64": {
+      "runner": "ubuntu-24.04-arm",
+      "host": "aarch64-unknown-linux-gnu",
+      "machines": [
+        "aarch64",
+        "arm64"
+      ]
+    },
+    "macos-x86_64": {
+      "runner": "macos-15-intel",
+      "host": "x86_64-apple-darwin",
+      "machines": [
+        "x86_64"
+      ]
+    },
+    "macos-aarch64": {
+      "runner": "macos-15",
+      "host": "aarch64-apple-darwin",
+      "machines": [
+        "arm64",
+        "aarch64"
+      ]
+    },
+    "windows-x86_64": {
+      "runner": "windows-2022",
+      "host": "x86_64-pc-windows-msvc",
+      "machines": [
+        "amd64",
+        "x86_64"
+      ]
+    }
+  },
+  "required_tests": {
+    "lightr_store": [
+      "store::cas::tests::roundtrip_put_get",
+      "store::cas::tests::fsync_ingest_file_reopen_roundtrip",
+      "store::cas::tests::integrity_corruption",
+      "store::refs::tests::ref_roundtrip"
+    ],
+    "lightr_index": [
+      "index::tests::mod_tests_ops::test_snapshot_hydrate_roundtrip",
+      "index::snapshot::tests::removed_source_does_not_publish_a_snapshot",
+      "index::tests::mod_tests_codec::test_index_encode_decode_roundtrip"
+    ]
+  },
+  "allowed_ignored": {
+    "index::tests::r1_tests_gc::gc_reclaims_hard_killed_run_dir": "Preexisting #[ignore] timing-based run-directory test; not a passing witness. No new skip added by SI00."
+  }
+}

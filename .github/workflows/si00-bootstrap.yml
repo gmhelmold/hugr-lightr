@@ -1,0 +1,144 @@
+name: SI00 bootstrap
+
+on:
+  push:
+    branches: [fix/snapshot-integrity]
+    paths: ['.github/workflows/**', 'scripts/si00/**', 'crates/**', 'Cargo.*', 'rust-toolchain.toml', 'docs/plans/snapshot-integrity/bootstrap/**']
+  pull_request:
+    branches: [fix/snapshot-integrity]
+    paths: ['.github/workflows/**', 'scripts/si00/**', 'crates/**', 'Cargo.*', 'rust-toolchain.toml', 'docs/plans/snapshot-integrity/bootstrap/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: si00-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  evidence-tools:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Check validator positive and negative controls
+        run: python3 -m unittest discover -s scripts/si00 -p 'test_*.py' -v
+      - name: Exercise safe constrained-filesystem capability
+        run: python3 scripts/si00/resource_probe.py --out si00-inventory/resource-probe.json
+      - name: Inventory all tracked Rust symbol occurrences
+        run: python3 scripts/si00/inventory.py --output si00-inventory/caller-inventory.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: si00-inventory-${{ github.sha }}
+          path: si00-inventory/
+          if-no-files-found: error
+          retention-days: 30
+
+  native-baseline:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {profile: linux-x86_64, runner: ubuntu-24.04}
+          - {profile: linux-aarch64, runner: ubuntu-24.04-arm}
+          - {profile: macos-x86_64, runner: macos-15-intel}
+          - {profile: macos-aarch64, runner: macos-15}
+          - {profile: windows-x86_64, runner: windows-2022}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_TERM_COLOR: never
+      RUST_BACKTRACE: '1'
+    steps:
+      # Hosted runners are disposable. Set this before checkout, not after
+      # Windows has materialized CRLF bytes under another configuration.
+      - name: Preserve repository bytes in the initial checkout
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require pristine tracked inputs before any build
+        run: |
+          git status --porcelain --untracked-files=no
+          test -z "$(git status --porcelain --untracked-files=no)"
+          git diff --exit-code
+          git diff --cached --exit-code
+      - name: Install repository-pinned toolchain
+        run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt,clippy
+      - name: Execute native tests and retain independently checkable evidence
+        run: python scripts/si00/native.py --profile '${{ matrix.profile }}' --out si00-results
+      - name: Preserve evidence and binaries even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: si00-native-${{ matrix.profile }}-${{ github.sha }}
+          path: si00-results/
+          if-no-files-found: error
+          retention-days: 30
+
+  native-evidence-gate:
+    if: always()
+    needs: [evidence-tools, native-baseline]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: si00-native-*-${{ github.sha }}
+          path: si00-downloaded
+      - name: Require complete native matrix, exact checkout and actual artifacts
+        run: |
+          test '${{ needs.evidence-tools.result }}' = success
+          test '${{ needs.native-baseline.result }}' = success
+          python3 scripts/si00/aggregate.py --artifacts si00-downloaded --out si00-verdict/native-matrix.json
+      - name: Retain independently validated matrix
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: si00-native-verdict-${{ github.sha }}
+          path: si00-verdict/
+          if-no-files-found: error
+          retention-days: 30
+
+  cli-baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Install pinned toolchain
+        run: rustup toolchain install 1.96.0 --profile minimal
+      - name: Build baseline CLI without enabling a new protocol
+        id: cli-build
+        run: cargo +1.96.0 build --locked --release --bin lightr
+      - name: Measure F0-F5 and compare materialized bytes
+        run: python3 scripts/si00/baseline.py --binary target/release/lightr --out si00-baseline
+      - name: Preserve bounded real-CLI incident observations
+        if: ${{ always() && steps.cli-build.outcome == 'success' }}
+        run: python3 scripts/si00/diagnose_capture.py --binary target/release/lightr --out si00-baseline/diagnostic
+      - name: Preserve all samples and failures (not a no-regression verdict)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: si00-cli-baseline-${{ github.sha }}
+          path: si00-baseline/
+          if-no-files-found: error
+          retention-days: 30
