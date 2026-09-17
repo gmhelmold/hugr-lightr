@@ -1,0 +1,137 @@
+name: SI00 bootstrap
+
+on:
+  push:
+    branches: [work/si-00-bootstrap]
+  pull_request:
+    branches: [fix/snapshot-integrity]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: si00-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Preserve exact tracked source for offline audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p si00-source
+          git rev-parse HEAD > si00-source/checkout.txt
+          git rev-parse HEAD^{tree} > si00-source/tree.txt
+          git archive --format=zip --output=si00-source/source.zip HEAD
+          sha256sum si00-source/source.zip > si00-source/SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: si00-source-${{ github.sha }}
+          path: si00-source/
+          if-no-files-found: error
+          retention-days: 30
+
+  native-baseline:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {profile: linux-x86_64, runner: ubuntu-24.04}
+          - {profile: linux-aarch64, runner: ubuntu-24.04-arm}
+          - {profile: macos-x86_64, runner: macos-15-intel}
+          - {profile: macos-aarch64, runner: macos-15}
+          - {profile: windows-x86_64, runner: windows-2022}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_TERM_COLOR: never
+      RUST_BACKTRACE: '1'
+      SI00_PROFILE: ${{ matrix.profile }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install repository-pinned toolchain
+        shell: bash
+        run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt,clippy
+      - name: Build and execute native store and index tests
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, pathlib, platform, re, subprocess, sys, time
+          out = pathlib.Path('si00-results'); out.mkdir()
+          def run(args, label, timeout=900):
+              start = time.time()
+              try:
+                  p = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
+                  rc, stdout, stderr = p.returncode, p.stdout, p.stderr
+              except subprocess.TimeoutExpired as e:
+                  rc, stdout, stderr = 124, e.stdout or b'', e.stderr or b''
+              (out / (label + '.stdout')).write_bytes(stdout)
+              (out / (label + '.stderr')).write_bytes(stderr)
+              record = {'argv': args, 'label': label, 'exit': rc, 'started': start, 'finished': time.time()}
+              return record, stdout
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True).strip()
+          result = {'schema': 1, 'kind': 'native-baseline-not-qualification',
+                    'checkout_sha': git('rev-parse', 'HEAD'), 'source_tree': git('rev-parse', 'HEAD^{tree}'),
+                    'requested_sha': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'],
+                    'profile': os.environ['SI00_PROFILE'], 'os': platform.platform(), 'machine': platform.machine(),
+                    'commands': [], 'binaries': [], 'production_protocol_enabled': False}
+          failed = False
+          try:
+              for label, cmd in [('rustc', ['rustc', '+1.96.0', '-Vv']), ('cargo', ['cargo', '+1.96.0', '-V'])]:
+                  rec, data = run(cmd, label); result['commands'].append(rec)
+                  if rec['exit']: raise RuntimeError(label + ' unavailable')
+                  result[label] = data.decode(errors='replace').strip()
+              rec, data = run(['cargo', '+1.96.0', 'test', '--locked', '-p', 'lightr-store', '-p', 'lightr-index', '--lib', '--no-run', '--message-format=json'], 'build')
+              result['commands'].append(rec)
+              if rec['exit']: raise RuntimeError('Native test build failed')
+              binaries = []
+              for line in data.decode(errors='replace').splitlines():
+                  try: msg = json.loads(line)
+                  except ValueError: continue
+                  if msg.get('reason') == 'compiler-artifact' and msg.get('profile', {}).get('test') and msg.get('executable'):
+                      binaries.append((msg['target']['name'], pathlib.Path(msg['executable'])))
+              if len(binaries) != 2: raise RuntimeError('Expected exactly two native libtest executables')
+              for name, binary in binaries:
+                  digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+                  listed, names = run([str(binary), '--list'], name + '-list', 60)
+                  expected = sorted(re.findall(r'^(.+): test$', names.decode(errors='replace'), re.M))
+                  if listed['exit'] or not expected: raise RuntimeError('Empty or invalid native test inventory: ' + name)
+                  tested, raw = run([str(binary), '--test-threads=1'], name + '-tests', 300)
+                  text = raw.decode(errors='replace')
+                  seen = re.findall(r'^test (.+?) \.\.\. (ok|FAILED|ignored.*)$', text, re.M)
+                  summary = re.search(r'test result: (?:ok|FAILED)\. (\d+) passed; (\d+) failed; (\d+) ignored;.*?(\d+) filtered out', text)
+                  entry = {'name': name, 'binary_sha256': digest, 'expected_tests': expected,
+                           'observed_tests': seen, 'summary': list(map(int, summary.groups())) if summary else None}
+                  result['binaries'].append(entry); result['commands'].extend([listed, tested])
+                  print(name, 'exit', tested['exit'], 'expected', len(expected), 'summary', entry['summary'], flush=True)
+                  if tested['exit'] or not summary or set(expected) != {n for n, s in seen}: failed = True
+              rec, _ = run(['cargo', '+1.96.0', 'fmt', '--all', '--', '--check'], 'fmt', 120)
+              result['commands'].append(rec)
+              result['known_baseline_fmt_failure'] = rec['exit'] != 0
+          except Exception as exc:
+              result['error'] = str(exc); failed = True
+          finally:
+              result['status'] = 'FAIL' if failed else 'NATIVE_BASELINE_EXECUTED'
+              (out / 'receipt.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+              print(json.dumps({'profile': result['profile'], 'status': result['status'], 'error': result.get('error')}))
+          sys.exit(1 if failed else 0)
+          PY
+      - name: Preserve raw evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: si00-baseline-${{ matrix.profile }}-${{ github.sha }}
+          path: si00-results/
+          if-no-files-found: error
+          retention-days: 30
