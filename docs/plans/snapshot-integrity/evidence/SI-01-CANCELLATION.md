@@ -128,3 +128,15 @@ Keep #147 and PR #155 open/draft. Preserve all five axiom groups and all 21
 numbered criteria. Unix lock release, remaining CoW/topology/resource obligations
 and reviewed full integration prevent G-FOUNDATION. No protocol activation,
 real-data migration, release, merge or coding-agent dispatch occurred.
+
+## Persistence correction after delivery packaging
+
+The repository source, review and this receipt are persistent on GitHub. The
+seven raw archives remain downloadable from their recorded GitHub artifact IDs
+until their stated expiry on 2026-10-17. A verified 49,633,115-byte conversation
+ZIP was assembled, but Library uploads failed with
+`Cannot use ConversionTreeTransaction when not in context`, including a retry.
+Do not interpret references above to a durable delivery as successful Library
+persistence. The conversation attachments are available; a separate persistent
+Library copy was NOT created. No alternate account storage or release was used.
+This documentary correction does not change the tested a442009 source.
