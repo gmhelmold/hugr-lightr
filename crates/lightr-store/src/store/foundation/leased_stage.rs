@@ -1,6 +1,6 @@
 //! Staging whose lifetime borrows the actual Store lease. Still not CAS-ready.
 use super::lease_io::Directory;
-use super::{Phase, PublicationFailure, PublicationOutcome, StoreLease};
+use super::{Phase, PublicationFailure, PublicationOutcome, StoreLease, Wait};
 use crate::store::cas::preparation::StagedFile;
 use lightr_core::Digest;
 use std::io::{self, Read};
@@ -47,6 +47,18 @@ impl<'a> LeasedStagedFile<'a> {
         expected: Option<(Digest, u64)>,
         operation_id: [u8; 16],
     ) -> Result<Self, PublicationFailure> {
+        Self::copy_with_wait(lease, reader, expected, Wait::Try, operation_id)
+    }
+
+    /// Cancellation/deadlines are checked between reads, writes, hashing and
+    /// synchronization. They do not asynchronously interrupt an OS call.
+    pub fn copy_with_wait(
+        lease: &'a StoreLease,
+        reader: &mut impl Read,
+        expected: Option<(Digest, u64)>,
+        wait: Wait<'_>,
+        operation_id: [u8; 16],
+    ) -> Result<Self, PublicationFailure> {
         let fail = |cause| {
             PublicationFailure::new(
                 operation_id,
@@ -56,9 +68,14 @@ impl<'a> LeasedStagedFile<'a> {
                 cause,
             )
         };
+        wait.check().map_err(fail)?;
         let parent = lease.staging().map_err(fail)?;
-        let stage = StagedFile::copy_from_reader(parent.path(), reader, expected, operation_id)?;
+        let stage =
+            StagedFile::copy_checked(parent.path(), reader, expected, operation_id, &|| {
+                wait.check()
+            })?;
         parent.verify().map_err(fail)?;
+        wait.check().map_err(fail)?;
         Ok(Self {
             stage,
             _parent: parent,

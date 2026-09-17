@@ -46,6 +46,34 @@ impl StagedFile {
         operation_id: [u8; 16],
         sync: impl FnOnce(&File) -> io::Result<()>,
     ) -> Result<Self, PublicationFailure> {
+        Self::copy_with_checkpoints(parent, reader, expected, operation_id, sync, &|| Ok(()))
+    }
+
+    pub(crate) fn copy_checked(
+        parent: &Path,
+        reader: &mut impl Read,
+        expected: Option<(Digest, u64)>,
+        operation_id: [u8; 16],
+        checkpoint: &dyn Fn() -> io::Result<()>,
+    ) -> Result<Self, PublicationFailure> {
+        Self::copy_with_checkpoints(
+            parent,
+            reader,
+            expected,
+            operation_id,
+            File::sync_all,
+            checkpoint,
+        )
+    }
+
+    fn copy_with_checkpoints(
+        parent: &Path,
+        reader: &mut impl Read,
+        expected: Option<(Digest, u64)>,
+        operation_id: [u8; 16],
+        sync: impl FnOnce(&File) -> io::Result<()>,
+        checkpoint: &dyn Fn() -> io::Result<()>,
+    ) -> Result<Self, PublicationFailure> {
         let failure = |phase, cause| {
             PublicationFailure::new(
                 operation_id,
@@ -55,6 +83,7 @@ impl StagedFile {
                 cause,
             )
         };
+        checkpoint().map_err(|error| failure(Phase::Stage, error))?;
         let owned =
             OwnedTemp::new(parent, "stage").map_err(|error| failure(Phase::Stage, error))?;
         let mut options = OpenOptions::new();
@@ -67,12 +96,12 @@ impl StagedFile {
         let mut file = options
             .open(owned.payload())
             .map_err(|error| failure(Phase::Stage, error))?;
-        let copied =
-            copy_bounded(reader, &mut file).map_err(|error| failure(Phase::Stage, error))?;
+        let copied = copy_bounded_checked(reader, &mut file, checkpoint)
+            .map_err(|error| failure(Phase::Stage, error))?;
         file.rewind()
             .map_err(|error| failure(Phase::Verify, error))?;
-        let (digest, length) =
-            Digest::of_reader(&mut file).map_err(|error| failure(Phase::Verify, error))?;
+        let (digest, length) = Digest::of_reader_checked(&mut file, checkpoint)
+            .map_err(|error| failure(Phase::Verify, error))?;
         if length != copied || expected.is_some_and(|value| value != (digest, length)) {
             return Err(failure(
                 Phase::Verify,
@@ -82,7 +111,9 @@ impl StagedFile {
                 ),
             ));
         }
+        checkpoint().map_err(|error| failure(Phase::PayloadSync, error))?;
         sync(&file).map_err(|error| failure(Phase::PayloadSync, error))?;
+        checkpoint().map_err(|error| failure(Phase::PayloadSync, error))?;
         file.rewind()
             .map_err(|error| failure(Phase::Verify, error))?;
         Ok(Self {
@@ -98,10 +129,13 @@ impl StagedFile {
     }
 
     /// Internal install seam only; public readers cannot alter staged bytes.
-    pub(crate) fn verify_again(&mut self) -> io::Result<()> {
+    pub(crate) fn verify_again(
+        &mut self,
+        checkpoint: &dyn Fn() -> io::Result<()>,
+    ) -> io::Result<()> {
         crate::store::foundation::verify_file_path(&self.file, &self._owned.payload())?;
         self.file.rewind()?;
-        let actual = Digest::of_reader(&mut self.file)?;
+        let actual = Digest::of_reader_checked(&mut self.file, checkpoint)?;
         if actual != (self.digest, self.length) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -157,18 +191,28 @@ impl Read for StagedFile {
     }
 }
 
+#[cfg(test)]
 fn copy_bounded(reader: &mut impl Read, writer: &mut impl Write) -> io::Result<u64> {
+    copy_bounded_checked(reader, writer, &|| Ok(()))
+}
+
+fn copy_bounded_checked(
+    reader: &mut impl Read,
+    writer: &mut impl Write,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+) -> io::Result<u64> {
     let mut buffer = [0u8; 64 * 1024];
     let mut total = 0u64;
     loop {
+        checkpoint()?;
         let size = match reader.read(&mut buffer) {
             Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
             result => result?,
         };
+        checkpoint()?;
         if size == 0 {
             return Ok(total);
         }
-        // Defend the copy boundary even against an invalid custom Read impl.
         let bytes = buffer.get(..size).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -178,10 +222,39 @@ fn copy_bounded(reader: &mut impl Read, writer: &mut impl Write) -> io::Result<u
         total = total
             .checked_add(size as u64)
             .ok_or_else(|| io::Error::other("staged length overflow"))?;
-        writer.write_all(bytes)?;
+        write_checked(writer, bytes, checkpoint)?;
     }
+}
+
+fn write_checked(
+    writer: &mut impl Write,
+    mut bytes: &[u8],
+    checkpoint: &dyn Fn() -> io::Result<()>,
+) -> io::Result<()> {
+    while !bytes.is_empty() {
+        checkpoint()?;
+        let size = match writer.write(bytes) {
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            result => result?,
+        };
+        checkpoint()?;
+        if size == 0 {
+            return Err(io::ErrorKind::WriteZero.into());
+        }
+        bytes = bytes.get(size..).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "writer exceeded supplied buffer",
+            )
+        })?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
 #[path = "preparation_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "preparation_cancellation_tests.rs"]
+mod cancellation_tests;

@@ -128,7 +128,7 @@ impl StoreLease {
                 e,
             )
         })?;
-        LeasedStagedFile::copy(self, reader, expected, id)
+        LeasedStagedFile::copy_with_wait(self, reader, expected, wait, id)
             .map_err(Arc::new)?
             .publish(wait, id)
     }
@@ -287,8 +287,14 @@ fn publish<'a>(
                 )
             })?;
             stage = Some(
-                LeasedStagedFile::copy(lease, &mut input, Some((digest, old_length)), id)
-                    .map_err(Arc::new)?,
+                LeasedStagedFile::copy_with_wait(
+                    lease,
+                    &mut input,
+                    Some((digest, old_length)),
+                    wait,
+                    id,
+                )
+                .map_err(Arc::new)?,
             );
         }
         let staged = stage
@@ -297,7 +303,7 @@ fn publish<'a>(
         let source = staged.stage.staged_path();
         at.step(Phase::Verify, NotPublished, &source, || {
             staged._parent.verify()?;
-            staged.stage.verify_again()
+            staged.stage.verify_again(&|| at.wait.check())
         })?;
         length = staged.len();
         at.step(Phase::PayloadSync, NotPublished, &source, || {

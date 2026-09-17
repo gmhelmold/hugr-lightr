@@ -89,7 +89,22 @@
       "store::foundation::publication_tests::publication_receipt_without_payload_and_absent_digest_fail_closed",
       "store::foundation::publication_tests::publication_rejects_staged_mutation_before_payload_install",
       "store::foundation::publication_tests::publication_same_lease_cache_does_not_bypass_new_source_validation",
-      "store::foundation::publication_tests::publication_preserves_readonly_source_attributes"
+      "store::foundation::publication_tests::publication_preserves_readonly_source_attributes",
+      "store::foundation::capture_cancellation_tests::capture_cancellation_after_read_stops_before_a_second_read",
+      "store::foundation::capture_cancellation_tests::capture_cancellation_is_not_retried_as_os_interrupted",
+      "store::foundation::capture_cancellation_tests::capture_cancellation_at_eof_cannot_finish_staging",
+      "store::foundation::capture_cancellation_tests::capture_cancellation_precancel_does_not_create_staging",
+      "store::foundation::capture_cancellation_tests::capture_cancellation_during_capture_does_not_poison_the_lease",
+      "store::foundation::capture_cancellation_tests::capture_cancellation_keeps_real_read_error_when_both_occur",
+      "store::foundation::capture_cancellation_tests::capture_cancellation_uncancelled_read_interruptions_preserve_bytes",
+      "store::foundation::capture_cancellation_tests::capture_cancellation_expired_deadline_does_not_read_or_allocate",
+      "store::cas::preparation::cancellation_tests::checkpoint_precancel_allocates_nothing",
+      "store::cas::preparation::cancellation_tests::checkpoint_hash_cancellation_cleans_only_owned_stage",
+      "store::cas::preparation::cancellation_tests::checkpoint_sync_completion_cannot_hide_cancellation",
+      "store::cas::preparation::cancellation_tests::checkpoint_write_interruption_is_not_blindly_retried",
+      "store::cas::preparation::cancellation_tests::checkpoint_short_write_cancel_stops_remaining_bytes",
+      "store::cas::preparation::cancellation_tests::checkpoint_writer_errors_and_invalid_counts_remain_explicit",
+      "store::cas::preparation::cancellation_tests::checkpoint_short_writes_and_os_interrupts_still_complete"
     ],
     "lightr_index": [
       "index::tests::mod_tests_ops::test_snapshot_hydrate_roundtrip",

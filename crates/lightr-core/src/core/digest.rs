@@ -19,20 +19,40 @@ impl Digest {
     /// Hash a reader without mapping mutable files or buffering the whole input.
     /// Returns the digest and the actual byte count; interrupted reads are retried.
     pub fn of_reader(reader: &mut impl std::io::Read) -> std::io::Result<(Self, u64)> {
+        Self::of_reader_checked(reader, || Ok(()))
+    }
+
+    /// Hash with cooperative checkpoints outside the EINTR retry loop.
+    /// A checkpoint failure is terminal, even when its kind is Interrupted.
+    /// The callback cannot preempt a synchronous read already in progress.
+    pub fn of_reader_checked(
+        reader: &mut impl std::io::Read,
+        mut checkpoint: impl FnMut() -> std::io::Result<()>,
+    ) -> std::io::Result<(Self, u64)> {
         let mut hasher = blake3::Hasher::new();
         let mut buffer = [0u8; 64 * 1024];
         let mut length = 0u64;
         loop {
+            checkpoint()?;
             let count = match reader.read(&mut buffer) {
-                Ok(0) => break,
                 Ok(count) => count,
                 Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(error) => return Err(error),
             };
+            checkpoint()?;
+            if count == 0 {
+                break;
+            }
+            let bytes = buffer.get(..count).ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "reader exceeded supplied buffer",
+                )
+            })?;
             length = length.checked_add(count as u64).ok_or_else(|| {
                 std::io::Error::new(std::io::ErrorKind::InvalidData, "stream length overflow")
             })?;
-            hasher.update(&buffer[..count]);
+            hasher.update(bytes);
         }
         Ok((Self(*hasher.finalize().as_bytes()), length))
     }
@@ -77,3 +97,7 @@ impl std::fmt::Debug for Digest {
         write!(f, "{}", self.to_hex())
     }
 }
+
+#[cfg(test)]
+#[path = "digest_checked_tests.rs"]
+mod checked_tests;
