@@ -47,7 +47,9 @@ fn options(directory: bool) -> OpenOptions {
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
-        o.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | if directory { libc::O_DIRECTORY } else { 0 });
+        o.custom_flags(
+            libc::O_NOFOLLOW | libc::O_NONBLOCK | if directory { libc::O_DIRECTORY } else { 0 },
+        );
         o.mode(0o600);
     }
     #[cfg(windows)]
@@ -56,7 +58,14 @@ fn options(directory: bool) -> OpenOptions {
         use windows_sys::Win32::Storage::FileSystem::{
             FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
         };
-        o.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT | if directory { FILE_FLAG_BACKUP_SEMANTICS } else { 0 });
+        o.custom_flags(
+            FILE_FLAG_OPEN_REPARSE_POINT
+                | if directory {
+                    FILE_FLAG_BACKUP_SEMANTICS
+                } else {
+                    0
+                },
+        );
     }
     o
 }
@@ -89,11 +98,19 @@ impl Directory {
         let path = fs::canonicalize(path)?;
         let handle = options(true).open(&path)?;
         check_type(&handle, true)?;
-        Ok(Self { id: identity(&handle)?, path, _handle: handle })
+        Ok(Self {
+            id: identity(&handle)?,
+            path,
+            _handle: handle,
+        })
     }
 
-    pub(super) fn path(&self) -> &Path { &self.path }
-    pub(super) fn id(&self) -> Identity { self.id }
+    pub(super) fn path(&self) -> &Path {
+        &self.path
+    }
+    pub(super) fn id(&self) -> Identity {
+        self.id
+    }
 
     pub(super) fn verify(&self) -> io::Result<()> {
         let file = options(true).open(&self.path)?;
@@ -123,7 +140,11 @@ impl Directory {
         let handle = options(true).open(&path)?;
         check_type(&handle, true)?;
         self.verify()?;
-        Ok(Self { id: identity(&handle)?, path, _handle: handle })
+        Ok(Self {
+            id: identity(&handle)?,
+            path,
+            _handle: handle,
+        })
     }
 }
 
@@ -135,22 +156,39 @@ pub(super) struct NativeLock {
 }
 
 impl NativeLock {
-    pub(super) fn acquire(dir: &Directory, name: &str, shared: bool, wait: Wait<'_>) -> io::Result<Self> {
+    pub(super) fn acquire(
+        dir: &Directory,
+        name: &str,
+        shared: bool,
+        wait: Wait<'_>,
+    ) -> io::Result<Self> {
         Self::acquire_observed(dir, name, shared, wait, || {})
     }
 
     pub(super) fn acquire_observed(
-        dir: &Directory, name: &str, shared: bool, wait: Wait<'_>, mut on_contention: impl FnMut(),
+        dir: &Directory,
+        name: &str,
+        shared: bool,
+        wait: Wait<'_>,
+        mut on_contention: impl FnMut(),
     ) -> io::Result<Self> {
         wait.check()?;
         dir.verify()?;
         let path = dir.path.join(name);
-        let file = options(false).write(true).create(true).truncate(false).open(&path)?;
+        let file = options(false)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path)?;
         check_type(&file, false)?;
         let id = identity(&file)?;
         loop {
             wait.check()?;
-            let result = if shared { file.try_lock_shared() } else { file.try_lock() };
+            let result = if shared {
+                file.try_lock_shared()
+            } else {
+                file.try_lock()
+            };
             match result {
                 Ok(()) => {
                     let locked = Self { _file: file };
@@ -166,10 +204,12 @@ impl NativeLock {
                 Err(TryLockError::WouldBlock) => {
                     on_contention();
                     match wait.remaining()? {
-                    None => return Err(io::Error::from(io::ErrorKind::WouldBlock)),
-                    Some(remaining) => thread::park_timeout(remaining.min(Duration::from_millis(5))),
+                        None => return Err(io::Error::from(io::ErrorKind::WouldBlock)),
+                        Some(remaining) => {
+                            thread::park_timeout(remaining.min(Duration::from_millis(5)))
+                        }
                     }
-                },
+                }
                 Err(TryLockError::Error(e)) => return Err(e),
             }
         }

@@ -14,8 +14,12 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Default)]
 pub struct Cancellation(AtomicBool);
 impl Cancellation {
-    pub fn cancel(&self) { self.0.store(true, Ordering::Release); }
-    pub fn is_cancelled(&self) -> bool { self.0.load(Ordering::Acquire) }
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::Release);
+    }
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
 }
 
 /// A nonblocking attempt or a finite, cooperatively cancellable wait.
@@ -23,16 +27,29 @@ impl Cancellation {
 #[derive(Clone, Copy)]
 pub enum Wait<'a> {
     Try,
-    Until { deadline: Instant, cancellation: &'a Cancellation },
+    Until {
+        deadline: Instant,
+        cancellation: &'a Cancellation,
+    },
 }
 impl Wait<'_> {
     pub(super) fn check(self) -> io::Result<()> {
-        if let Self::Until { deadline, cancellation } = self {
+        if let Self::Until {
+            deadline,
+            cancellation,
+        } = self
+        {
             if cancellation.is_cancelled() {
-                return Err(io::Error::new(io::ErrorKind::Interrupted, "lease acquisition cancelled"));
+                return Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "lease acquisition cancelled",
+                ));
             }
             if Instant::now() >= deadline {
-                return Err(io::Error::new(io::ErrorKind::TimedOut, "lease acquisition deadline elapsed"));
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "lease acquisition deadline elapsed",
+                ));
             }
         }
         Ok(())
@@ -41,7 +58,9 @@ impl Wait<'_> {
         self.check()?;
         Ok(match self {
             Self::Try => None,
-            Self::Until { deadline, .. } => Some(deadline.saturating_duration_since(Instant::now())),
+            Self::Until { deadline, .. } => {
+                Some(deadline.saturating_duration_since(Instant::now()))
+            }
         })
     }
 }
@@ -51,15 +70,25 @@ impl Wait<'_> {
 #[derive(Debug, Clone)]
 pub struct StoreLocks(Arc<Directory>);
 impl StoreLocks {
-    pub fn open_existing(root: &Path) -> io::Result<Self> { Ok(Self(Arc::new(Directory::open(root)?))) }
-    pub fn same_store(&self, other: &Self) -> bool { self.0.id() == other.0.id() }
+    pub fn open_existing(root: &Path) -> io::Result<Self> {
+        Ok(Self(Arc::new(Directory::open(root)?)))
+    }
+    pub fn same_store(&self, other: &Self) -> bool {
+        self.0.id() == other.0.id()
+    }
     pub fn shared(&self, wait: Wait<'_>) -> io::Result<StoreLease> {
         let guard = NativeLock::acquire(&self.0, ".gc.lock", true, wait)?;
-        Ok(StoreLease { _guard: guard, domain: self.clone() })
+        Ok(StoreLease {
+            _guard: guard,
+            domain: self.clone(),
+        })
     }
     pub fn exclusive(&self, wait: Wait<'_>) -> io::Result<ExclusiveStoreLease> {
         let guard = NativeLock::acquire(&self.0, ".gc.lock", false, wait)?;
-        Ok(ExclusiveStoreLease { _guard: guard, domain: self.clone() })
+        Ok(ExclusiveStoreLease {
+            _guard: guard,
+            domain: self.clone(),
+        })
     }
 }
 
@@ -71,11 +100,17 @@ pub struct StoreLease {
     pub(super) domain: StoreLocks,
 }
 impl StoreLease {
-    pub fn belongs_to(&self, domain: &StoreLocks) -> bool { self.domain.same_store(domain) }
-    pub(super) fn staging(&self) -> io::Result<Directory> { self.domain.0.child(".si01-staging") }
+    pub fn belongs_to(&self, domain: &StoreLocks) -> bool {
+        self.domain.same_store(domain)
+    }
+    pub(super) fn staging(&self) -> io::Result<Directory> {
+        self.domain.0.child(".si01-staging")
+    }
 
     /// Independent worker scopes borrow the same native lock; no reacquisition.
-    pub fn worker(&self) -> LeaseWorker<'_> { LeaseWorker { lease: self } }
+    pub fn worker(&self) -> LeaseWorker<'_> {
+        LeaseWorker { lease: self }
+    }
 }
 
 /// Exclusive Store capability; deliberately not convertible to a shared lease.
@@ -85,7 +120,9 @@ pub struct ExclusiveStoreLease {
     domain: StoreLocks,
 }
 impl ExclusiveStoreLease {
-    pub fn belongs_to(&self, domain: &StoreLocks) -> bool { self.domain.same_store(domain) }
+    pub fn belongs_to(&self, domain: &StoreLocks) -> bool {
+        self.domain.same_store(domain)
+    }
 }
 
 /// A worker obtains key locks in one sorted set, or one cache leaf section.
@@ -96,7 +133,11 @@ pub struct LeaseWorker<'a> {
     lease: &'a StoreLease,
 }
 impl LeaseWorker<'_> {
-    pub fn digests<'a>(&'a mut self, keys: &[Digest], wait: Wait<'_>) -> io::Result<DigestLocks<'a>> {
+    pub fn digests<'a>(
+        &'a mut self,
+        keys: &[Digest],
+        wait: Wait<'_>,
+    ) -> io::Result<DigestLocks<'a>> {
         wait.check()?;
         let dir = self.lease.domain.0.child(".si01-digest-locks")?;
         let mut keys = keys.to_vec();
@@ -106,10 +147,18 @@ impl LeaseWorker<'_> {
         for key in &keys {
             guards.push(NativeLock::acquire(&dir, &key.to_hex(), false, wait)?);
         }
-        Ok(DigestLocks { _guards: guards, keys, _borrow: std::marker::PhantomData })
+        Ok(DigestLocks {
+            _guards: guards,
+            keys,
+            _borrow: std::marker::PhantomData,
+        })
     }
 
-    pub fn cache<'a>(&'a mut self, cache: &'a CacheLocks, wait: Wait<'_>) -> io::Result<CacheLease<'a>> {
+    pub fn cache<'a>(
+        &'a mut self,
+        cache: &'a CacheLocks,
+        wait: Wait<'_>,
+    ) -> io::Result<CacheLease<'a>> {
         cache.exclusive(wait)
     }
 }
@@ -123,7 +172,9 @@ pub struct DigestLocks<'a> {
 
 impl DigestLocks<'_> {
     /// The exact sorted, deduplicated order in which these locks were acquired.
-    pub fn keys(&self) -> &[Digest] { &self.keys }
+    pub fn keys(&self) -> &[Digest] {
+        &self.keys
+    }
 }
 
 /// Cache locks belong to the shared cache, NOT to any initiating Store. Both
@@ -131,11 +182,18 @@ impl DigestLocks<'_> {
 #[derive(Debug, Clone)]
 pub struct CacheLocks(Arc<Directory>);
 impl CacheLocks {
-    pub fn open_existing(root: &Path) -> io::Result<Self> { Ok(Self(Arc::new(Directory::open(root)?))) }
-    pub fn same_cache(&self, other: &Self) -> bool { self.0.id() == other.0.id() }
+    pub fn open_existing(root: &Path) -> io::Result<Self> {
+        Ok(Self(Arc::new(Directory::open(root)?)))
+    }
+    pub fn same_cache(&self, other: &Self) -> bool {
+        self.0.id() == other.0.id()
+    }
     pub fn exclusive(&self, wait: Wait<'_>) -> io::Result<CacheLease<'_>> {
         let guard = NativeLock::acquire(&self.0, ".si01-cache.lock", false, wait)?;
-        Ok(CacheLease { _guard: guard, _cache: self })
+        Ok(CacheLease {
+            _guard: guard,
+            _cache: self,
+        })
     }
 }
 

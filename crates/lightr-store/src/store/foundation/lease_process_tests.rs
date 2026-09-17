@@ -15,7 +15,9 @@ const ROOT_ENV: &str = "LIGHTR_SI01_LEASE_CHILD_ROOT";
 // Its ordinary invocation is not counted as an independent concurrency witness.
 #[test]
 fn lease_child_probe() {
-    let Some(root) = std::env::var_os(ROOT_ENV) else { return; };
+    let Some(root) = std::env::var_os(ROOT_ENV) else {
+        return;
+    };
     let mode = std::env::var("LIGHTR_SI01_LEASE_CHILD_MODE").unwrap();
     let marker = std::env::var_os("LIGHTR_SI01_LEASE_CHILD_READY").unwrap();
     if mode == "cache" {
@@ -28,7 +30,10 @@ fn lease_child_probe() {
     } else {
         let domain = StoreLocks::open_existing(Path::new(&root)).unwrap();
         if mode == "expect-blocked" {
-            assert_eq!(domain.exclusive(Wait::Try).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+            assert_eq!(
+                domain.exclusive(Wait::Try).unwrap_err().kind(),
+                io::ErrorKind::WouldBlock
+            );
             fs::write(marker, b"blocked").unwrap();
         } else {
             let _held = domain.shared(Wait::Try).unwrap();
@@ -50,15 +55,18 @@ impl Drop for ChildProbe {
 }
 impl ChildProbe {
     fn launch(root: &Path, marker: &Path, mode: &str) -> Self {
-        Self(Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", CHILD, "--nocapture"])
-            .env(ROOT_ENV, root)
-            .env("LIGHTR_SI01_LEASE_CHILD_MODE", mode)
-            .env("LIGHTR_SI01_LEASE_CHILD_READY", marker)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::inherit())
-            .spawn().unwrap())
+        Self(
+            Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", CHILD, "--nocapture"])
+                .env(ROOT_ENV, root)
+                .env("LIGHTR_SI01_LEASE_CHILD_MODE", mode)
+                .env("LIGHTR_SI01_LEASE_CHILD_READY", marker)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::inherit())
+                .spawn()
+                .unwrap(),
+        )
     }
     fn ready(&mut self, marker: &Path) {
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -66,19 +74,32 @@ impl ChildProbe {
             if let Some(status) = self.0.try_wait().unwrap() {
                 panic!("child exited before acquiring its lock: {status}");
             }
-            assert!(Instant::now() < deadline, "child handshake watchdog expired");
+            assert!(
+                Instant::now() < deadline,
+                "child handshake watchdog expired"
+            );
             std::thread::park_timeout(Duration::from_millis(2));
         }
     }
     fn finish(&mut self, release: bool) {
-        if release { self.0.stdin.take().unwrap().write_all(b"release\n").unwrap(); }
+        if release {
+            self.0
+                .stdin
+                .take()
+                .unwrap()
+                .write_all(b"release\n")
+                .unwrap();
+        }
         let deadline = Instant::now() + Duration::from_secs(10);
         loop {
             if let Some(status) = self.0.try_wait().unwrap() {
                 assert!(status.success(), "child failed: {status}");
                 return;
             }
-            assert!(Instant::now() < deadline, "child completion watchdog expired");
+            assert!(
+                Instant::now() < deadline,
+                "child completion watchdog expired"
+            );
             std::thread::park_timeout(Duration::from_millis(2));
         }
     }
@@ -93,7 +114,10 @@ fn lease_cross_process_shared_and_exclusive_contend_both_directions() {
     let mut child = ChildProbe::launch(root.path(), &marker, "shared");
     child.ready(&marker);
     let shared = domain.shared(Wait::Try).unwrap();
-    assert_eq!(domain.exclusive(Wait::Try).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+    assert_eq!(
+        domain.exclusive(Wait::Try).unwrap_err().kind(),
+        io::ErrorKind::WouldBlock
+    );
     child.finish(true);
     drop(shared);
     let exclusive = domain.exclusive(Wait::Try).unwrap();
@@ -113,7 +137,10 @@ fn lease_killed_holder_releases_only_its_native_lock() {
     let marker = signals.path().join("held");
     let mut child = ChildProbe::launch(root.path(), &marker, "shared");
     child.ready(&marker);
-    assert_eq!(domain.exclusive(Wait::Try).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+    assert_eq!(
+        domain.exclusive(Wait::Try).unwrap_err().kind(),
+        io::ErrorKind::WouldBlock
+    );
     drop(child); // kill + wait, never an unlink of the lock file.
     assert!(domain.exclusive(Wait::Try).is_ok());
     assert!(root.path().join(".gc.lock").is_file());
@@ -130,7 +157,10 @@ fn lease_cache_is_shared_across_processes_and_foreign_stores() {
     let mut child = ChildProbe::launch(cache_root.path(), &marker, "cache");
     child.ready(&marker);
     let foreign = domain.exclusive(Wait::Try).unwrap();
-    assert_eq!(cache.exclusive(Wait::Try).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+    assert_eq!(
+        cache.exclusive(Wait::Try).unwrap_err().kind(),
+        io::ErrorKind::WouldBlock
+    );
     child.finish(true);
     assert!(cache.exclusive(Wait::Try).is_ok());
     drop(foreign);

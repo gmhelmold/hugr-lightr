@@ -16,10 +16,13 @@ mod ready_tests;
 mod lease;
 mod lease_io;
 mod leased_stage;
-pub use lease::{CacheLease, CacheLocks, Cancellation, DigestLocks, ExclusiveStoreLease, LeaseWorker, StoreLease, StoreLocks, Wait};
+pub use lease::{
+    CacheLease, CacheLocks, Cancellation, DigestLocks, ExclusiveStoreLease, LeaseWorker,
+    StoreLease, StoreLocks, Wait,
+};
 pub use leased_stage::LeasedStagedFile;
 
 #[cfg(test)]
-mod lease_tests;
-#[cfg(test)]
 mod lease_process_tests;
+#[cfg(test)]
+mod lease_tests;

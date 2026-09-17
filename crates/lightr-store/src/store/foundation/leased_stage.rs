@@ -47,19 +47,39 @@ impl<'a> LeasedStagedFile<'a> {
         expected: Option<(Digest, u64)>,
         operation_id: [u8; 16],
     ) -> Result<Self, PublicationFailure> {
-        let fail = |cause| PublicationFailure::new(
-            operation_id, PublicationOutcome::NotPublished, Phase::Stage, None, cause,
-        );
+        let fail = |cause| {
+            PublicationFailure::new(
+                operation_id,
+                PublicationOutcome::NotPublished,
+                Phase::Stage,
+                None,
+                cause,
+            )
+        };
         let parent = lease.staging().map_err(fail)?;
         let stage = StagedFile::copy_from_reader(parent.path(), reader, expected, operation_id)?;
         parent.verify().map_err(fail)?;
-        Ok(Self { stage, _parent: parent, _lease: lease })
+        Ok(Self {
+            stage,
+            _parent: parent,
+            _lease: lease,
+        })
     }
-    pub fn digest(&self) -> Digest { self.stage.digest() }
-    pub fn len(&self) -> u64 { self.stage.len() }
-    pub fn is_empty(&self) -> bool { self.stage.is_empty() }
-    pub fn rewind(&mut self) -> io::Result<()> { self.stage.rewind() }
+    pub fn digest(&self) -> Digest {
+        self.stage.digest()
+    }
+    pub fn len(&self) -> u64 {
+        self.stage.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.stage.is_empty()
+    }
+    pub fn rewind(&mut self) -> io::Result<()> {
+        self.stage.rewind()
+    }
 }
 impl Read for LeasedStagedFile<'_> {
-    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> { self.stage.read(buffer) }
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        self.stage.read(buffer)
+    }
 }
