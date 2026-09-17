@@ -72,12 +72,13 @@ fn native_filesystem_or_scan_explicitly_rejects_selected_non_utf8_filename() {
             // APFS rejects the fixture at creation (Darwin EILSEQ = 92).
             // This is an asserted native capability, not a skipped scan success.
             // The separate conversion test still exercises our rejection logic.
-            assert!(
-                cfg!(target_os = "macos"),
-                "unexpected creation error: {error}"
-            );
-            assert_eq!(error.raw_os_error(), Some(92));
-            assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
+            #[cfg(target_os = "macos")]
+            {
+                assert_eq!(error.raw_os_error(), Some(92));
+                assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
+            }
+            #[cfg(not(target_os = "macos"))]
+            panic!("unexpected creation error: {error}");
         }
     }
 }
