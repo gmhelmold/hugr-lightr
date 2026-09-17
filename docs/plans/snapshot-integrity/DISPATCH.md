@@ -1,69 +1,73 @@
-# Snapshot integrity — publication and execution state
+# Snapshot integrity — current execution and integration state
 
-**Date:** 2026-09-16  
-**Specification:** [SNAPSHOT-INTEGRITY-REMEDIATION.md](../SNAPSHOT-INTEGRITY-REMEDIATION.md), version 2.2; technical commit `e30811971f6a1c2a1e2fdb0a91dc8ccf9a06879d`.  
-**Campaign:** #152. **Bootstrap:** SI-00 #153.  
-**Integration:** `fix/snapshot-integrity` / PR #146 (draft).  
-**Unchanged audited Rust baseline:** `e4a53417f6fe7da8c4f44908af9525536443d0fa`.  
-**Tracking status:** six native children and seven blocking edges VERIFIED; Project creation attempted and denied for the Actions identity.
+**Updated:** 2026-09-17. **Campaign:** #152. **Integration:** PR #146,
+`fix/snapshot-integrity`; main remains unchanged by this campaign.
+**Technical contract:** [v2.2](../SNAPSHOT-INTEGRITY-REMEDIATION.md) at
+`e30811971f6a1c2a1e2fdb0a91dc8ccf9a06879d`; Accepted design ADR-0020.
+All 123 criterion IDs, five axiom groups per WP, 14 invariants and E01-E22 remain
+unchanged. This current-state record supersedes old NOT STARTED summaries;
+historical receipts remain versioned and must not be mistaken for current state.
 
-## Scope and technical contract
+## Authority and workflow
 
-The owner requested completion of the campaign's GitHub organization. This tracking update does not execute SI-00, accept ADRs, change Rust or its tests, activate the storage protocol, migrate data, launch agents, merge, release or change app permissions/billing. A temporary administrative workflow was used on an isolated branch and then removed; it was never merged into main or this integration branch.
+The owner authorized execution and explicitly delegated reviewed merge,
+organization, maintenance and hygiene. No repeated blanket merge confirmation
+is required for qualified in-scope increments. Keep source changes in reviewed
+PRs with exact candidate evidence; never use status labels to waive criteria.
+Main delivery requires full campaign qualification. No release, billing or
+account permission change, production migration or hidden protocol activation.
 
-The technical v2.2 specification is unchanged: six WPs, 30 axiom sections, all 123 criterion IDs, 14 global invariants and E01–E22. The integrated-review refinements remain planning obligations: actual resource/lock domains, native symlink/parent resolution, inert foundation followed by G-ACTIVATION, independent pending pre-scan and rejection of empty/echo-only benchmark evidence.
+One WP may use several PRs. An accepted **inactive increment** may integrate
+without claiming the full WP DoD. G-FOUNDATION remains separate from PR merge,
+G-ACTIVATION and SI-05 qualification. No coding subagent was launched.
 
-**Specification Git blob:** `5317d313c7edee03f83742173888191c9a885745`. **Specification SHA-256:** `e9c44406190b154e3a7f7fec24889806249b42a24f1ac666bccb9609e4d7f23b`. WP criteria remain pinned to the technical commit above; this separate tracking receipt does not amend their contracts.
+## Current work graph
 
-## Native hierarchy and dependencies — completed and verified
-
-[Run 35163052860](https://github.com/gmhelmold/hugr-lightr/actions/runs/35163052860), workflow commit `93f2504061995cc2573e0ab6b03991dd172a686d`, created and read back the native relationships below. Existing parents were checked first; no unrelated parent was replaced and no dependency was removed.
-
-**Parent #152:** native children #153, #147, #148, #149, #150, #151.
-
-| Dependent | Native Blocked by | Meaning |
+| Package | Issue | Current state |
 |---|---|---|
-| #147 | #153 | SI-00 accepted |
-| #148 | #153, #147 | SI-00 permits its isolated pure portion; SI-01/G-FOUNDATION is required for production integration and DoD |
-| #149 | #147, #148 | Both primitives/capture integrated and accepted composite ADR |
-| #150 | #149 | Actual post-G-ACTIVATION candidate |
-| #151 | #150 | Frozen candidate plus registered fixture-matched budgets |
+| SI-00 | #153 | COMPLETED; #154 merged as `0c48886d2c82e671c33466ca0d5ff1640f90985d` |
+| SI-01 | #147 | IN PROGRESS; #155 increment merged as `b7ed8953df506f00f77515bcaabc117afc15ee40`; #156 metadata work remains unmerged |
+| SI-02 | #148 | Isolated portion permitted after SI-00; full integration/DoD waits for G-FOUNDATION |
+| SI-03 | #149 | Waits for accepted SI-01/02; owns coordinated public activation |
+| SI-04 | #150 | Qualifies actual SI-03 activated candidate, not nonexistent behavior |
+| SI-05 | #151 | Final native/resource/performance qualification after SI-04 |
 
-There are six child links and seven blocking edges, not just Markdown navigation. The [second run, 35163241378](https://github.com/gmhelmold/hugr-lightr/actions/runs/35163241378), updated all six WP relationship headers, verified complete body read-back and preserved all numbered criteria and their hashes. Native relationships do not prove the readiness gates or imply that an issue is implemented.
+The six native child links and seven dependencies were created/read back in
+[35163052860](https://github.com/gmhelmold/hugr-lightr/actions/runs/35163052860).
+#147 is blocked by #153; #148 by #153/#147; #149 by #147/#148; #150 by #149;
+#151 by #150. Closing #153 does not close #147 or release #148's full integration.
+No relation was removed by this maintenance update.
 
-## Project — exact authorization boundary, not completed
+## Latest accepted increment
 
-The second administrative run queried existing Projects and attempted `createProjectV2` for the repository owner's account. GitHub returned GraphQL error type `FORBIDDEN` at `createProjectV2`:
+[Lock release/integration receipt](evidence/SI-01-LOCK-RELEASE-INTEGRATION.md).
+Source `8d1276858277fcf507038fa10d41b64bf54b1877`, actual CI merge
+`e20ebe915fb67faf2437888e00fdbf27d3b2fb1e`, tree
+`fed8b882d52cb10571bb24d95430c2d7dabfb9de`. The actual #155 integration merge
+has that exact tree and ordered parents. Workspace, native matrix, full F0-F5,
+contract and causal controls pass; owner-specific Unix release is fixed.
 
-```text
-github-actions[bot] does not have permission to create projects on ownerId U_kgDOD9CVIg.
-```
+`production_protocol_enabled=false`. **G-FOUNDATION and G-ACTIVATION are not
+established.** Complete CoW/fallback, inspection cancellation, topology,
+resource/metadata/reaping and caller obligations before accepting SI-01.
+Preserve #156's separate changes and reconcile its diff against the integrated
+foundation; do not restore an obsolete duplicate codec or discard shared code.
 
-**No Project was created.** The run returned failure rather than claiming all setup was complete. The earlier absence of a connector mutation has been narrowed to an actual account-Project authorization denial. Repository issue access does not provide that account-level permission. No new secret, alternate credential or account permission was obtained or changed, and no bypass or automatic retry is scheduled.
+## Hygiene and external boundary
 
-Completion of the Project requires a separately authorized Projects connection or the owner's own authenticated GitHub session. Preserve this requirement; do not silently waive the requested board, create a replacement in an unrelated service, or turn the denied operation into a green checkbox. Do not request tokens/passwords in chat. The intended view remains Backlog, Ready, In progress, Review, Integrated and Done, with explicit blockers and no invented dates.
+Only verified merged/retired campaign branches are eligible for removal. The
+admin branch's unique history is archived as a small Git bundle in the latest
+receipt; no administrative workflow remains active. Branch #156 remains live.
+Do not mutate siblings, unrelated user checkouts, or non-campaign branches.
 
-## One-off workflow cleanup
+Account Project creation was previously denied to Actions; the current local
+account query lacks read:project. The board is not marked complete and account
+credentials/scopes are not changed as repo hygiene. This is not a runtime gate.
 
-The administrative job token was limited to `contents: read` and `issues: write` plus GitHub's metadata read. Both runs used `chore/snapshot-tracking-setup`, with exact repository/branch checks and fixed campaign issue IDs. No runtime source was checked out or executed by the setup script.
+## Resume
 
-The temporary `.github/workflows/snapshot-tracking-setup.yml` was removed from that branch in commit `c46c5ed34063312f6857120e4d8b953f08d9a617`. It was never merged into main or the runtime integration branch. No ongoing administrative workflow, recurring monitor or background dispatcher remains. Existing repository benchmark workflows may have triggered automatically on the administrative pushes; they are not claimed as runtime qualification.
-
-## Work state — all NOT STARTED
-
-| Package | Issue | Prerequisites / meaning of completion |
-|---|---|---|
-| SI-00 | #153 | Later implementation authorization; accepted domains/seams/activation plan, native capability and valid baseline-evidence bootstrap |
-| SI-01 | #147 | SI-00; G-FOUNDATION certifies inert primitives and records production_protocol_enabled=false |
-| SI-02 | #148 | Pure portion after SI-00; actual primitive integration after G-FOUNDATION; no production activation |
-| SI-03 | #149 | Integrated SI-01/02 and accepted composite ADR; ordered slices culminate in coordinated G-ACTIVATION on disposable stores |
-| SI-04 | #150 | Actual activated SI-03 candidate; causal proof of public paths and all required experiments |
-| SI-05 | #151 | Frozen SI-04 candidate; native/resource qualification and real comparison against registered budgets |
-
-G-ACTIVATION is a source-integration gate, not production rollout, SI-05 qualification or owner authorization to migrate data. One WP may use multiple reviewed PRs, but coupled acceptance remains one obligation. Worker PRs target `fix/snapshot-integrity`; issue closure requires its own DoD, evidence and integrated SHA. Completing GitHub relationships does not complete any work package.
-
-## Review dispositions and resume
-
-Integrated-review A01–A04 remain specified, not implemented. A05's evidence gate remains specified: the historical zero-artifact/echo-only benchmark aggregator has not been corrected by this tracking operation. A06 is now complete for native hierarchy/dependencies and still blocked for the account-level Project, with the exact attempt recorded above. The original CI/ENOENT and source defects remain unresolved by administrative setup.
-
-Before later implementation, read the live specification, campaign and WP criteria, reconcile the actual integration head, verify prerequisites and ownership, and retain the accepted resource-domain, path-resolution, activation and pending-scan contracts. Preserve the earlier failed Copilot assignment receipt; no coding agent was launched or retried. Qualification remains SI-05, and main merge/release remains a separate owner decision.
+Read this file, the current issue/PR and accepted contract. Fetch and compare
+exact head before writes; preserve concurrent commits and avoid force-push.
+Use a fresh scoped branch for remaining work, not a resurrected merged PR.
+Record exact binaries/checkouts; retain original failure evidence. Close a WP
+only after all five axioms and its reviewed integration DoD are met.
