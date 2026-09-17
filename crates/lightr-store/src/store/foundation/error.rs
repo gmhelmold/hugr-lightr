@@ -36,12 +36,25 @@ pub struct PublicationFailure {
 }
 
 impl PublicationFailure {
-    pub fn new(operation_id: [u8; 16], outcome: PublicationOutcome, phase: Phase,
-               relative_path: Option<PathBuf>, cause: io::Error) -> Self {
-        Self { operation_id, outcome, phase, relative_path, cause }
+    pub fn new(
+        operation_id: [u8; 16],
+        outcome: PublicationOutcome,
+        phase: Phase,
+        relative_path: Option<PathBuf>,
+        cause: io::Error,
+    ) -> Self {
+        Self {
+            operation_id,
+            outcome,
+            phase,
+            relative_path,
+            cause,
+        }
     }
 
-    pub fn original_io(&self) -> &io::Error { &self.cause }
+    pub fn original_io(&self) -> &io::Error {
+        &self.cause
+    }
 
     pub fn into_legacy(self) -> LightrError {
         LightrError::Io(io::Error::new(self.cause.kind(), self))
@@ -58,11 +71,15 @@ impl PublicationFailure {
 impl fmt::Display for PublicationFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?} at {:?}", self.outcome, self.phase)?;
-        if let Some(path) = &self.relative_path { write!(f, " ({})", path.display())?; }
+        if let Some(path) = &self.relative_path {
+            write!(f, " ({})", path.display())?;
+        }
         write!(f, ": {}", self.cause)
     }
 }
 
 impl Error for PublicationFailure {
-    fn source(&self) -> Option<&(dyn Error + 'static)> { Some(&self.cause) }
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(&self.cause)
+    }
 }

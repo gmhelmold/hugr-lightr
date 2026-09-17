@@ -16,9 +16,16 @@ pub enum Assurance {
 }
 
 impl Assurance {
+    /// Expected OS profile only; this does not qualify a volume or sync operation.
     pub fn native() -> Self {
-        #[cfg(unix)] { Self::UnixFileDirectory }
-        #[cfg(windows)] { Self::WindowsFile }
+        #[cfg(unix)]
+        {
+            Self::UnixFileDirectory
+        }
+        #[cfg(windows)]
+        {
+            Self::WindowsFile
+        }
     }
 }
 
@@ -45,16 +52,32 @@ pub(super) fn invalid(message: impl Into<String>) -> io::Error {
 
 impl Readiness {
     pub fn new(digest: Digest, length: u64, assurance: Assurance) -> Self {
-        Self { digest, length, assurance }
+        Self {
+            digest,
+            length,
+            assurance,
+        }
     }
-    pub fn digest(&self) -> Digest { self.digest }
-    pub fn length(&self) -> u64 { self.length }
-    pub fn assurance(&self) -> Assurance { self.assurance }
+    pub fn digest(&self) -> Digest {
+        self.digest
+    }
+    pub fn length(&self) -> u64 {
+        self.length
+    }
+    pub fn assurance(&self) -> Assurance {
+        self.assurance
+    }
 
     pub fn encode(&self) -> io::Result<Vec<u8>> {
-        let body = serde_json::to_vec(&Body { version: 1, digest: self.digest.to_hex(),
-                                            length: self.length, assurance: self.assurance })?;
-        if body.len() > LIMIT { return Err(invalid("readiness body exceeds bound")); }
+        let body = serde_json::to_vec(&Body {
+            version: 1,
+            digest: self.digest.to_hex(),
+            length: self.length,
+            assurance: self.assurance,
+        })?;
+        if body.len() > LIMIT {
+            return Err(invalid("readiness body exceeds bound"));
+        }
         let mut frame = Vec::with_capacity(44 + body.len());
         frame.extend_from_slice(TAG);
         frame.extend_from_slice(&(body.len() as u32).to_le_bytes());
@@ -71,9 +94,13 @@ impl Readiness {
     pub fn read(reader: &mut impl Read) -> io::Result<Self> {
         let mut header = [0u8; 12];
         reader.read_exact(&mut header)?;
-        if &header[..8] != TAG { return Err(invalid("bad readiness tag")); }
+        if &header[..8] != TAG {
+            return Err(invalid("bad readiness tag"));
+        }
         let length = u32::from_le_bytes(header[8..].try_into().expect("fixed header")) as usize;
-        if length > LIMIT { return Err(invalid("readiness declared length exceeds bound")); }
+        if length > LIMIT {
+            return Err(invalid("readiness declared length exceeds bound"));
+        }
         let mut tail = vec![0u8; length + 32];
         reader.read_exact(&mut tail)?;
         let mut extra = [0];
@@ -93,11 +120,20 @@ impl Readiness {
             return Err(invalid("readiness checksum mismatch"));
         }
         let body: Body = serde_json::from_slice(&tail[..length])?;
-        if body.version != 1 || body.digest.len() != 64 ||
-            !body.digest.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+        if body.version != 1
+            || body.digest.len() != 64
+            || !body
+                .digest
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
             return Err(invalid("invalid readiness version or digest"));
         }
         let digest = Digest::from_hex(&body.digest).map_err(|e| invalid(e.to_string()))?;
-        Ok(Self { digest, length: body.length, assurance: body.assurance })
+        Ok(Self {
+            digest,
+            length: body.length,
+            assurance: body.assurance,
+        })
     }
 }
