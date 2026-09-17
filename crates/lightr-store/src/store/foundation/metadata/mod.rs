@@ -20,3 +20,6 @@ mod failure_tests;
 mod publish_tests;
 #[cfg(test)]
 mod readiness_tests;
+
+#[cfg(test)]
+mod robustness_tests;

@@ -60,6 +60,12 @@ impl<R: Read> Read for Capture<R> {
             ));
         }
         let count = self.reader.read(&mut output[..limit])?;
+        if count > limit {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "reader exceeded supplied buffer",
+            ));
+        }
         self.bytes.extend_from_slice(&output[..count]);
         Ok(count)
     }

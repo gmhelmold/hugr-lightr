@@ -123,7 +123,11 @@
       "store::foundation::metadata::readiness_tests::frozen_si00_readiness_vectors_are_exact",
       "store::foundation::metadata::readiness_tests::resigned_invalid_schema_is_rejected_not_just_bad_checksums",
       "store::foundation::metadata::readiness_tests::trailing_io_error_is_not_misread_as_eof",
-      "store::foundation::metadata::readiness_tests::zero_length_and_all_digest_bytes_roundtrip"
+      "store::foundation::metadata::readiness_tests::zero_length_and_all_digest_bytes_roundtrip",
+      "store::foundation::metadata::robustness_tests::metadata_replaced_staging_name_cannot_install_other_bytes",
+      "store::foundation::metadata::robustness_tests::readiness_capture_rejects_invalid_reader_count_without_panicking",
+      "store::foundation::metadata::robustness_tests::metadata_final_cleanup_barrier_failure_preserves_confirmation",
+      "store::cas::owned_temp::tests::successful_explicit_cleanup_does_not_clean_a_successor_allocation"
     ],
     "lightr_index": [
       "index::tests::mod_tests_ops::test_snapshot_hydrate_roundtrip",

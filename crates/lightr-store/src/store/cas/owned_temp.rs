@@ -13,6 +13,7 @@ const ATTEMPTS: usize = 32;
 
 pub(crate) struct OwnedTemp {
     dir: PathBuf,
+    cleanup_done: bool,
 }
 
 impl OwnedTemp {
@@ -37,7 +38,12 @@ impl OwnedTemp {
                 builder.mode(0o700);
             }
             match builder.create(&dir) {
-                Ok(()) => return Ok(Self { dir }),
+                Ok(()) => {
+                    return Ok(Self {
+                        dir,
+                        cleanup_done: false,
+                    })
+                }
                 Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
                 Err(e) => return Err(e),
             }
@@ -51,7 +57,14 @@ impl OwnedTemp {
     /// Complete cleanup explicitly after a new checked writer installed payload.
     /// Legacy callers keep their existing best-effort Drop behavior.
     pub(crate) fn finish(self) -> io::Result<()> {
-        fs::remove_dir(&self.dir)
+        self.finish_with(|path| fs::remove_dir(path))
+    }
+
+    fn finish_with(mut self, remove: impl FnOnce(&Path) -> io::Result<()>) -> io::Result<()> {
+        remove(&self.dir)?;
+        // After releasing the reservation this guard no longer owns that name.
+        self.cleanup_done = true;
+        Ok(())
     }
 
     pub(crate) fn payload(&self) -> PathBuf {
@@ -61,6 +74,9 @@ impl OwnedTemp {
 
 impl Drop for OwnedTemp {
     fn drop(&mut self) {
+        if self.cleanup_done {
+            return;
+        }
         let payload = self.payload();
         // A copied Windows read-only attribute belongs to our unpublished file,
         // not the source. Clear it only when necessary to clean up that file.

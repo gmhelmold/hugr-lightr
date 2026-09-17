@@ -201,9 +201,14 @@ pub(super) fn install_with(
             io::Error::new(io::ErrorKind::InvalidData, "staged metadata was truncated"),
         ));
     }
-    drop(file);
+    // The name must still identify the file whose bytes we verified. Keep the
+    // handle alive through rename; a path-only replacement is not confirmation.
+    // Stable managed ancestors remain a caller precondition, not C12 coverage.
+    crate::store::foundation::verify_file_path(&file, &temporary)
+        .map_err(|e| fail(Stage::Verify, Visible::Unchanged, e))?;
     ops.rename(&temporary, &destination)
         .map_err(|e| fail(Stage::Rename, Visible::MayBeInstalled, e))?;
+    drop(file);
     ops.sync_directory(parent)
         .map_err(|e| fail(Stage::SyncDirectory, Visible::InstalledUnconfirmed, e))?;
     staging

@@ -2,6 +2,14 @@ name: SI01 wire and publication primitives
 on:
   pull_request:
     branches: [fix/snapshot-integrity]
+    paths:
+      - 'crates/lightr-store/**'
+      - 'crates/lightr-core/**'
+      - 'Cargo.*'
+      - 'rust-toolchain.toml'
+      - 'scripts/si01/**'
+      - 'docs/plans/snapshot-integrity/bootstrap/**'
+      - '.github/workflows/si01-primitives.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,6 +21,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
+      CARGO_BUILD_JOBS: '2'
       CARGO_INCREMENTAL: '0'
       CARGO_TERM_COLOR: never
     steps:
