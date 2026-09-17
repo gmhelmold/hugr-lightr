@@ -1,18 +1,16 @@
 # ADR-0020 — Snapshot integrity: bounded metadata and coordinated activation
 
-- **Status:** Proposed; requires recorded owner/TechLead acceptance before SI-01 protocol implementation.
+- **Status:** Accepted as design on 2026-09-17 by the coordinator under the owner's continuation-through-closure mandate; see the review record below. This is not runtime qualification.
 - **Date:** 2026-09-17
 - **Scope:** campaign #152, bootstrap #153, PR #154. No protocol is activated by this document.
 - **Contract:** execution specification v2.2 at `e30811971f6a1c2a1e2fdb0a91dc8ccf9a06879d`.
 
-## Compatibility decisions requiring ratification
+## Accepted compatibility decisions
 
 ADR-0009 remains the content-plane foundation. ADR-0010's stat-only identity
-may remain a status optimization but would be superseded for snapshot publication
-upon acceptance:
+remains a status optimization but is superseded for new-protocol snapshot publication:
 a stable source must be represented by this capture's bytes. ADR-0017's
-Windows symlink-copy fallback would be superseded upon acceptance for exact
-materialization by
+Windows symlink-copy fallback is superseded for new-protocol exact materialization by
 preserve-or-reject representation/capability classes. Native validation is a
 mandatory campaign qualification gate rather than a postponed runbook claim.
 ADR-0012 requires actual numerical comparison; an echo-only job is not a gate.
@@ -23,9 +21,11 @@ u16 name length. Do not confuse it with the 72-byte LRR1 Action Cache record.
 New envelopes must have a tag disjoint from *semantically valid* legacy names,
 not merely from the prefix of an unrelated record type.
 
-## Selected bounded wire proposal
+## Selected bounded wire contract
 
-Only metadata is framed; payload CAS and LMF1 are unchanged. Every frame is
+Only metadata is framed; payload CAS and LMF1 are unchanged. Bounded control-record
+JSON is an explicit exception to ADR-0009's border-only JSON rule, not a JSON
+manifest or payload format. Every frame is
 `8-byte tag | u32-LE body length | exact UTF-8 JSON body | 32-byte BLAKE3`.
 The checksum covers tag, length and body with the domain
 `lightr/snapshot-integrity/metadata/v1/`. It detects accidental damage, not an
@@ -92,6 +92,21 @@ rollout are explicit operational preconditions, not a claimed access control.
 
 ## Acceptance record
 
-Status remains Proposed until acceptance identity/date and the compatibility
-review are recorded. Passing Python validators or existing native unit tests
-cannot supply that acceptance. Until then, no SI-01 READY or G-FOUNDATION claim.
+Reviewer and decision-maker: ChatGPT, author/coordinator, under the owner's
+explicit `OK pode executar`, `pode seguir ate fechar` and `siga` mandate.
+No independent human, agent or owner line-by-line review is represented.
+[Final contract/compatibility review](../plans/snapshot-integrity/bootstrap/FINAL-CONTRACT-REVIEW.md)
+ratifies the schema, baseline caller/resource map, error/support surface and
+G-FOUNDATION/G-ACTIVATION boundary. The review preserves all five package axioms.
+
+The ten frozen native-authored vectors have decoded SHA-256
+`8e0a4b7c52f99e12a8ecf91a4bdc706b547f5524d8e7464d06972e0b5b3221df`.
+Checks use the locked native hash helper and independent reference conformance;
+normal CI does not regenerate expectations. This proves specification-oracle
+conformance, not a production Rust codec or legal runtime state transitions.
+
+Design acceptance is complete. SI-00 handoff is still conditional on its final
+reviewed integration receipt; this ADR alone does not mark a package DONE,
+start SI-01, establish G-FOUNDATION, activate the protocol, migrate real data,
+merge main or authorize release. A07's narrow existing-protocol repairs remain
+explicitly separate from implementing this new protocol.
