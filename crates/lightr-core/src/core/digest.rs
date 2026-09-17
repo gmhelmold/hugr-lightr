@@ -16,6 +16,27 @@ impl Digest {
         Ok(Digest(*hasher.finalize().as_bytes()))
     }
 
+    /// Hash a reader without mapping mutable files or buffering the whole input.
+    /// Returns the digest and the actual byte count; interrupted reads are retried.
+    pub fn of_reader(reader: &mut impl std::io::Read) -> std::io::Result<(Self, u64)> {
+        let mut hasher = blake3::Hasher::new();
+        let mut buffer = [0u8; 64 * 1024];
+        let mut length = 0u64;
+        loop {
+            let count = match reader.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(count) => count,
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(error) => return Err(error),
+            };
+            length = length.checked_add(count as u64).ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "stream length overflow")
+            })?;
+            hasher.update(&buffer[..count]);
+        }
+        Ok((Self(*hasher.finalize().as_bytes()), length))
+    }
+
     pub fn to_hex(&self) -> String {
         let mut s = String::with_capacity(64);
         for b in &self.0 {
