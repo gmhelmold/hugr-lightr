@@ -85,7 +85,7 @@ def main():
         archive = subprocess.check_output(['git', 'archive', '--format=zip', 'HEAD'], cwd=ROOT)
         (out/'source.zip').write_bytes(archive)
         with tempfile.TemporaryDirectory(prefix='si01-publication-controls-') as temp:
-            root = Path(temp)
+            root = Path(temp).resolve()
             with zipfile.ZipFile(io.BytesIO(archive)) as z:
                 for member in z.infolist():
                     require((root/member.filename).resolve().is_relative_to(root), 'unsafe archive entry')
