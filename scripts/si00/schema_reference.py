@@ -112,6 +112,8 @@ def body_check(kind, obj, hashfn):
         need(obj['phase'] in ('PREPARED','COMMIT_DECIDED'), 'unknown phase')
         refs = [named(obj[k]) for k in ('before', 'after')]
         need(all(r is None or r['name'] == obj['ref_name'] for r in refs), 'tuple name mismatch')
+        if obj['operation_kind'] in ('UNDO', 'ADOPT'):
+            need(refs[0] is not None, 'operation requires existing reference')
         if obj['operation_kind'] == 'UNTAG':
             need(refs[0] is not None and refs[1] is None, 'invalid untag transition')
             need(obj['slot'] is None and obj['expected_envelope'] is None, 'untag appends history')

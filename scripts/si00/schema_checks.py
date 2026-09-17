@@ -15,6 +15,8 @@ import unittest
 from pathlib import Path
 from schema_reference import DOMAIN, TAGS, LIMITS, REF_DOMAIN, Invalid, NativeHash, decode, frame, refrecord
 
+from goldens import golden_bytes
+
 HASH = None
 VECTORS = []
 
@@ -127,9 +129,10 @@ def main():
         for name,kind,obj in specimens():
             wire=encoded(kind,obj);values.append({'id':name,'kind':kind,'body':obj,'wire_hex':wire.hex(),'wire_sha256':hashlib.sha256(wire).hexdigest()})
         a.vectors.parent.mkdir(parents=True,exist_ok=True);a.vectors.write_text(json.dumps({'schema':1,'vectors':values},indent=2)+'\n')
-    VECTORS=json.loads(a.vectors.read_text())['vectors']
+    golden_raw=golden_bytes(a.vectors)
+    VECTORS=json.loads(golden_raw)['vectors']
     result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(SchemaChecks))
     a.result.parent.mkdir(parents=True,exist_ok=True)
-    a.result.write_text(json.dumps({'schema':1,'tests':result.testsRun,'failures':len(result.failures),'errors':len(result.errors),'skipped':len(result.skipped),'golden_sha256':hashlib.sha256(a.vectors.read_bytes()).hexdigest(),'generated_this_run':a.generate,'runtime_codec_tested':False},indent=2)+'\n')
+    a.result.write_text(json.dumps({'schema':1,'tests':result.testsRun,'failures':len(result.failures),'errors':len(result.errors),'skipped':len(result.skipped),'golden_sha256':hashlib.sha256(golden_raw).hexdigest(),'generated_this_run':a.generate,'runtime_codec_tested':False},indent=2)+'\n')
     return 0 if result.wasSuccessful() and result.testsRun==11 and not result.skipped else 1
 if __name__=='__main__':sys.exit(main())

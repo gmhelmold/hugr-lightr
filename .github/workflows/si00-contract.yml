@@ -29,8 +29,10 @@ jobs:
           cargo +1.96.0 build --locked -p lightr-core --example si00_hash
           cp target/debug/examples/si00_hash si00-contract/si00_hash
           sha256sum si00-contract/si00_hash > si00-contract/hash-binary.sha256
-      - name: Author golden candidate and test bounds (not acceptance)
-        run: python3 scripts/si00/schema_checks.py --hash-bin target/debug/examples/si00_hash --vectors si00-contract/schema-vectors.json --generate --result si00-contract/schema-result.json
+      - name: Verify immutable native-authored goldens without regeneration
+        run: |
+          python3 scripts/si00/schema_checks.py --hash-bin target/debug/examples/si00_hash --vectors docs/plans/snapshot-integrity/bootstrap/vectors/schema-vectors.json.gz --result si00-contract/schema-result.json
+          PYTHONPATH=scripts/si00 python3 -c "from goldens import golden_bytes; from pathlib import Path; Path('si00-contract/schema-vectors.json').write_bytes(golden_bytes(Path('docs/plans/snapshot-integrity/bootstrap/vectors/schema-vectors.json.gz')))"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

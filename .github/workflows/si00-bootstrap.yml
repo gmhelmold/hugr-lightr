@@ -3,10 +3,10 @@ name: SI00 bootstrap
 on:
   push:
     branches: [fix/snapshot-integrity]
-    paths: ['.github/workflows/**', 'scripts/si00/**', 'crates/**', 'Cargo.*', 'rust-toolchain.toml', 'docs/plans/snapshot-integrity/bootstrap/expected-tests.json']
+    paths: ['.github/workflows/**', 'scripts/si00/**', 'crates/**', 'Cargo.*', 'rust-toolchain.toml', 'docs/plans/snapshot-integrity/bootstrap/**']
   pull_request:
     branches: [fix/snapshot-integrity]
-    paths: ['.github/workflows/**', 'scripts/si00/**', 'crates/**', 'Cargo.*', 'rust-toolchain.toml', 'docs/plans/snapshot-integrity/bootstrap/expected-tests.json']
+    paths: ['.github/workflows/**', 'scripts/si00/**', 'crates/**', 'Cargo.*', 'rust-toolchain.toml', 'docs/plans/snapshot-integrity/bootstrap/**']
   workflow_dispatch:
 
 permissions:
