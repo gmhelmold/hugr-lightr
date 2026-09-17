@@ -26,7 +26,7 @@ G-ACTIVATION and SI-05 qualification. No coding subagent was launched.
 | Package | Issue | Current state |
 |---|---|---|
 | SI-00 | #153 | COMPLETED; #154 merged as `0c48886d2c82e671c33466ca0d5ff1640f90985d` |
-| SI-01 | #147 | IN PROGRESS; #155 increment merged as `b7ed8953df506f00f77515bcaabc117afc15ee40`; #156 metadata work remains unmerged |
+| SI-01 | #147 | IN PROGRESS; #155 and #156 increments MERGED; latest code integration `1dff1b927c8e8f2aeda4a4145651fc48277f590d`; full package not yet accepted |
 | SI-02 | #148 | Isolated portion permitted after SI-00; full integration/DoD waits for G-FOUNDATION |
 | SI-03 | #149 | Waits for accepted SI-01/02; owns coordinated public activation |
 | SI-04 | #150 | Qualifies actual SI-03 activated candidate, not nonexistent behavior |
@@ -40,24 +40,28 @@ No relation was removed by this maintenance update.
 
 ## Latest accepted increment
 
-[Lock release/integration receipt](evidence/SI-01-LOCK-RELEASE-INTEGRATION.md).
-Source `8d1276858277fcf507038fa10d41b64bf54b1877`, actual CI merge
-`e20ebe915fb67faf2437888e00fdbf27d3b2fb1e`, tree
-`fed8b882d52cb10571bb24d95430c2d7dabfb9de`. The actual #155 integration merge
-has that exact tree and ordered parents. Workspace, native matrix, full F0-F5,
-contract and causal controls pass; owner-specific Unix release is fixed.
+[Metadata integration receipt](evidence/SI-01-METADATA-INTEGRATION.md).
+Source `17dbfa5b0d455f7121cda68724f31736a2b658ef`, actual tested PR merge
+`6647555a0bd9ab8553dcded5ad19d2e512cf03a1`, integrated as
+`1dff1b927c8e8f2aeda4a4145651fc48277f590d`. Both merges have tree
+`4caed236fbaea49ddc68f0caa03a81b49483deaf` and the same ordered parents.
+Workspace, five native profiles, full F0-F5, immutable contract and causal
+controls pass. The original Intel DNS failure is retained separately from the
+successful same-source retry. Three new metadata/cleanup defects are fixed.
+Earlier lock-release evidence remains in its own historical receipt.
 
 `production_protocol_enabled=false`. **G-FOUNDATION and G-ACTIVATION are not
-established.** Complete CoW/fallback, inspection cancellation, topology,
-resource/metadata/reaping and caller obligations before accepting SI-01.
-Preserve #156's separate changes and reconcile its diff against the integrated
-foundation; do not restore an obsolete duplicate codec or discard shared code.
+established.** Finish CoW/fallback, checkpointed existing-object inspection,
+topology/resource/reaping, typed metadata caller integration and remaining
+qualification before accepting SI-01. PR #156 no longer needs reconciliation;
+use the integrated metadata helper and shared decoder in subsequent work.
 
 ## Hygiene and external boundary
 
 Only verified merged/retired campaign branches are eligible for removal. The
-admin branch's unique history is archived as a small Git bundle in the latest
-receipt; no administrative workflow remains active. Branch #156 remains live.
+admin branch's unique history is archived in the prior lock-release receipt;
+no administrative workflow remains active. Branch #156 was retired only after
+its reviewed merge, exact-tip and ancestry checks; its history is retained.
 Do not mutate siblings, unrelated user checkouts, or non-campaign branches.
 
 Account Project creation was previously denied to Actions; the current local
