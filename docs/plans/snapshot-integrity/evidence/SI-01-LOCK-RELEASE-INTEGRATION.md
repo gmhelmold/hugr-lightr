@@ -83,7 +83,7 @@ rewritten as success or given an invented internal cause.
 
 ## Repository hygiene
 
-The closed SI-00 and SI-01 delivery branches will be removed only after exact
+The closed SI-00 and SI-01 delivery branches were removed after exact
 head and merged-ancestry checks. The retired admin branch has zero net diff
 against its base and no open PR. Its unique history is preserved in
 [the compact Git bundle](archive/snapshot-tracking-setup-20260917.bundle),
@@ -92,7 +92,11 @@ The bundle requires base `e30811971f6a1c2a1e2fdb0a91dc8ccf9a06879d`, which remai
 in repository history. `git bundle verify` passed. It is archival data, not an
 active workflow. No secrets or executable deployment artifact are stored in it.
 
-Cleanup status at authoring: PENDING read-back; update after actual deletion.
+Cleanup VERIFIED: work/si-00-bootstrap at b558303, work/si-01-foundation at
+8d12768 and chore/snapshot-tracking-setup at c46c5ed were deleted with
+expected-tip guards. All three absence checks passed. No commit history was
+rewritten; the two delivery histories remain in integration and the retired
+admin history remains in the versioned bundle.
 PR #156 / `work/si-01-wire-primitives` contains unmerged metadata changes and is
 explicitly preserved. No blind deletion of other branches or user checkouts.
 The duplicate CI path filter was removed. The account Project query still lacks
