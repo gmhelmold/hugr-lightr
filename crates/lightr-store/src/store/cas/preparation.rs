@@ -54,8 +54,8 @@ impl StagedFile {
                 cause,
             )
         };
-        let owned = OwnedTemp::new(parent, "stage")
-            .map_err(|error| failure(Phase::Stage, error))?;
+        let owned =
+            OwnedTemp::new(parent, "stage").map_err(|error| failure(Phase::Stage, error))?;
         let mut options = OpenOptions::new();
         options.read(true).write(true).create_new(true);
         #[cfg(unix)]
@@ -66,16 +66,19 @@ impl StagedFile {
         let mut file = options
             .open(owned.payload())
             .map_err(|error| failure(Phase::Stage, error))?;
-        let copied = copy_bounded(reader, &mut file)
-            .map_err(|error| failure(Phase::Stage, error))?;
+        let copied =
+            copy_bounded(reader, &mut file).map_err(|error| failure(Phase::Stage, error))?;
         file.rewind()
             .map_err(|error| failure(Phase::Verify, error))?;
-        let (digest, length) = Digest::of_reader(&mut file)
-            .map_err(|error| failure(Phase::Verify, error))?;
+        let (digest, length) =
+            Digest::of_reader(&mut file).map_err(|error| failure(Phase::Verify, error))?;
         if length != copied || expected.is_some_and(|value| value != (digest, length)) {
             return Err(failure(
                 Phase::Verify,
-                io::Error::new(io::ErrorKind::InvalidData, "staged digest or length mismatch"),
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "staged digest or length mismatch",
+                ),
             ));
         }
         sync(&file).map_err(|error| failure(Phase::PayloadSync, error))?;
@@ -125,7 +128,10 @@ fn copy_bounded(reader: &mut impl Read, writer: &mut impl Write) -> io::Result<u
         }
         // Defend the copy boundary even against an invalid custom Read impl.
         let bytes = buffer.get(..size).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "reader exceeded supplied buffer")
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "reader exceeded supplied buffer",
+            )
         })?;
         total = total
             .checked_add(size as u64)

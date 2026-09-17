@@ -43,7 +43,10 @@ fn stage_roundtrips_empty_and_multiple_buffers() {
 fn stage_rejects_digest_and_length_mismatch_before_sync() {
     let parent = tempdir().unwrap();
     fs::write(parent.path().join("existing"), b"keep").unwrap();
-    for expected in [(Digest::of_bytes(b"wrong"), 4), (Digest::of_bytes(b"data"), 5)] {
+    for expected in [
+        (Digest::of_bytes(b"wrong"), 4),
+        (Digest::of_bytes(b"data"), 5),
+    ] {
         let result = StagedFile::copy_with_sync(
             parent.path(),
             &mut b"data".as_slice(),
@@ -165,8 +168,14 @@ fn bounded_copy_handles_interrupt_short_write_and_write_error() {
         }
     }
     let mut output = Short(Vec::new());
-    assert_eq!(copy_bounded(&mut Interrupted(true), &mut output).unwrap(), 0);
-    assert_eq!(copy_bounded(&mut b"data".as_slice(), &mut output).unwrap(), 4);
+    assert_eq!(
+        copy_bounded(&mut Interrupted(true), &mut output).unwrap(),
+        0
+    );
+    assert_eq!(
+        copy_bounded(&mut b"data".as_slice(), &mut output).unwrap(),
+        4
+    );
     assert_eq!(output.0, b"data");
     struct Broken;
     impl Write for Broken {
