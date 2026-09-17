@@ -4,8 +4,8 @@
 //! Issuing a lease-bound PreparedObject and writing receipts are separate,
 //! not-yet-published SI-01 work. Existing Store methods are unchanged.
 
-pub mod metadata;
 mod error;
+pub mod metadata;
 mod ready;
 
 pub use error::{Phase, PublicationFailure, PublicationOutcome};

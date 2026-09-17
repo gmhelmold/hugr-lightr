@@ -67,8 +67,7 @@ fn checked_metadata_replaces_bytes_and_cleans_only_own_staging() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join("foreign"), b"untouched").unwrap();
     for bytes in [b"old".as_slice(), b"newer".as_slice(), b"".as_slice()] {
-        let report =
-            install_metadata(dir.path(), "entry", bytes, Assurance::native()).unwrap();
+        let report = install_metadata(dir.path(), "entry", bytes, Assurance::native()).unwrap();
         assert_eq!(report.length, bytes.len() as u64);
         assert_eq!(report.assurance, Assurance::native());
         assert_eq!(fs::read(dir.path().join("entry")).unwrap(), bytes);

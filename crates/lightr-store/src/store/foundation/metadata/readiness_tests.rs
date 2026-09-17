@@ -1,4 +1,4 @@
-use super::{Assurance, ReadinessFrame, Readiness, MAX_READY_BODY};
+use super::{Assurance, Readiness, ReadinessFrame, MAX_READY_BODY};
 use lightr_core::Digest;
 use std::io::{self, Read};
 
