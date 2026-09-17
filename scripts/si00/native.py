@@ -44,7 +44,9 @@ def main() -> int:
                    machine=platform.machine(), os=platform.platform(), toolchain='1.96.0',
                    run_id=os.environ.get('GITHUB_RUN_ID'), event=os.environ.get('GITHUB_EVENT_NAME'),
                    requested_sha=os.environ.get('GITHUB_SHA'), commands=[], binaries=[], artifacts=[])
-    receipt['tracked_dirty_before'] = bool(git('status', '--porcelain', '--untracked-files=no'))
+    receipt['tracked_status_before'] = git('status', '--porcelain', '--untracked-files=no')
+    receipt['tracked_dirty_before'] = bool(receipt['tracked_status_before'])
+    print('tracked_status_before=' + json.dumps(receipt['tracked_status_before']), flush=True)
     (out / 'input-manifest.json').write_text(json.dumps(input_manifest(ROOT), indent=2) + '\n')
     (out / 'requirements.json').write_text(json.dumps(policy, indent=2) + '\n')
     (out / 'expected.json').write_text(json.dumps(expected, indent=2) + '\n')
@@ -103,7 +105,9 @@ def main() -> int:
     except Exception as exc:
         receipt['error'] = f'{type(exc).__name__}: {exc}'; failed = True
     finally:
-        receipt['tracked_dirty_after'] = bool(git('status', '--porcelain', '--untracked-files=no'))
+        receipt['tracked_status_after'] = git('status', '--porcelain', '--untracked-files=no')
+        receipt['tracked_dirty_after'] = bool(receipt['tracked_status_after'])
+        print('tracked_status_after=' + json.dumps(receipt['tracked_status_after']), flush=True)
         if fingerprint(ROOT) != expected['input_fingerprint']: failed = True
         receipt['status'] = 'EXECUTION_FAILED' if failed else 'EXECUTED'
         receipt['artifacts'] = [{'path': p.relative_to(out).as_posix(), 'sha256': sha256(p)}
