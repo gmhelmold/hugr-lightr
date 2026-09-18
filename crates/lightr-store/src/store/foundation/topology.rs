@@ -89,6 +89,89 @@ impl TopologyInspection {
     }
 }
 
+/// Read-only destination inspection for materializing a stored snapshot.
+///
+/// No live source is accepted or inferred. This is NOT a writable destination
+/// capability: it neither checks emptiness nor creates output, acquires a Store
+/// lease, or excludes namespace/content changes. C12 write adapters remain separate.
+/// The same conservative native profile limits as TopologyInspection apply.
+///
+/// ```no_run
+/// use lightr_store::store::foundation::{topology::DestinationInspection, Wait};
+/// use std::{io, path::Path};
+/// fn inspect_output(protected: &[&Path], output: &Path) -> io::Result<()> {
+///     let observation = DestinationInspection::inspect(protected, output, Wait::Try)?;
+///     observation.revalidate(Wait::Try)?;
+///     // A missing target exposes no handle to its existing ancestor.
+///     assert_eq!(observation.is_missing(), observation.existing_directory().is_none());
+///     Ok(())
+/// }
+/// ```
+pub struct DestinationInspection {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    inner: topology_native::Inspection,
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    _private: (),
+}
+
+impl DestinationInspection {
+    /// Check only the requested destination against all existing protected roots.
+    /// Root completeness remains the caller's obligation. The nearest existing
+    /// ancestor is retained internally for an absent suffix, never as the target.
+    pub fn inspect(protected: &[&Path], destination: &Path, wait: Wait<'_>) -> io::Result<Self> {
+        wait.check()?;
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            Ok(Self {
+                inner: topology_native::Inspection::inspect_destination(
+                    protected,
+                    destination,
+                    wait,
+                )?,
+            })
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = (protected, destination);
+            Err(unsupported())
+        }
+    }
+
+    /// Repeat the observation, not a namespace lock or permission for later writes.
+    pub fn revalidate(&self, wait: Wait<'_>) -> io::Result<()> {
+        wait.check()?;
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            let observed = &self.inner;
+            observed.revalidate(wait)
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            Err(unsupported())
+        }
+    }
+
+    /// Borrow only the exact existing target. None means the destination was
+    /// absent; its ancestor is NOT an output directory. O_RDONLY restricts data
+    /// I/O, not all metadata operations on File. No emptiness/freshness is implied.
+    pub fn existing_directory(&self) -> Option<&File> {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            self.inner.destination_handle()
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            None
+        }
+    }
+
+    /// True only for a captured missing suffix. Revalidation does not update
+    /// an old observation into a newly existing directory: create a new inspection.
+    pub fn is_missing(&self) -> bool {
+        self.existing_directory().is_none()
+    }
+}
+
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn unsupported() -> io::Error {
     io::Error::new(

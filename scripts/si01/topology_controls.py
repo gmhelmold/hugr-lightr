@@ -30,6 +30,20 @@ CASES = [
      'if tail.iter().any(|p| *p == b"." || *p == b"..") {',
      'if false && tail.iter().any(|p| *p == b"." || *p == b"..") {',
      "unix::topology_missing_suffix_dot_and_dangling_link_are_explicitly_rejected", "unresolved dot components were accepted"),
+    ("destination-protected-overlap", "topology_native.rs",
+     "if protected.contains(subject) || subject.contains(protected) {",
+     "if false && (protected.contains(subject) || subject.contains(protected)) {",
+     "store::foundation::destination_tests::unix::destination_checks_each_protected_root_and_all_overlap_directions",
+     "protected destination was accepted"),
+    ("destination-missing-handle", "topology_native.rs",
+     "target.missing.is_empty().then_some(&target.object)",
+     "true.then_some(&target.object)",
+     "store::foundation::destination_tests::unix::destination_missing_target_never_exposes_its_existing_ancestor",
+     "ancestor exposed as destination"),
+    ("destination-revalidation", "topology.rs",
+     "observed.revalidate(wait)", "{ let _ = observed; wait.check() }",
+     "store::foundation::destination_tests::unix::destination_revalidation_detects_replacement_without_retargeting_handle",
+     "changed destination was accepted"),
 ]
 
 
@@ -63,6 +77,8 @@ def main():
     cargo = ["cargo", "+1.96.0", "test", "--locked", "-p", "lightr-store", "--lib"]
     suite = cargo + [PREFIX, "--", "--nocapture"]
     expected = r"test result: ok\. 20 passed; 0 failed; 0 ignored;"
+    destination_suite = cargo + ["store::foundation::destination_tests::", "--", "--nocapture"]
+    destination_expected = r"test result: ok\. 11 passed; 0 failed; 0 ignored;"
     try:
         require(not git("status", "--porcelain", "--untracked-files=no"), "tracked source dirty")
         archive = subprocess.check_output(["git", "archive", "--format=zip", "HEAD"], cwd=ROOT)
@@ -75,6 +91,8 @@ def main():
                 z.extractall(root)
             code, text = run(root, suite, "pristine")
             require(code == 0 and re.search(expected, text), "pristine suite absent or failed")
+            code, text = run(root, destination_suite, "destination-pristine")
+            require(code == 0 and re.search(destination_expected, text), "destination pristine suite absent or failed")
             for label, name, old, new, test, message in CASES:
                 path = root / BASE / name
                 original = path.read_text()
@@ -83,7 +101,7 @@ def main():
                 try:
                     code, _ = run(root, cargo + ["--no-run"], label + "-build")
                     require(code == 0, "mutant compilation failed: " + label)
-                    full = PREFIX + "tests::" + test
+                    full = test if test.startswith("store::") else PREFIX + "tests::" + test
                     code, text = run(root, cargo + [full, "--", "--exact"], label + "-test", 60)
                     require(code == 101 and f"test {full} ... FAILED" in text and message in text
                             and re.search(r"test result: FAILED\. 0 passed; 1 failed; 0 ignored;", text),
@@ -93,6 +111,8 @@ def main():
                     path.write_text(original)
             code, text = run(root, suite, "restored")
             require(code == 0 and re.search(expected, text), "restored suite failed")
+            code, text = run(root, destination_suite, "destination-restored")
+            require(code == 0 and re.search(destination_expected, text), "destination restored suite failed")
         receipt["status"] = "TOPOLOGY_CONTROLS_PASSED"
     except Exception as error:
         receipt["status"] = "FAILED"

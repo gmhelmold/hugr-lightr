@@ -43,12 +43,30 @@ pub(super) struct Inspection {
     cwd: File,
     requests: Vec<Request>,
     roots: usize,
+    destination: Option<usize>,
     observed: Vec<Resolved>,
 }
 impl Inspection {
     pub(super) fn inspect(
         protected: &[&Path],
         source: SourcePath<'_>,
+        destination: Option<&Path>,
+        wait: Wait<'_>,
+    ) -> io::Result<Self> {
+        Self::inspect_paths(protected, Some(source), destination, wait)
+    }
+
+    pub(super) fn inspect_destination(
+        protected: &[&Path],
+        destination: &Path,
+        wait: Wait<'_>,
+    ) -> io::Result<Self> {
+        Self::inspect_paths(protected, None, Some(destination), wait)
+    }
+
+    fn inspect_paths(
+        protected: &[&Path],
+        source: Option<SourcePath<'_>>,
         destination: Option<&Path>,
         wait: Wait<'_>,
     ) -> io::Result<Self> {
@@ -66,25 +84,30 @@ impl Inspection {
                 kind: Kind::Directory,
             })
             .collect();
-        let (path, kind) = match source {
-            SourcePath::Directory(path) => (path, Kind::Directory),
-            SourcePath::File(path) => (path, Kind::File),
-        };
-        requests.push(Request {
-            path: path.to_path_buf(),
-            kind,
-        });
-        if let Some(path) = destination {
+        if let Some(source) = source {
+            let (path, kind) = match source {
+                SourcePath::Directory(path) => (path, Kind::Directory),
+                SourcePath::File(path) => (path, Kind::File),
+            };
+            requests.push(Request {
+                path: path.to_path_buf(),
+                kind,
+            });
+        }
+        let destination = destination.map(|path| {
+            let index = requests.len();
             requests.push(Request {
                 path: path.to_path_buf(),
                 kind: Kind::ProposedDirectory,
             });
-        }
+            index
+        });
         let observed = snapshot(&cwd, &requests, protected.len(), wait)?;
         let result = Self {
             cwd,
             requests,
             roots: protected.len(),
+            destination,
             observed,
         };
         // Detect changes during acquisition rather than returning an already
@@ -113,9 +136,15 @@ impl Inspection {
         &self.observed[self.roots].object
     }
     pub(super) fn destination_is_missing(&self) -> bool {
-        self.observed
-            .get(self.roots + 1)
-            .is_some_and(|r| !r.missing.is_empty())
+        self.destination
+            .is_some_and(|index| !self.observed[index].missing.is_empty())
+    }
+
+    pub(super) fn destination_handle(&self) -> Option<&File> {
+        self.destination.and_then(|index| {
+            let target = &self.observed[index];
+            target.missing.is_empty().then_some(&target.object)
+        })
     }
 }
 

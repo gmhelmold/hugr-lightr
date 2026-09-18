@@ -59,6 +59,8 @@ class TopologyPolicyTests(unittest.TestCase):
             self.assertEqual(policy["required_tests"]["lightr_store"].count(prefix + name), 1)
         for profile, configuration in policy["profiles"].items():
             specific = configuration.get("required_tests", {}).get("lightr_store", [])
+            # Other reviewed increments may append their own required families.
+            specific = [name for name in specific if name.startswith(prefix)]
             if profile.startswith(("linux-", "macos-")):
                 self.assertEqual(set(specific), {prefix + "unix::" + name for name in native})
                 self.assertEqual(len(specific), 17)
