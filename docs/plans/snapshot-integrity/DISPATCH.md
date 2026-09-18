@@ -53,9 +53,12 @@ Existing-payload inspection now observes cooperative cancellation during the
 bounded hash. It preserves actual I/O failures, payload/receipt identities and
 same-key waiter error propagation; a distinct digest may progress. Full Store
 verification and four compiled local causal controls passed. All seven new
-method names were checked in all five native profiles. The mandatory-name
-policy itself was not extended; do not claim automated enforcement of those
-new names. Prior metadata and lock-release receipts remain historical evidence.
+method names were checked in all five native profiles. The follow-up native
+policy now requires those seven inspection-cancellation names explicitly.
+Five policy test methods cover their registration plus complete and missing,
+ignored (even allowlisted), or failed synthetic receipts. Synthetic controls
+are not native execution evidence. Prior metadata and lock-release receipts
+remain historical evidence; the policy follow-up requires its own current CI.
 
 `production_protocol_enabled=false`. **G-FOUNDATION and G-ACTIVATION are not
 established.** The inspection-cancellation increment is integrated; remaining
