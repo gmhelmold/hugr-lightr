@@ -15,7 +15,42 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[2]
 BASE = "crates/lightr-store/src/store/foundation/"
 PREFIX = "store::foundation::tree_plan::"
-CASES = [('duplicates', 'tree_plan.rs', 'if pair[0].path() == pair[1].path() {', 'if false && pair[0].path() == pair[1].path() {', 'tree_plan_duplicate_entries_of_every_kind_are_rejected', 'duplicate explicit entry accepted'), ('ancestor-kind', 'tree_plan.rs', 'if !matches!(entries[index], Entry::Dir { .. }) {', 'if false && !matches!(entries[index], Entry::Dir { .. }) {', 'tree_plan_non_directory_ancestors_are_rejected_in_all_entry_orders', 'non-directory ancestor accepted'), ('total-size', 'tree_plan.rs', 'if total != manifest.total_size {', 'if false && total != manifest.total_size {', 'tree_plan_declared_totals_and_sum_overflow_are_rejected', 'mismatched total accepted'), ('work-budget', 'tree_plan.rs', '.filter(|total| *total <= maximum)', '.filter(|total| *total <= maximum || true)', 'tree_plan_caller_budgets_include_repeated_components_and_link_text', 'work budget exceeded without failure'), ('normal-components', 'tree_plan.rs', 'if component.is_empty() || component == "." || component == ".." {', 'if false && (component.is_empty() || component == "." || component == "..") {', 'tree_plan_names_are_exact_relative_components_not_normalized_paths', 'invalid relative components accepted'), ('implied-directories', 'tree_plan.rs', 'directories.push(&path[..end]);', 'let _ = &path[..end];', 'tree_plan_unsorted_tree_preserves_entries_and_includes_implied_directories', 'assertion `left == right` failed')]
+CASES = [('duplicates',
+  'tree_plan.rs',
+  'if pair[0].path() == pair[1].path() {',
+  'if false && pair[0].path() == pair[1].path() {',
+  'tree_plan_duplicate_entries_of_every_kind_are_rejected',
+  'duplicate explicit entry accepted'),
+ ('ancestor-kind',
+  'tree_plan.rs',
+  'if !matches!(entries[index], Entry::Dir { .. }) {',
+  'if false && !matches!(entries[index], Entry::Dir { .. }) {',
+  'tree_plan_non_directory_ancestors_are_rejected_in_all_entry_orders',
+  'non-directory ancestor accepted'),
+ ('total-size',
+  'tree_plan.rs',
+  'if total != manifest.total_size {',
+  'if false && total != manifest.total_size {',
+  'tree_plan_declared_totals_and_sum_overflow_are_rejected',
+  'mismatched total accepted'),
+ ('work-budget',
+  'tree_plan.rs',
+  '.filter(|total| *total <= maximum)',
+  '.filter(|total| *total <= maximum || true)',
+  'tree_plan_caller_budgets_include_repeated_components_and_link_text',
+  'work budget exceeded without failure'),
+ ('normal-components',
+  'tree_plan.rs',
+  'if component.is_empty() || component == "." || component == ".." {',
+  'if false && (component.is_empty() || component == "." || component == "..") {',
+  'tree_plan_names_are_exact_relative_components_not_normalized_paths',
+  'invalid relative components accepted'),
+ ('implied-directories',
+  'tree_plan.rs',
+  'directories.push(&path[..end]);',
+  'let _ = &path[..end];',
+  'tree_plan_unsorted_tree_preserves_entries_and_includes_implied_directories',
+  'assertion `left == right` failed')]
 
 
 def main():
