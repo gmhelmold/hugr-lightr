@@ -15,6 +15,13 @@ STORE = "crates/lightr-store/src/store/"
 CAPTURE = "store::foundation::capture_cancellation_tests::"
 COPY = "store::cas::preparation::cancellation_tests::"
 CORE = "core::digest::checked_tests::"
+
+# Select the original module family; retain counts and portable log filenames.
+SUITES = [
+    ("lightr-core", CORE + "checked_hash_", "checked_hash_", 7),
+    ("lightr-store", CAPTURE + "capture_cancellation_", "capture_cancellation_", 8),
+    ("lightr-store", COPY + "checkpoint_", "checkpoint_", 7),
+]
 CASES = [
     ("copy-routing", "lightr-store", STORE+"foundation/publication.rs",
      "LeasedStagedFile::copy_with_wait(self, reader, expected, wait, id)",
@@ -67,10 +74,8 @@ def main():
         return result.returncode, (out/(label+".log")).read_text(errors="replace")
 
     def suite(root, label):
-        for crate, name, count in [("lightr-core","checked_hash_",7),
-                                   ("lightr-store","capture_cancellation_",8),
-                                   ("lightr-store","checkpoint_",7)]:
-            code,text=run(root,["cargo","+1.96.0","test","--locked","-p",crate,"--lib",name,"--","--test-threads=1"],label+"-"+name)
+        for crate, selection, name, count in SUITES:
+            code,text=run(root,["cargo","+1.96.0","test","--locked","-p",crate,"--lib",selection,"--","--test-threads=1"],label+"-"+name)
             need(code==0 and re.search(r"test result: ok\. "+str(count)+r" passed; 0 failed; 0 ignored; 0 measured; \d+ filtered out",text),"missing/failed suite "+name)
 
     try:
