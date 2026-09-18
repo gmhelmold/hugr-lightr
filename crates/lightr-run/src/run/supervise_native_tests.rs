@@ -260,15 +260,20 @@ fn stop_reaps_the_whole_process_group() {
     ];
     let (run_dir, t) = start(home.path(), tmp.path(), cmd, None);
 
+    let mut published_pid = None;
     let up = poll_until(10_000, || {
-        crate::run::ctl::ctl_sock_path(&run_dir).exists() && pidfile.exists()
+        if !crate::run::ctl::ctl_sock_path(&run_dir).exists() {
+            return false;
+        }
+        published_pid = pid_ready::read_complete_pid(&pidfile);
+        published_pid.is_some()
     });
-    assert!(up, "child must come up and publish the grandchild pid");
-
-    let grandchild = fs::read_to_string(&pidfile)
-        .ok()
-        .and_then(|s| s.trim().parse::<i32>().ok())
-        .expect("grandchild pid");
+    if !up {
+        let _ = stop(&run_dir, 1);
+        let _ = t.join();
+        panic!("child must publish a complete positive grandchild pid");
+    }
+    let grandchild = published_pid.expect("validated grandchild pid");
     assert!(alive(grandchild), "grandchild must be alive before stop");
 
     // The group SIGTERM (then SIGKILL) must reach the grandchild, not just `sh`.
@@ -385,3 +390,6 @@ fn supervisor_memory_cap_plumbed() {
         );
     }
 }
+
+#[path = "supervise_native_pid_tests.rs"]
+mod pid_ready;
