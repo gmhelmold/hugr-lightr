@@ -33,6 +33,29 @@ CI (`.github/workflows/ci.yml`) additionally enforces:
 - **Windows cross-clippy** (`--target x86_64-pc-windows-gnu -D warnings`) —
   catches cfg-gated dead code on the platform you didn't build.
 
+## Integration and aggregate gate
+
+The same `.github/workflows/ci.yml` runs for PRs targeting `main` and
+`fix/snapshot-integrity`. `Required CI` fails unless all nine mandatory job
+results are exactly `success`; a failed, skipped, cancelled or missing job is
+not acceptance. The intentionally disabled release job is not a verification
+job and remains outside this aggregate. Existing native/campaign controls are
+additional evidence, not a substitute for the complete CI configuration.
+
+The integration branch requires `Required CI` from GitHub Actions, strict
+up-to-date checks and administrator enforcement. Never bypass this rule,
+remove a failing target, suppress warnings, or merge from old check results.
+Read the exact PR head and tested merge before integration; confirm the parent
+PR's new checks afterwards. An in-scope repair PR may fix an already-red
+integration branch only after the repair candidate's full gates succeed.
+
+Reproduce the Windows cross-check with the pinned compiler:
+
+```sh
+RUSTFLAGS="-D warnings" cargo +1.96.0 check --locked --workspace --target x86_64-pc-windows-gnu
+python3 -m unittest discover -s scripts/ci -p 'test_*.py' -v
+```
+
 ## The ADR rule
 
 Code is written **only against Accepted ADRs** (`docs/adr/`). If your change
@@ -65,3 +88,26 @@ if your change affects a row, update the row in the same PR.
 - New behavior comes with a test that fails without the change.
 - English, lean, evidence-cited. Commits use `Co-Authored-By` trailers where
   applicable.
+
+The current ARM macOS runner is separate from the pinned Intel runner. Both
+remain required, alongside the earlier ARM baseline; changing a job label must
+not silently remove coverage of an environment that produced a real failure.
+A single documented `expect` at the Windows-only temporary cleanup statement
+acknowledges Clippy's Unix-specific readonly warning. It does not compile on
+Unix, change global lint policy or add a native permission-manipulation API.
+
+See the official platform distinction in
+[Permissions::set_readonly](https://doc.rust-lang.org/std/fs/struct.Permissions.html#method.set_readonly).
+The exact socket witness runs via Cargo with `--features vz`, records the
+executable hash and every iteration, and stops on its first failure. It is
+not a retry-until-success rule or an explanation of an older intermittent fault.
+
+macOS CI keeps `-D warnings` AND the repository's Swift runtime rpath:
+`RUSTFLAGS="-D warnings -C link-arg=-Wl,-rpath,/usr/lib/swift"`.
+Cargo's environment RUSTFLAGS replaces target rustflags; omitting the latter
+can compile a vz test executable which then fails before test enumeration.
+
+CI caches registry data and target outputs only, never ~/.cargo/bin. Keys must
+include OS, architecture, job/target and the pinned toolchain/configuration, so
+an ARM runner cannot replace the Intel runner's toolchain executable. No old-key
+fallback is used by the repaired workflow.

@@ -127,7 +127,8 @@
       "store::foundation::metadata::robustness_tests::metadata_replaced_staging_name_cannot_install_other_bytes",
       "store::foundation::metadata::robustness_tests::readiness_capture_rejects_invalid_reader_count_without_panicking",
       "store::foundation::metadata::robustness_tests::metadata_final_cleanup_barrier_failure_preserves_confirmation",
-      "store::cas::owned_temp::tests::successful_explicit_cleanup_does_not_clean_a_successor_allocation"
+      "store::cas::owned_temp::tests::successful_explicit_cleanup_does_not_clean_a_successor_allocation",
+      "store::cas::owned_temp::tests::readonly_cleanup_is_local_to_owned_payload"
     ],
     "lightr_index": [
       "index::tests::mod_tests_ops::test_snapshot_hydrate_roundtrip",

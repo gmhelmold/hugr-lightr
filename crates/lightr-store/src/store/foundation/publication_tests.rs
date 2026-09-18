@@ -286,7 +286,8 @@ fn publication_preserves_readonly_source_attributes() {
     let root = TempDir::new().unwrap();
     let input = root.path().join("source");
     fs::write(&input, b"read only").unwrap();
-    let mut perms = fs::metadata(&input).unwrap().permissions();
+    let original_permissions = fs::metadata(&input).unwrap().permissions();
+    let mut perms = original_permissions.clone();
     perms.set_readonly(true);
     fs::set_permissions(&input, perms).unwrap();
     let locks = StoreLocks::open_existing(root.path()).unwrap();
@@ -299,8 +300,6 @@ fn publication_preserves_readonly_source_attributes() {
     assert!(fs::metadata(&input).unwrap().permissions().readonly());
     #[cfg(windows)]
     {
-        let mut perms = fs::metadata(&input).unwrap().permissions();
-        perms.set_readonly(false);
-        fs::set_permissions(input, perms).unwrap();
+        fs::set_permissions(input, original_permissions).unwrap();
     }
 }

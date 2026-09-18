@@ -68,6 +68,28 @@ Account Project creation was previously denied to Actions; the current local
 account query lacks read:project. The board is not marked complete and account
 credentials/scopes are not changed as repo hygiene. This is not a runtime gate.
 
+## CI integration incident and permanent acceptance rule
+
+The parent PR's run `35285486823` at `c1d3ca9` was RED despite passing
+increment-specific workflows. Both Windows-GNU checks rejected Unix-only
+mutability under `RUSTFLAGS=-D warnings` in `lease_io.rs`. Treat this as a
+coordinator integration failure, not a network or permission problem.
+Earlier green slice receipts remain scoped historical evidence, not proof
+that the parent PR was green. No main merge occurred.
+
+The repair scopes mutability to Unix while preserving mode 0700. The shared
+full CI now applies to both main and integration PR targets. Its `Required CI`
+aggregate rejects any mandatory failure/cancellation/skip/missing result. The
+integration branch requires that exact Actions check with strict base currency
+and administrator enforcement; direct force-push/deletion are disabled.
+Do not substitute native subset results for cross-compile or full-workspace
+checks. The live repair PR/run records the actual verification outcome.
+
+Before resuming feature work, require the repair PR #159 and parent #146 on
+its exact new head to have complete passing gates; record commit-specific
+acceptance in #159. A previous slice's green status is not that proof.
+This changes no package criterion or activation gate.
+
 ## Resume
 
 Read this file, the current issue/PR and accepted contract. Fetch and compare

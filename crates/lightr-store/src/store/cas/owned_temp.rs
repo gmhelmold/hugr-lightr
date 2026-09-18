@@ -84,6 +84,13 @@ impl Drop for OwnedTemp {
         if let Ok(meta) = fs::symlink_metadata(&payload) {
             if meta.is_file() && !meta.file_type().is_symlink() && meta.permissions().readonly() {
                 let mut permissions = meta.permissions();
+                // Windows changes FILE_ATTRIBUTE_READONLY, not Unix mode bits
+                // or a DACL. This branch does not compile on Unix. See std::fs
+                // Permissions::set_readonly's platform-specific contract.
+                #[expect(
+                    clippy::permissions_set_readonly_false,
+                    reason = "Windows-only owned temporary: clear its attribute, never Unix permissions"
+                )]
                 permissions.set_readonly(false);
                 let _ = fs::set_permissions(&payload, permissions);
             }

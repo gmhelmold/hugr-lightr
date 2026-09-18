@@ -57,6 +57,7 @@ jobs:
     env:
       CARGO_INCREMENTAL: '0'
       CARGO_TERM_COLOR: never
+      RUSTFLAGS: '-D warnings'
       RUST_BACKTRACE: '1'
     steps:
       # Hosted runners are disposable. Set this before checkout, not after
