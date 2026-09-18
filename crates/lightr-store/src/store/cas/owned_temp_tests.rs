@@ -122,3 +122,25 @@ fn successful_explicit_cleanup_does_not_clean_a_successor_allocation() {
         b"belongs-to-successor"
     );
 }
+
+#[test]
+fn readonly_cleanup_is_local_to_owned_payload() {
+    let parent = TempDir::new().unwrap();
+    let source = parent.path().join("source");
+    fs::write(&source, b"preserve-source").unwrap();
+    let saved = fs::metadata(&source).unwrap().permissions();
+    let mut readonly = saved.clone();
+    readonly.set_readonly(true);
+    fs::set_permissions(&source, readonly).unwrap();
+    let allocation = OwnedTemp::new(parent.path(), "readonly-witness").unwrap();
+    let payload = allocation.payload();
+    let reservation = allocation.dir.clone();
+    fs::copy(&source, &payload).unwrap();
+    assert!(fs::metadata(&payload).unwrap().permissions().readonly());
+    drop(allocation);
+    assert!(!payload.exists(), "owned readonly payload leaked");
+    assert!(!reservation.exists(), "owned reservation leaked");
+    assert_eq!(fs::read(&source).unwrap(), b"preserve-source");
+    assert!(fs::metadata(&source).unwrap().permissions().readonly());
+    fs::set_permissions(source, saved).unwrap();
+}

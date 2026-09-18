@@ -85,8 +85,10 @@ and administrator enforcement; direct force-push/deletion are disabled.
 Do not substitute native subset results for cross-compile or full-workspace
 checks. The live repair PR/run records the actual verification outcome.
 
-Finish this CI repair and verify parent #146 on its exact new head before
-resuming feature work. This changes no package criterion or activation gate.
+Before resuming feature work, require the repair PR #159 and parent #146 on
+its exact new head to have complete passing gates; record commit-specific
+acceptance in #159. A previous slice's green status is not that proof.
+This changes no package criterion or activation gate.
 
 ## Resume
 

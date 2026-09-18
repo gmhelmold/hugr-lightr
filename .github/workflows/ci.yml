@@ -160,10 +160,12 @@ jobs:
   # ============================================================
   macos-x86_64:
     name: macOS x86_64 (vz engine + bench)
-    runs-on: macos-latest
+    runs-on: macos-15-intel
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      - name: Verify Intel runner identity
+        run: test "$(uname -m)" = x86_64
 
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
@@ -216,6 +218,79 @@ jobs:
         with:
           name: bench-macos-x86_64
           path: bench-results/
+
+  macos-current-arm64:
+    name: macOS current arm64 (vz engine + bench)
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify current ARM runner identity
+        run: test "$(uname -m)" = arm64
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Install clippy + rustfmt
+        run: rustup component add clippy rustfmt
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            target
+          key: ${{ runner.os }}-current-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binary (for acceptance tests)
+        run: cargo build --release --bin lightr --features vz
+
+      - name: Install vz kernel pack (optional - may fail if no network)
+        run: |
+          ./target/release/lightr engine install-pack /tmp/lightr-packs || echo "install-pack failed (expected in CI without network), continuing..."
+          ls -la /tmp/lightr-packs/ 2>/dev/null || true
+
+      - name: Repeated exact socket witness (first failure blocks)
+        run: python3 scripts/ci/repeat_socket_witness.py
+
+      - name: Run unit tests (workspace) - skip flaky gc test
+        run: cargo test --workspace --features vz --lib --bins -- --skip gc_reclaims_hard_killed_run_dir
+
+      - name: Run acceptance tests (with binary) - skip flaky net test on macOS
+        run: |
+          export CARGO_BIN_EXE_lightr=$(pwd)/target/release/lightr
+          cargo test -p lightr-acceptance -- --skip net_published_run_is_reachable_then_torn_down
+
+      - name: clippy (deny warnings)
+        run: cargo clippy --workspace --all-targets --features vz -- -D warnings
+
+      - name: fmt check
+        run: cargo fmt --all --check
+
+      - name: Run benchmarks
+        run: |
+          mkdir -p bench-results
+          LIGHTR_HOME=/tmp/lightr_bench ./target/release/lightr bench --json > bench-results/macos-current-arm64.json
+          cat bench-results/macos-current-arm64.json
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-macos-current-arm64
+          path: bench-results/
+
+      - name: Preserve every socket witness, including failures
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: socket-witness-${{ github.sha }}
+          path: socket-witness-evidence/
+          if-no-files-found: error
+          retention-days: 30
 
   # ============================================================
   # MACOS arm64 (macos-14) — vz engine native validation
@@ -435,7 +510,7 @@ jobs:
   # ============================================================
   benchmark-report:
     name: Aggregate benchmarks + report
-    needs: [linux-x86_64, linux-aarch64, macos-x86_64, macos-arm64]
+    needs: [linux-x86_64, linux-aarch64, macos-x86_64, macos-arm64, macos-current-arm64]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     if: always()
@@ -465,7 +540,7 @@ jobs:
   # Always runs: skipped/cancelled/missing mandatory jobs must not look green.
   required-ci:
     name: Required CI
-    needs: [linux-x86_64, linux-aarch64, macos-x86_64, macos-arm64, windows, cross-compile, docs-spec, benchmark-report]
+    needs: [linux-x86_64, linux-aarch64, macos-x86_64, macos-arm64, macos-current-arm64, windows, cross-compile, docs-spec, benchmark-report]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5

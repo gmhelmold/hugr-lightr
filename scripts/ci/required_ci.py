@@ -9,7 +9,7 @@ import sys
 
 REQUIRED_JOBS = frozenset({
     "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64",
-    "windows", "cross-compile", "docs-spec", "benchmark-report",
+    "windows", "cross-compile", "macos-current-arm64", "docs-spec", "benchmark-report",
 })
 
 
@@ -28,7 +28,7 @@ def main():
     except (KeyError, TypeError, ValueError) as error:
         print("Required CI: FAIL: " + str(error), file=sys.stderr)
         return 1
-    print("Required CI: all eight mandatory jobs succeeded; release excluded")
+    print("Required CI: all nine mandatory jobs succeeded; release excluded")
     return 0
 
 

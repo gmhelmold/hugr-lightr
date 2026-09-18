@@ -36,7 +36,7 @@ CI (`.github/workflows/ci.yml`) additionally enforces:
 ## Integration and aggregate gate
 
 The same `.github/workflows/ci.yml` runs for PRs targeting `main` and
-`fix/snapshot-integrity`. `Required CI` fails unless all eight mandatory job
+`fix/snapshot-integrity`. `Required CI` fails unless all nine mandatory job
 results are exactly `success`; a failed, skipped, cancelled or missing job is
 not acceptance. The intentionally disabled release job is not a verification
 job and remains outside this aggregate. Existing native/campaign controls are
@@ -88,3 +88,16 @@ if your change affects a row, update the row in the same PR.
 - New behavior comes with a test that fails without the change.
 - English, lean, evidence-cited. Commits use `Co-Authored-By` trailers where
   applicable.
+
+The current ARM macOS runner is separate from the pinned Intel runner. Both
+remain required, alongside the earlier ARM baseline; changing a job label must
+not silently remove coverage of an environment that produced a real failure.
+A single documented `expect` at the Windows-only temporary cleanup statement
+acknowledges Clippy's Unix-specific readonly warning. It does not compile on
+Unix, change global lint policy or add a native permission-manipulation API.
+
+See the official platform distinction in
+[Permissions::set_readonly](https://doc.rust-lang.org/std/fs/struct.Permissions.html#method.set_readonly).
+The exact socket witness runs via Cargo with `--features vz`, records the
+executable hash and every iteration, and stops on its first failure. It is
+not a retry-until-success rule or an explanation of an older intermittent fault.
