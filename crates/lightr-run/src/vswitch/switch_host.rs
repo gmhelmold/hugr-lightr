@@ -305,10 +305,17 @@ pub fn run_switch_host(home: &Path, network_id: &str) -> io::Result<()> {
     let mut seen_member = false;
     let watch_deadline = Instant::now() + BIRTH_CONNECT_TIMEOUT;
     loop {
-        let count = reg.members().map(|m| m.len()).unwrap_or(0);
+        let observed_members = reg.members();
+        #[cfg(test)]
+        if let Err(error) = &observed_members {
+            eprintln!("switch membership read failed before lifecycle decision: {error:?}");
+        }
+        let count = observed_members.map(|m| m.len()).unwrap_or(0);
         if count > 0 {
             seen_member = true;
         } else if seen_member {
+            #[cfg(test)]
+            eprintln!("switch self-stop: observed zero after prior membership, home={home:?}");
             break; // last member left → self-stop
         } else if Instant::now() >= watch_deadline {
             // No member ever attached (birther died before passing its fd). Stop

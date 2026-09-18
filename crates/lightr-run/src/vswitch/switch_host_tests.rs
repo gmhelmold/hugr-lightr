@@ -116,7 +116,12 @@ fn attach_forward_dhcp_dns_then_refcount_self_stop() {
     // PROOF 1: A→B Ethernet frame forwarding. Flood first so the switch learns A.
     let payload = b"C9-FRAME-AB";
     let frame = build_eth(b.mac.0, a.mac.0, 0x88b5, payload);
-    ga.send(&frame).unwrap();
+    ga.send(&frame).unwrap_or_else(|error| {
+        use std::os::fd::AsRawFd;
+        panic!("frame send failed: {error:?}; fd={}; local={:?}; peer={:?}; read_timeout={:?}; write_timeout={:?}; socket_error={:?}; host_finished={}; registry={:?}",
+            ga.as_raw_fd(), ga.local_addr(), ga.peer_addr(), ga.read_timeout(),
+            ga.write_timeout(), ga.take_error(), host.is_finished(), reg.members());
+    });
     let mut buf = vec![0u8; 64 * 1024];
     let n = recv_with_deadline(&gb, &mut buf).expect("B receives A's frame");
     assert_eq!(&buf[..n], &frame[..], "B got a different frame than A sent");
