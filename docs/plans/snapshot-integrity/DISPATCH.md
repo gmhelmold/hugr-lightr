@@ -1,6 +1,6 @@
 # Snapshot integrity — current execution and integration state
 
-**Updated:** 2026-09-17. **Campaign:** #152. **Integration:** PR #146,
+**Updated:** 2026-09-18. **Campaign:** #152. **Integration:** PR #146,
 `fix/snapshot-integrity`; main remains unchanged by this campaign.
 **Technical contract:** [v2.2](../SNAPSHOT-INTEGRITY-REMEDIATION.md) at
 `e30811971f6a1c2a1e2fdb0a91dc8ccf9a06879d`; Accepted design ADR-0020.
@@ -26,7 +26,7 @@ G-ACTIVATION and SI-05 qualification. No coding subagent was launched.
 | Package | Issue | Current state |
 |---|---|---|
 | SI-00 | #153 | COMPLETED; #154 merged as `0c48886d2c82e671c33466ca0d5ff1640f90985d` |
-| SI-01 | #147 | IN PROGRESS; #155 and #156 increments MERGED; latest code integration `1dff1b927c8e8f2aeda4a4145651fc48277f590d`; full package not yet accepted |
+| SI-01 | #147 | IN PROGRESS; #155 and #156 increments MERGED; inspection increment #161 MERGED as `2aa762fd9b5c4b90800e4752a4f63e57fb9bd46e`; full package not yet accepted |
 | SI-02 | #148 | Isolated portion permitted after SI-00; full integration/DoD waits for G-FOUNDATION |
 | SI-03 | #149 | Waits for accepted SI-01/02; owns coordinated public activation |
 | SI-04 | #150 | Qualifies actual SI-03 activated candidate, not nonexistent behavior |
@@ -40,21 +40,28 @@ No relation was removed by this maintenance update.
 
 ## Latest accepted increment
 
-[Metadata integration receipt](evidence/SI-01-METADATA-INTEGRATION.md).
-Source `17dbfa5b0d455f7121cda68724f31736a2b658ef`, actual tested PR merge
-`6647555a0bd9ab8553dcded5ad19d2e512cf03a1`, integrated as
-`1dff1b927c8e8f2aeda4a4145651fc48277f590d`. Both merges have tree
-`4caed236fbaea49ddc68f0caa03a81b49483deaf` and the same ordered parents.
-Workspace, five native profiles, full F0-F5, immutable contract and causal
-controls pass. The original Intel DNS failure is retained separately from the
-successful same-source retry. Three new metadata/cleanup defects are fixed.
-Earlier lock-release evidence remains in its own historical receipt.
+[Inspection cancellation receipt](evidence/SI-01-INSPECTION-INTEGRATION.md).
+Source `3629b310cfa004dec5918b862ec2acea05e4411f`, tested merge
+`aa6e07ff26c49be94e5b8c2dd63df39d6ff07aef`, actual integration
+`2aa762fd9b5c4b90800e4752a4f63e57fb9bd46e`. Both merge trees are
+`60ea55bb182e44c67bc55f26fb9cbec48c99542f`, with the same ordered parents.
+All seven candidate workflows passed before integration. The new parent CI
+is run `35307295711`; verify its final result, not just the child PR's status.
+Any later data-only maintenance head needs its own current checks as well.
+
+Existing-payload inspection now observes cooperative cancellation during the
+bounded hash. It preserves actual I/O failures, payload/receipt identities and
+same-key waiter error propagation; a distinct digest may progress. Full Store
+verification and four compiled local causal controls passed. All seven new
+method names were checked in all five native profiles. The mandatory-name
+policy itself was not extended; do not claim automated enforcement of those
+new names. Prior metadata and lock-release receipts remain historical evidence.
 
 `production_protocol_enabled=false`. **G-FOUNDATION and G-ACTIVATION are not
-established.** Finish CoW/fallback, checkpointed existing-object inspection,
-topology/resource/reaping, typed metadata caller integration and remaining
-qualification before accepting SI-01. PR #156 no longer needs reconciliation;
-use the integrated metadata helper and shared decoder in subsequent work.
+established.** The inspection-cancellation increment is integrated; remaining
+CoW/fallback, topology/resource/reaping, typed metadata caller integration and
+complete qualification must satisfy the original SI-01 criteria. No broad
+public-path conversion or format activation is implied by this increment.
 
 ## Hygiene and external boundary
 
@@ -85,10 +92,13 @@ and administrator enforcement; direct force-push/deletion are disabled.
 Do not substitute native subset results for cross-compile or full-workspace
 checks. The live repair PR/run records the actual verification outcome.
 
-Before resuming feature work, require the repair PR #159 and parent #146 on
-its exact new head to have complete passing gates; record commit-specific
-acceptance in #159. A previous slice's green status is not that proof.
-This changes no package criterion or activation gate.
+Repair #159 was merged as `5254a3ec30561c5eb354f68bb3061fd0afb6efec`.
+Incident #160 was closed after NEW parent runs `35301946157` and
+`35301946189` passed; the closure is recorded in #160 and #159. Do not
+reapply superseded local listener patches or treat the incident as still open.
+The same rule continues for #161 and every later increment: exact candidate
+gates before merge, then fresh parent-head verification. Historical failing
+observations remain in their receipts. No package criterion is waived.
 
 ## Resume
 
