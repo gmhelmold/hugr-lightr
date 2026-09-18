@@ -26,7 +26,7 @@ G-ACTIVATION and SI-05 qualification. No coding subagent was launched.
 | Package | Issue | Current state |
 |---|---|---|
 | SI-00 | #153 | COMPLETED; #154 merged as `0c48886d2c82e671c33466ca0d5ff1640f90985d` |
-| SI-01 | #147 | IN PROGRESS; #155 and #156 increments MERGED; inspection increment #161 MERGED as `2aa762fd9b5c4b90800e4752a4f63e57fb9bd46e`; full package not yet accepted |
+| SI-01 | #147 | IN PROGRESS; foundation/metadata #155/#156, inspection/policy #161/#163, capture #164 and estimator #166 integrated; topology #165 carries its live acceptance record; full package not accepted |
 | SI-02 | #148 | Isolated portion permitted after SI-00; full integration/DoD waits for G-FOUNDATION |
 | SI-03 | #149 | Waits for accepted SI-01/02; owns coordinated public activation |
 | SI-04 | #150 | Qualifies actual SI-03 activated candidate, not nonexistent behavior |
@@ -46,12 +46,21 @@ Live-file clone/copy preparation #164 is integrated as
 35313338751 and 35313338744 passed. The actual macOS clone and portable
 fallback evidence do not certify Linux reflink or ReFS clone capability.
 
-[Resource estimation](RESOURCE-ESTIMATE.md) supplies only bounded arithmetic
-over an explicit caller inventory, with no Store inspection, native capacity
-discovery, cleanup, recovery or retry authorization. Its own delivery PR must
-pass current gates and then fresh parent checks. Native topology inspection
-is a separate concurrent draft (#165 at this review); preserve that work and
-consult its live status rather than claiming it integrated here.
+[Resource estimation](RESOURCE-ESTIMATE.md) was integrated through #166 as
+`7b3c802d2baac121bcf59320ad6a17df50e7d063`. Fresh parent CI 35375608714 and
+35375608715, plus push bootstrap 35375603718 and 35375603704, passed. The tool
+supplies bounded arithmetic and complete stream validation over an explicit
+caller inventory, not native capacity discovery, cleanup or recovery authority.
+Its superseded local patches must not be reapplied.
+
+[Read-only topology inspection](evidence/SI-01-TOPOLOGY-INSPECTION.md) belongs to
+#165. This source includes its reconciliation with #166; the live PR records
+its exact reviewed candidate, gate results and integration state. It is an
+observation, NOT ValidatedTopology or a write/publication capability. Windows,
+cross-mount equivalence, missing protected roots, writable destination anchoring
+and recursive traversal remain outside this increment. Profile-specific test
+requirements enforce actual Linux/macOS observations separately from the
+explicit Windows Unsupported result. All prior required tests remain mandatory.
 
 All SI-01 criteria remain mandatory. CoW implementation is no longer missing,
 but native capability rows, complete C12, typed inventory/metadata consumers,

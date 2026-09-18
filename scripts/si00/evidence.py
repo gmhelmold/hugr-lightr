@@ -119,7 +119,15 @@ def validate_native(receipt: dict, root: Path, expected: dict, policy: dict) -> 
         require(names and len(set(names)) == len(names), 'empty/duplicate test inventory')
         events, counts = parse_tests(artifact(root, tested['stdout']).read_text(encoding='utf-8'))
         require(set(events) == set(names), 'not all enumerated tests executed')
-        for required in policy['required_tests'][name]:
+        extra = profile.get('required_tests', {})
+        require(isinstance(extra, dict) and set(extra) <= set(policy['required_tests']),
+                'invalid profile-specific required-test policy')
+        specific = extra.get(name, [])
+        require(isinstance(specific, list) and all(isinstance(n, str) and n for n in specific),
+                'invalid profile-specific test names')
+        required_names = policy['required_tests'][name] + specific
+        require(len(required_names) == len(set(required_names)), 'duplicate required test policy')
+        for required in required_names:
             require(events.get(required) == 'ok', f'required smoke not passed: {required}')
         for n, status in events.items():
             require(status == 'ok' or (status.startswith('ignored') and n in policy['allowed_ignored']),
