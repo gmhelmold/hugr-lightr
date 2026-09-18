@@ -6,6 +6,7 @@ use super::{
     StoreLease, Wait,
 };
 use lightr_core::Digest;
+use std::cell::Cell;
 use std::fs::File;
 use std::io::{self, Read};
 use std::path::Path;
@@ -135,6 +136,8 @@ impl StoreLease {
 
     /// Resolve a CAS digest; without a valid receipt it must be read, checked,
     /// fully copied to NEW staging, sealed and installed before issuing proof.
+    /// Existing payload hashing observes cancellation between 64 KiB reads;
+    /// cancellation before installation leaves payload and receipt untouched.
     pub fn prepare_existing(
         &self,
         digest: Digest,
@@ -203,6 +206,35 @@ struct Attempt<'a> {
     effects: Effects<'a>,
 }
 impl Attempt<'_> {
+    fn inspect(
+        &self,
+        layout: &Layout<'_>,
+        digest: Digest,
+    ) -> PreparationResult<(Option<File>, bool, u64)> {
+        use PublicationOutcome::{NotPublished, RecoveryRequired};
+        let target = layout.payload_path();
+        let fail = |cause, outcome| failure(self.id, Phase::Verify, outcome, &target, cause);
+        self.wait.check().map_err(|e| fail(e, NotPublished))?;
+        (self.effects.observer)(Phase::Verify, &target).map_err(|e| fail(e, RecoveryRequired))?;
+        // Only an error from our checkpoint is cancellation. An actual I/O
+        // failure remains authoritative even if cancellation happens alongside it.
+        let cancelled = Cell::new(false);
+        layout
+            .inspect(digest, &|| {
+                self.wait.check().inspect_err(|_| cancelled.set(true))
+            })
+            .map_err(|e| {
+                fail(
+                    e,
+                    if cancelled.get() {
+                        NotPublished
+                    } else {
+                        RecoveryRequired
+                    },
+                )
+            })
+    }
+
     fn step<T>(
         &self,
         phase: Phase,
@@ -248,10 +280,7 @@ fn publish<'a>(
         || Layout::open(lease, digest),
     )?;
     let target = layout.payload_path();
-    let (existing, ready, old_length) =
-        at.step(Phase::Verify, RecoveryRequired, &target, || {
-            layout.inspect(digest)
-        })?;
+    let (existing, ready, old_length) = at.inspect(&layout, digest)?;
     let work;
     let length;
     if ready {

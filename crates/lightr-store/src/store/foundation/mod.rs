@@ -46,3 +46,9 @@ mod publication_process_tests;
 
 #[cfg(test)]
 mod capture_cancellation_tests;
+
+#[cfg(test)]
+mod inspection_cancellation_tests;
+
+#[cfg(test)]
+mod inspection_waiter_tests;
