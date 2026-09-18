@@ -20,6 +20,12 @@ class FileCapturePolicyTests(unittest.TestCase):
                 source = (ROOT / "crates/lightr-store/src/store/cas" / suffix).read_text()
                 self.assertIn("#[test]\nfn " + name.rsplit("::", 1)[1] + "(", source)
 
+    def test_existing_publication_control_is_scoped_to_its_modules(self):
+        source = (ROOT / "scripts/si01/publication_controls.py").read_text()
+        self.assertIn("PREFIX + 'publication', '--', '--test-threads=2'", source)
+        self.assertNotIn("'publication_', '--'", source)
+        self.assertIn("29 passed; 0 failed; 0 ignored", source)
+
     def test_capture_modes_and_native_witness_have_no_ignore(self):
         for file in ["file_capture_tests.rs", "file_capture_edge_tests.rs"]:
             source = (ROOT / "crates/lightr-store/src/store/cas" / file).read_text()

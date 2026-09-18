@@ -175,3 +175,21 @@ Causal receipt (hashes refer to the archived source and exact local child logs):
 Remote execution, eventual merge SHA and parent verification belong in the linked
 PR/issue receipt after they actually occur. This later document is not a new
 Rust executable identity. Historical failed logs are retained, not overwritten.
+
+## Candidate CI follow-up: selector contamination, not a lost test
+
+At head d3ce3b8, foundation run 35312086091 rejected its publication pristine
+suite because Cargo's substring selector `publication_` also selected the new
+capture-composition test. The archived log shows 30 passed/zero failed/ignored,
+while that intentionally fixed suite expects 29 original methods. The log
+SHA-256 is 2f26fdf71ada0b816a270a98777de4efdb9463c2d6f3bdcb081cce4a19e37a0f;
+raw artifact 10534350050 ZIP SHA-256 is
+7e9a65332d9e8aae297a0d3c0512528ac285fb9f0f759e400f037a8829dd991d.
+
+The selector now uses `store::foundation::publication`, selecting the same
+29 original methods and preserving the fixed count, exact mutant assertions
+and proof-lifetime checks. The capture-composition method remains mandatory
+in its own 13-method native suite. No test was renamed or removed to hide this
+failure. A Python regression checks the harness namespace and fixed count.
+The new file-capture controls job already passed at d3ce3b8; complete candidate
+qualification must still be rerun on the corrective head.

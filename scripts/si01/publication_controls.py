@@ -78,7 +78,7 @@ def main():
         return process.returncode, (out/(label+'.log')).read_text(errors='replace')
     def suite(root, label):
         code, text = run(['cargo', '+1.96.0', 'test', '--locked', '-p', 'lightr-store', '--lib',
-                          'publication_', '--', '--test-threads=2'], root, label)
+                          PREFIX + 'publication', '--', '--test-threads=2'], root, label)
         require(code == 0 and re.search(r'^test result: ok\. 29 passed; 0 failed; 0 ignored; 0 measured; \d+ filtered out', text, re.M), label+' publication suite absent/failed')
     try:
         require(not git('status', '--porcelain', '--untracked-files=no'), 'dirty authoring inputs')
