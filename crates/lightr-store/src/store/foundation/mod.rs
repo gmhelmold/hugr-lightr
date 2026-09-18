@@ -60,3 +60,6 @@ pub mod topology;
 
 #[cfg(test)]
 mod destination_tests;
+
+/// Logical tree checks only; native representation and writing remain separate.
+pub mod tree_plan;

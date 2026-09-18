@@ -40,6 +40,14 @@ No relation was removed by this maintenance update.
 
 ## Current increment map — 2026-09-18
 
+[Whole-tree structural preflight](TREE-PLAN.md) is the current additive
+prerequisite. It borrows a complete logical Manifest, rejects structural
+conflicts and supplies explicit/implied directories under caller work budgets.
+Its live delivery PR supplies actual qualification and merge status. This is
+not native name representability, payload proof, or an anchored writer; none of
+the old public hydrate routes are activated or certified by this addition.
+
+
 Inspection cancellation #161, its mandatory-name policy #163 and live-file
 clone/copy #164 are integrated. Resource estimation #166 is integrated as
 `7b3c802d2baac121bcf59320ad6a17df50e7d063`. Topology inspection #165 is integrated

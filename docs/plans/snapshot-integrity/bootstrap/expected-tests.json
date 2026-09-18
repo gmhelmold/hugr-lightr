@@ -270,7 +270,22 @@
       "store::foundation::topology::tests::topology_platform_capability_is_explicit",
       "store::foundation::destination_tests::destination_precancel_precedes_native_resolution",
       "store::foundation::destination_tests::destination_expired_deadline_precedes_native_resolution",
-      "store::foundation::destination_tests::destination_platform_disposition_is_explicit_without_live_source"
+      "store::foundation::destination_tests::destination_platform_disposition_is_explicit_without_live_source",
+      "store::foundation::tree_plan::tests::tree_plan_empty_tree_fits_zero_budgets",
+      "store::foundation::tree_plan::tests::tree_plan_unsorted_tree_preserves_entries_and_includes_implied_directories",
+      "store::foundation::tree_plan::tests::tree_plan_duplicate_entries_of_every_kind_are_rejected",
+      "store::foundation::tree_plan::tests::tree_plan_non_directory_ancestors_are_rejected_in_all_entry_orders",
+      "store::foundation::tree_plan::tests::tree_plan_shared_implied_parents_and_sibling_prefixes_are_distinct",
+      "store::foundation::tree_plan::tests::tree_plan_names_are_exact_relative_components_not_normalized_paths",
+      "store::foundation::tree_plan::tests::tree_plan_preserves_unicode_case_and_unix_literal_characters",
+      "store::foundation::tree_plan::tests::tree_plan_link_text_is_retained_without_lookup_or_normalization",
+      "store::foundation::tree_plan::tests::tree_plan_wire_lengths_count_utf8_bytes_without_claiming_native_support",
+      "store::foundation::tree_plan::tests::tree_plan_declared_totals_and_sum_overflow_are_rejected",
+      "store::foundation::tree_plan::tests::tree_plan_version_and_permission_bit_contracts_are_explicit",
+      "store::foundation::tree_plan::tests::tree_plan_caller_budgets_include_repeated_components_and_link_text",
+      "store::foundation::tree_plan::tests::tree_plan_entry_cancellation_and_deadline_precede_validation",
+      "store::foundation::tree_plan::tests::tree_plan_every_checkpoint_failure_is_terminal_without_input_mutation",
+      "store::foundation::tree_plan::tests::tree_plan_small_tree_results_match_independent_pairwise_oracle"
     ],
     "lightr_index": [
       "index::tests::mod_tests_ops::test_snapshot_hydrate_roundtrip",
