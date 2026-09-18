@@ -38,7 +38,25 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Latest accepted increment
+## Current topology work and accepted CoW base
+
+Live-file capture #164 is integrated as `90ce0dc12ab0af43bdc51b13a0aa7d5863e74c1d`.
+Its fresh parent runs `35313338751` and `35313338744` passed. Native macOS cloning
+was witnessed; hosted Linux copy fallback is not reflink qualification and
+Windows portable tests are not a ReFS witness. See the #164 receipt and review.
+
+This branch also contains the **read-only** topology inspector in #165; its live
+PR records exact-head CI/review/integration state. The inspector is not a
+ValidatedTopology mutation capability. Windows, cross-mount equivalence,
+missing protected roots, writable destination anchoring and recursive traversal
+remain unqualified. No public route is activated and full C12 remains open.
+Per-profile native test requirements distinguish real Unix execution from the
+explicit Windows Unsupported disposition. No previous required test is removed.
+
+The earlier accepted inspection increment is recorded below; its waiting-for-CI
+wording is historical, not the current state of #164/#165.
+
+## Earlier accepted inspection increment
 
 [Inspection cancellation receipt](evidence/SI-01-INSPECTION-INTEGRATION.md).
 Source `3629b310cfa004dec5918b862ec2acea05e4411f`, tested merge
@@ -62,7 +80,7 @@ remain historical evidence; the policy follow-up requires its own current CI.
 
 `production_protocol_enabled=false`. **G-FOUNDATION and G-ACTIVATION are not
 established.** The inspection-cancellation increment is integrated; remaining
-CoW/fallback, topology/resource/reaping, typed metadata caller integration and
+CoW native-capability qualification, topology/resource/reaping, typed metadata caller integration and
 complete qualification must satisfy the original SI-01 criteria. No broad
 public-path conversion or format activation is implied by this increment.
 

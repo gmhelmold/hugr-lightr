@@ -329,3 +329,31 @@ fn topology_observed_source_is_read_only() {
     assert_eq!(error.raw_os_error(), Some(libc::EBADF));
     assert_eq!(fs::read(&file).unwrap(), b"untouched");
 }
+
+#[test]
+fn topology_relative_paths_match_native_lookup() {
+    let (_root, store, source) = fixture();
+    // Construct the oracle-relative spelling from native canonical directories;
+    // never change process CWD, which other tests may be using concurrently.
+    fn relative(target: &Path) -> PathBuf {
+        let cwd = fs::canonicalize(std::env::current_dir().unwrap()).unwrap();
+        let target = fs::canonicalize(target).unwrap();
+        let a: Vec<_> = cwd.components().collect();
+        let b: Vec<_> = target.components().collect();
+        let common = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+        let mut result = PathBuf::new();
+        for _ in common..a.len() {
+            result.push("..");
+        }
+        for part in &b[common..] {
+            result.push(part.as_os_str());
+        }
+        result
+    }
+    let observed = inspect(&relative(&store), &relative(&source), None).unwrap();
+    assert_eq!(
+        id(observed.source_handle()),
+        id(&std::fs::File::open(&source).unwrap())
+    );
+    observed.revalidate(Wait::Try).unwrap();
+}

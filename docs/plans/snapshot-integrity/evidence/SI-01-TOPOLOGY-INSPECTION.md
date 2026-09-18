@@ -27,7 +27,9 @@ matching observations cannot exclude a later mutation. The inspector therefore
 does not authorize writes, recursive traversal, missing-destination creation or
 public protocol activation. Those adapters still need their own anchored use
 and resource/lifetime protection. Contents may change and need the existing
-capture/hash checks. It does not verify protection-inventory completeness or
+capture/hash checks. O_RDONLY restricts data I/O; the exposed File is not a
+metadata-immutability sandbox. Callers remain responsible for their own methods
+and must not treat this observation as authorization to change attributes. It does not verify protection-inventory completeness or
 classify overlapping Store/cache ownership domains on the caller's behalf.
 
 ## Conservative supported subset and explicit rejection
@@ -88,7 +90,7 @@ No missing platform or later C12 obligation is silently marked complete.
 ## Tests and evidence collection
 
 Three portable methods require explicit platform disposition and entry
-cancellation/deadline failure. Sixteen Linux/macOS methods inspect actual local
+cancellation/deadline failure. Seventeen Linux/macOS methods inspect actual local
 filesystems; their names are required only on the corresponding native profiles.
 The evidence validator gains an additive per-profile requirement map; shared
 required names, native host identities, existing ignores and prior tests remain.
@@ -97,7 +99,7 @@ profile requirements using synthetic receipts. These are not native executions.
 
 Four compiled causal controls remove protected overlap, paired overlap,
 identity revalidation or the unresolved-parent rejection. The bounded harness
-requires a pristine/restored 19-test suite and exact failing assertions from
+requires a pristine/restored 20-test suite and exact failing assertions from
 successfully compiled variants. A compiler error/timeout/empty suite is failure,
 never a causal witness. Linux CI runs that harness as an additional job.
 

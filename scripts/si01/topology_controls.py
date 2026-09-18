@@ -62,7 +62,7 @@ def main():
 
     cargo = ["cargo", "+1.96.0", "test", "--locked", "-p", "lightr-store", "--lib"]
     suite = cargo + [PREFIX, "--", "--nocapture"]
-    expected = r"test result: ok\. 19 passed; 0 failed; 0 ignored;"
+    expected = r"test result: ok\. 20 passed; 0 failed; 0 ignored;"
     try:
         require(not git("status", "--porcelain", "--untracked-files=no"), "tracked source dirty")
         archive = subprocess.check_output(["git", "archive", "--format=zip", "HEAD"], cwd=ROOT)

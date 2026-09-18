@@ -54,14 +54,14 @@ class TopologyPolicyTests(unittest.TestCase):
         common = re.findall(r"^fn (topology_[^(]+)\(", (folder / "topology_tests.rs").read_text(), re.M)
         native = re.findall(r"^fn (topology_[^(]+)\(", (folder / "topology_unix_tests.rs").read_text(), re.M)
         self.assertEqual(len(common), 3)
-        self.assertEqual(len(native), 16)
+        self.assertEqual(len(native), 17)
         for name in common:
             self.assertEqual(policy["required_tests"]["lightr_store"].count(prefix + name), 1)
         for profile, configuration in policy["profiles"].items():
             specific = configuration.get("required_tests", {}).get("lightr_store", [])
             if profile.startswith(("linux-", "macos-")):
                 self.assertEqual(set(specific), {prefix + "unix::" + name for name in native})
-                self.assertEqual(len(specific), 16)
+                self.assertEqual(len(specific), 17)
             else:
                 self.assertEqual(specific, [])
 
