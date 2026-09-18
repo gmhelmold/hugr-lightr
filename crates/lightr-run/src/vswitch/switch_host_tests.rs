@@ -94,14 +94,20 @@ fn attach_forward_dhcp_dns_then_refcount_self_stop() {
     // Start the switch host on a thread (NOT a re-exec): the production body.
     let host_home = home.clone();
     let host_id = id.clone();
-    let host = std::thread::spawn(move || run_switch_host(&host_home, &host_id));
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+    let host = std::thread::spawn(move || {
+        run_switch_host_observed(&host_home, &host_id, || {
+            ready_tx
+                .send(())
+                .expect("fixture waits for listener readiness");
+        })
+    });
 
-    // Wait for the host to bind ctl.sock, then attach both members (CONNECT path).
+    // The callback follows successful bind/listen and accept-thread creation.
     let ctl = ctl_sock_path(&home, &id);
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
-    while !ctl.exists() && std::time::Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(10));
-    }
+    ready_rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("test host must be listening before production attach");
     let ga = attach(&home, &id, &a).expect("attach a");
     let gb = attach(&home, &id, &b).expect("attach b");
     let ga = UnixDatagram::from(ga);
@@ -384,3 +390,9 @@ fn decode_dns_first_a(frame: &[u8]) -> Option<Ipv4Addr> {
 
 #[path = "switch_host_parallel_tests.rs"]
 mod parallel_lifecycle;
+
+#[path = "switch_host_ack_tests.rs"]
+mod ack_order;
+
+#[path = "switch_host_ready_signal_tests.rs"]
+mod ready_signal;

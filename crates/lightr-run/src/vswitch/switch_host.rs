@@ -209,8 +209,10 @@ fn pass_and_ack_observed(
     before_ack: impl FnOnce(),
 ) -> io::Result<OwnedFd> {
     use std::io::Read;
-    send_fd(&stream, host.as_raw_fd(), meta)?;
+    // Configure before sending: the peer may ACK and close immediately. Darwin
+    // rejects socket-option changes after close even while the ACK is buffered.
     stream.set_read_timeout(Some(BIRTH_CONNECT_TIMEOUT))?;
+    send_fd(&stream, host.as_raw_fd(), meta)?;
     before_ack();
     let mut ack = [0u8; 1];
     stream.read_exact(&mut ack)?;
@@ -295,6 +297,14 @@ pub fn detach(home: &Path, network_id: &str, name: &str) -> io::Result<()> {
 /// stopped cleanly (socket + threads reclaimed). A consumer's binary entry
 /// dispatches here on [`SWITCH_HOST_ARGV`].
 pub fn run_switch_host(home: &Path, network_id: &str) -> io::Result<()> {
+    run_switch_host_observed(home, network_id, || {})
+}
+
+fn run_switch_host_observed(
+    home: &Path,
+    network_id: &str,
+    listener_ready: impl FnOnce(),
+) -> io::Result<()> {
     let id = network_id.to_string();
     let reg = NetworkRegistry::open(home, &id)?;
     let switch = Arc::new(VSwitch::start(&id, reg.subnet())?);
@@ -310,6 +320,7 @@ pub fn run_switch_host(home: &Path, network_id: &str) -> io::Result<()> {
     let accept = std::thread::Builder::new()
         .name(format!("vswitch-accept-{id}"))
         .spawn(move || accept_loop(&listener, &acc_switch, &acc_stop))?;
+    listener_ready();
 
     // Refcount self-watch: poll members.json (under the registry lock). The
     // switch is born BEFORE the first member's attach completes, so wait for the
