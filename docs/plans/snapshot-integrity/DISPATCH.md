@@ -38,7 +38,27 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Latest accepted increment
+## Current increment map — 2026-09-18
+
+Inspection cancellation #161 and mandatory-name policy #163 are integrated.
+Live-file clone/copy preparation #164 is integrated as
+`90ce0dc12ab0af43bdc51b13a0aa7d5863e74c1d`; its fresh parent checks
+35313338751 and 35313338744 passed. The actual macOS clone and portable
+fallback evidence do not certify Linux reflink or ReFS clone capability.
+
+[Resource estimation](RESOURCE-ESTIMATE.md) supplies only bounded arithmetic
+over an explicit caller inventory, with no Store inspection, native capacity
+discovery, cleanup, recovery or retry authorization. Its own delivery PR must
+pass current gates and then fresh parent checks. Native topology inspection
+is a separate concurrent draft (#165 at this review); preserve that work and
+consult its live status rather than claiming it integrated here.
+
+All SI-01 criteria remain mandatory. CoW implementation is no longer missing,
+but native capability rows, complete C12, typed inventory/metadata consumers,
+resource/reaper implementation and actual constrained-resource E18 remain open.
+Neither this tool nor a passing CI establishes G-FOUNDATION or G-ACTIVATION.
+
+## Earlier accepted inspection increment — historical evidence
 
 [Inspection cancellation receipt](evidence/SI-01-INSPECTION-INTEGRATION.md).
 Source `3629b310cfa004dec5918b862ec2acea05e4411f`, tested merge
@@ -46,7 +66,7 @@ Source `3629b310cfa004dec5918b862ec2acea05e4411f`, tested merge
 `2aa762fd9b5c4b90800e4752a4f63e57fb9bd46e`. Both merge trees are
 `60ea55bb182e44c67bc55f26fb9cbec48c99542f`, with the same ordered parents.
 All seven candidate workflows passed before integration. The new parent CI
-is run `35307295711`; verify its final result, not just the child PR's status.
+was run `35307295711`; the associated receipt preserves that result.
 Any later data-only maintenance head needs its own current checks as well.
 
 Existing-payload inspection now observes cooperative cancellation during the
@@ -62,7 +82,7 @@ remain historical evidence; the policy follow-up requires its own current CI.
 
 `production_protocol_enabled=false`. **G-FOUNDATION and G-ACTIVATION are not
 established.** The inspection-cancellation increment is integrated; remaining
-CoW/fallback, topology/resource/reaping, typed metadata caller integration and
+native CoW capability rows, topology/resource/reaping, typed metadata callers and
 complete qualification must satisfy the original SI-01 criteria. No broad
 public-path conversion or format activation is implied by this increment.
 
