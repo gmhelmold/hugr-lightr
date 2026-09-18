@@ -49,6 +49,16 @@ class WorkflowContractTests(unittest.TestCase):
             with self.subTest(job=job):
                 self.assertIn('RUSTFLAGS: "-D warnings -C link-arg=-Wl,-rpath,/usr/lib/swift"', part)
 
+    def test_caches_never_replace_toolchain_binaries_or_cross_architectures(self):
+        text = (ROOT / ".github/workflows/ci.yml").read_text()
+        for block in text.split("      - name: Cache cargo")[1:]:
+            cache = block.split("      - name:", 1)[0]
+            self.assertNotIn(".cargo/bin", cache)
+            self.assertNotIn(".cargo\\bin", cache)
+            self.assertIn("${{ runner.arch }}", cache)
+            self.assertIn("${{ github.job }}", cache)
+            self.assertIn("ci-v2-", cache)
+
     def test_socket_evidence_requires_one_exact_success(self):
         text = "test " + CASE + " ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 264 filtered out\n"
         self.assertTrue(exact_pass(0, text))

@@ -106,3 +106,8 @@ macOS CI keeps `-D warnings` AND the repository's Swift runtime rpath:
 `RUSTFLAGS="-D warnings -C link-arg=-Wl,-rpath,/usr/lib/swift"`.
 Cargo's environment RUSTFLAGS replaces target rustflags; omitting the latter
 can compile a vz test executable which then fails before test enumeration.
+
+CI caches registry data and target outputs only, never ~/.cargo/bin. Keys must
+include OS, architecture, job/target and the pinned toolchain/configuration, so
+an ARM runner cannot replace the Intel runner's toolchain executable. No old-key
+fallback is used by the repaired workflow.
