@@ -128,7 +128,14 @@
       "store::foundation::metadata::robustness_tests::readiness_capture_rejects_invalid_reader_count_without_panicking",
       "store::foundation::metadata::robustness_tests::metadata_final_cleanup_barrier_failure_preserves_confirmation",
       "store::cas::owned_temp::tests::successful_explicit_cleanup_does_not_clean_a_successor_allocation",
-      "store::cas::owned_temp::tests::readonly_cleanup_is_local_to_owned_payload"
+      "store::cas::owned_temp::tests::readonly_cleanup_is_local_to_owned_payload",
+      "store::foundation::inspection_cancellation_tests::inspection_cancelled_at_entry_stops_before_receipt_work",
+      "store::foundation::inspection_cancellation_tests::inspection_preserves_real_io_error_when_cancellation_also_occurs",
+      "store::foundation::inspection_cancellation_tests::inspection_checks_between_real_payload_blocks",
+      "store::foundation::inspection_cancellation_tests::inspection_cancellation_at_empty_payload_eof_is_terminal",
+      "store::foundation::inspection_cancellation_tests::inspection_precancel_and_expired_deadline_precede_receipt_decoding",
+      "store::foundation::inspection_cancellation_tests::inspection_uncancelled_keeps_verification_and_returns_rewound_file",
+      "store::foundation::inspection_waiter_tests::inspection_cancellation_wakes_waiter_and_preserves_distinct_progress"
     ],
     "lightr_index": [
       "index::tests::mod_tests_ops::test_snapshot_hydrate_roundtrip",
