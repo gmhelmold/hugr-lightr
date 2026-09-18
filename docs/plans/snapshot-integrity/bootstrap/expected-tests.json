@@ -135,7 +135,20 @@
       "store::foundation::inspection_cancellation_tests::inspection_cancellation_at_empty_payload_eof_is_terminal",
       "store::foundation::inspection_cancellation_tests::inspection_precancel_and_expired_deadline_precede_receipt_decoding",
       "store::foundation::inspection_cancellation_tests::inspection_uncancelled_keeps_verification_and_returns_rewound_file",
-      "store::foundation::inspection_waiter_tests::inspection_cancellation_wakes_waiter_and_preserves_distinct_progress"
+      "store::foundation::inspection_waiter_tests::inspection_cancellation_wakes_waiter_and_preserves_distinct_progress",
+      "store::cas::preparation::file_capture::tests::file_capture_copy_only_uses_full_bytes_from_offset_zero",
+      "store::cas::preparation::file_capture::tests::file_capture_partial_unsupported_clone_falls_back_without_tail",
+      "store::cas::preparation::file_capture::tests::file_capture_clone_resource_error_is_not_hidden_by_fallback",
+      "store::cas::preparation::file_capture::tests::file_capture_claimed_clone_success_still_checks_digest_and_length",
+      "store::cas::preparation::file_capture::tests::file_capture_precancel_does_not_allocate_or_invoke_clone",
+      "store::cas::preparation::file_capture::tests::file_capture_cancel_after_clone_and_during_hash_cleans_only_owned_file",
+      "store::cas::preparation::file_capture::tests::file_capture_sync_error_remains_fatal_for_both_capture_modes",
+      "store::cas::preparation::file_capture::tests::file_capture_empty_source_never_claims_an_unexecuted_clone",
+      "store::cas::preparation::file_capture::tests::file_capture_native_or_reported_fallback_preserves_readonly_source",
+      "store::cas::preparation::file_capture::tests::file_capture_lease_composes_with_existing_publication_and_requalification",
+      "store::cas::preparation::file_capture::tests::file_capture_fallback_classification_rejects_real_io_errors",
+      "store::cas::preparation::file_capture::edge_tests::file_capture_opened_source_is_not_reinterpreted_by_path",
+      "store::cas::preparation::file_capture::edge_tests::file_capture_unknown_clone_scratch_blocks_cleanup_and_fallback"
     ],
     "lightr_index": [
       "index::tests::mod_tests_ops::test_snapshot_hydrate_roundtrip",
