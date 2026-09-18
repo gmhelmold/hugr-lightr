@@ -101,3 +101,8 @@ See the official platform distinction in
 The exact socket witness runs via Cargo with `--features vz`, records the
 executable hash and every iteration, and stops on its first failure. It is
 not a retry-until-success rule or an explanation of an older intermittent fault.
+
+macOS CI keeps `-D warnings` AND the repository's Swift runtime rpath:
+`RUSTFLAGS="-D warnings -C link-arg=-Wl,-rpath,/usr/lib/swift"`.
+Cargo's environment RUSTFLAGS replaces target rustflags; omitting the latter
+can compile a vz test executable which then fails before test enumeration.

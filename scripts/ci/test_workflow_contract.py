@@ -42,6 +42,13 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("python3 scripts/ci/repeat_socket_witness.py", current)
         self.assertTrue({"macos-x86_64", "macos-current-arm64", "macos-arm64"} <= REQUIRED_JOBS)
 
+    def test_macos_warnings_do_not_erase_configured_swift_rpath(self):
+        text = (ROOT / ".github/workflows/ci.yml").read_text()
+        for job in ("macos-x86_64", "macos-current-arm64", "macos-arm64"):
+            part = text.split("  " + job + ":", 1)[1].split("    steps:", 1)[0]
+            with self.subTest(job=job):
+                self.assertIn('RUSTFLAGS: "-D warnings -C link-arg=-Wl,-rpath,/usr/lib/swift"', part)
+
     def test_socket_evidence_requires_one_exact_success(self):
         text = "test " + CASE + " ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 264 filtered out\n"
         self.assertTrue(exact_pass(0, text))

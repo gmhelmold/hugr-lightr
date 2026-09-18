@@ -162,6 +162,9 @@ jobs:
     name: macOS x86_64 (vz engine + bench)
     runs-on: macos-15-intel
     timeout-minutes: 90
+    env:
+      # RUSTFLAGS replaces target rustflags; retain .cargo/config.toml Swift rpath.
+      RUSTFLAGS: "-D warnings -C link-arg=-Wl,-rpath,/usr/lib/swift"
     steps:
       - uses: actions/checkout@v4
       - name: Verify Intel runner identity
@@ -223,6 +226,9 @@ jobs:
     name: macOS current arm64 (vz engine + bench)
     runs-on: macos-latest
     timeout-minutes: 90
+    env:
+      # RUSTFLAGS replaces target rustflags; retain .cargo/config.toml Swift rpath.
+      RUSTFLAGS: "-D warnings -C link-arg=-Wl,-rpath,/usr/lib/swift"
     steps:
       - uses: actions/checkout@v4
       - name: Verify current ARM runner identity
@@ -299,6 +305,9 @@ jobs:
     name: macOS arm64 (vz engine native)
     runs-on: macos-14
     timeout-minutes: 120
+    env:
+      # RUSTFLAGS replaces target rustflags; retain .cargo/config.toml Swift rpath.
+      RUSTFLAGS: "-D warnings -C link-arg=-Wl,-rpath,/usr/lib/swift"
     steps:
       - uses: actions/checkout@v4
 
