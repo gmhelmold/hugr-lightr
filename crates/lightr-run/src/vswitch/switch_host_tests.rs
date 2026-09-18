@@ -106,8 +106,8 @@ fn attach_forward_dhcp_dns_then_refcount_self_stop() {
     let gb = attach(&home, &id, &b).expect("attach b");
     let ga = UnixDatagram::from(ga);
     let gb = UnixDatagram::from(gb);
-    // Darwin can return EINVAL from a timed AF_UNIX datagram socket on send.
-    // Nonblocking reads preserve same deadline without mutating socket timeout.
+    // Receive with an explicit bounded deadline; do not change send timeouts.
+    // Sender endpoint lifetime during attach is covered by the ACK regression.
     ga.set_nonblocking(true).unwrap();
     gb.set_nonblocking(true).unwrap();
     // Give the accept loop a beat to add both members.
@@ -381,3 +381,6 @@ fn decode_dns_first_a(frame: &[u8]) -> Option<Ipv4Addr> {
     let rd = dns.get(pos..pos + 4)?;
     Some(Ipv4Addr::new(rd[0], rd[1], rd[2], rd[3]))
 }
+
+#[path = "switch_host_parallel_tests.rs"]
+mod parallel_lifecycle;

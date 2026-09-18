@@ -190,18 +190,28 @@ const ATTACH_ACK: u8 = 0x01;
 /// Send `host`'s fd + `meta` over `stream`, then block for the switch's
 /// post-`add_member` ACK before handing back the `guest` end. Synchronizing on
 /// the ACK is what makes membership ESTABLISHED on return — the supervisor can
-/// boot the VM knowing eth1 is already wired into the switch. `host` is dropped
-/// here (the switch owns its dup); a missing ACK fails closed.
+/// boot the VM knowing eth1 is already wired into the switch. Keep `host` until
+/// that ACK confirms receiver ownership; a missing ACK fails closed.
 fn pass_and_ack(
-    mut stream: UnixStream,
+    stream: UnixStream,
     host: UnixDatagram,
     meta: &[u8],
     guest: UnixDatagram,
 ) -> io::Result<OwnedFd> {
+    pass_and_ack_observed(stream, host, meta, guest, || {})
+}
+
+fn pass_and_ack_observed(
+    mut stream: UnixStream,
+    host: UnixDatagram,
+    meta: &[u8],
+    guest: UnixDatagram,
+    before_ack: impl FnOnce(),
+) -> io::Result<OwnedFd> {
     use std::io::Read;
     send_fd(&stream, host.as_raw_fd(), meta)?;
-    drop(host); // the switch owns its own dup now
     stream.set_read_timeout(Some(BIRTH_CONNECT_TIMEOUT))?;
+    before_ack();
     let mut ack = [0u8; 1];
     stream.read_exact(&mut ack)?;
     if ack[0] != ATTACH_ACK {
@@ -210,6 +220,8 @@ fn pass_and_ack(
             "switch host returned a bad attach ack",
         ));
     }
+    // Keep the sender's endpoint alive until receiver ownership is acknowledged.
+    drop(host);
     Ok(OwnedFd::from(guest))
 }
 
@@ -305,17 +317,10 @@ pub fn run_switch_host(home: &Path, network_id: &str) -> io::Result<()> {
     let mut seen_member = false;
     let watch_deadline = Instant::now() + BIRTH_CONNECT_TIMEOUT;
     loop {
-        let observed_members = reg.members();
-        #[cfg(test)]
-        if let Err(error) = &observed_members {
-            eprintln!("switch membership read failed before lifecycle decision: {error:?}");
-        }
-        let count = observed_members.map(|m| m.len()).unwrap_or(0);
+        let count = reg.members().map(|m| m.len()).unwrap_or(0);
         if count > 0 {
             seen_member = true;
         } else if seen_member {
-            #[cfg(test)]
-            eprintln!("switch self-stop: observed zero after prior membership, home={home:?}");
             break; // last member left → self-stop
         } else if Instant::now() >= watch_deadline {
             // No member ever attached (birther died before passing its fd). Stop
