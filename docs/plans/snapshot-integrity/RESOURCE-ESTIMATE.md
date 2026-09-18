@@ -1,11 +1,12 @@
-# C13 capacity-estimate support — local candidate
+# C13 recovery capacity estimate — support contract
 
 **Date:** 2026-09-18. **Parent work:** SI-01 #147 / campaign #152.
 **Source basis:** integration `90ce0dc12ab0af43bdc51b13a0aa7d5863e74c1d`,
 Git tree `23c2ba918ca1d9886747c3aa02de45a642e7139a`.
-**State:** candidate, not published or integrated. This is support-tool arithmetic,
-not new Rust Store behavior, a recovered pending-operation inspector or a C13
-qualification receipt. No new architectural or persistent-format decision.
+**State:** versioned support contract; PR #166 records current qualification and
+integration. This is arithmetic, not new Rust Store behavior, a recovered
+pending-operation inspector or a C13 qualification receipt. No new architectural
+or persistent-format decision.
 
 ## Contract and boundary
 
@@ -122,6 +123,15 @@ and 100,000 object/metadata records in TOTAL. These are parser/engineering bound
 not measured performance claims. Negative, fractional, exponential, non-finite,
 boolean and overflowing integers are rejected. Source input is read-only.
 
+Input must be a blocking binary stream. The bounded reader consumes through EOF;
+a short read alone never certifies that the document is complete. The total read
+budget is 8 MiB plus one byte to detect overflow, including fragmented input.
+A later I/O error is propagated even if an earlier fragment was valid JSON.
+`None` (nonblocking no-data), non-byte results and a reader returning more than
+its requested budget fail explicitly; no read-error retry or partial success is
+introduced. This does not set an I/O deadline or preempt an already blocked read.
+See Python's [stream read contract](https://docs.python.org/3/library/io.html).
+
 ## Use and outcomes
 
 ```sh
@@ -156,7 +166,8 @@ per Store, and missing data cannot become permission to recover or delete.
 
 Cover same-domain duplicates and conflicts, separate Stores sharing capacity,
 separate pools, metadata/directory overhead, per-file rounding, quota/inodes,
-empty files, unknown information, u64 overflow, parser limits and read-only CLI
+empty files, unknown information, u64 overflow, parser limits, fragmented reads,
+EOF, late read errors and read-only CLI
 success/error paths. Preserve the existing 50 support and 13 CI-policy tests.
 
 ### Quality standards
@@ -201,3 +212,23 @@ Local evidence logs (SHA-256):
 - `support.log`: `65fa8f8ca9bb09dece473f6dcaef2dd792163ae1eeede9b39383591a9ebdce18` (child exit 0).
 - `ci-policy.log`: `7d9e6ded070118ebbfa72f2c9795866aa9dff3e275ad5ea0650f922b5e47f9eb` (child exit 0).
 - `causal.log`: `9162cb05c861756eb67cb1fdbb1b6b6b9ff588f98636d05140ba1d45f9c608cc` (child exit 0).
+
+## Stream review follow-up — 2026-09-18
+
+Reconciled onto PR #166 source `f23e84df9ccb16f46f8da4316e083bb8237e661f`,
+not reapplied as an add-file patch. The two Python files match the later
+reviewed artifact; the current synthetic-example wording, acceptance boundary,
+publication history and DISPATCH changes are preserved.
+
+A legal short read is not end-of-input. The parser now reads through EOF with
+a cumulative byte budget, rejects invalid reader results and preserves a late
+I/O failure. Six new stream methods accompany the original 33 arithmetic/CLI
+methods. This is API-level bounded stream validation, not a storage exploit or
+a claim that regular-file reads reproduced the short-fragment case.
+
+The six stream methods were exercised first against the published single-read
+implementation and then against the corrected reader. The previous 50 support
+methods and 13 CI-policy methods are retained. All examples and formula-oracle
+inputs are synthetic; no filesystem capacity discovery or recovery is performed.
+Actual qualification status and exact run identities belong to the PR review
+and post-integration receipt, not to earlier green checks or this contract.

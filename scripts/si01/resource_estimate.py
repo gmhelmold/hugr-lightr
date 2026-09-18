@@ -85,8 +85,19 @@ def pairs(items: list[tuple[str, Any]]) -> dict:
 
 
 def load(stream: BinaryIO) -> dict:
-    data = stream.read(MAX_INPUT_BYTES + 1)
-    require(len(data) <= MAX_INPUT_BYTES, "input exceeds byte limit")
+    # A short read is not EOF. Require the entire blocking stream before
+    # accepting JSON, while reading at most the byte limit plus one byte.
+    # No retries, polling or partial success for nonblocking/failed reads.
+    data = bytearray()
+    while True:
+        remaining = MAX_INPUT_BYTES + 1 - len(data)
+        block = stream.read(remaining)
+        require(type(block) is bytes, "expected bytes from a blocking binary stream")
+        require(len(block) <= remaining, "reader exceeded supplied byte budget")
+        if not block:
+            break
+        data.extend(block)
+        require(len(data) <= MAX_INPUT_BYTES, "input exceeds byte limit")
     # Bound structure before decoding, independently of interpreter recursion
     # limits. Brackets in JSON strings (including escaped quotes) are data.
     depth = 0

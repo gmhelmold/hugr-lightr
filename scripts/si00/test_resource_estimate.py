@@ -421,5 +421,88 @@ class ResourceEstimateTests(unittest.TestCase):
             self.assertFalse(missing.exists())
 
 
+class FragmentedReader(io.BytesIO):
+    """Blocking binary stream with legal short reads; never a real Store."""
+    def __init__(self, content, chunk):
+        super().__init__(content)
+        self.chunk = chunk
+        self.requests = []
+
+    def read(self, size=-1):
+        if size <= 0:
+            raise AssertionError("every read must have a positive finite budget")
+        self.requests.append(size)
+        return super().read(min(size, self.chunk))
+
+
+class ResourceStreamTests(unittest.TestCase):
+    def test_fragmented_stream_matches_complete_inventory(self):
+        value = fixture()
+        encoded = json.dumps(value).encode("utf-8")
+        for chunk in (1, 7, 64, len(encoded)):
+            with self.subTest(chunk=chunk):
+                stream = FragmentedReader(encoded, chunk)
+                actual = resource.load(stream)
+                self.assertEqual(actual, value)
+                self.assertEqual(resource.estimate(actual), resource.estimate(value))
+                self.assertEqual(stream.tell(), len(encoded))
+                self.assertGreater(len(stream.requests), 1)
+
+    def test_valid_prefix_cannot_hide_trailing_fragment(self):
+        encoded = json.dumps(fixture()).encode("utf-8")
+        for suffix in (b" trailing", b" {}", b"\xff"):
+            with self.subTest(suffix=suffix):
+                stream = FragmentedReader(encoded + suffix, len(encoded))
+                with self.assertRaises(resource.InvalidInventory):
+                    resource.load(stream)
+                self.assertEqual(stream.tell(), len(encoded) + len(suffix))
+
+    def test_late_io_error_is_not_hidden_by_valid_prefix(self):
+        encoded = json.dumps(fixture()).encode("utf-8")
+        failure = OSError(5, "controlled late read failure")
+
+        class LateFailure(io.BytesIO):
+            def read(self, size=-1):
+                if self.tell() == len(encoded):
+                    raise failure
+                return super().read(size)
+
+        with self.assertRaises(OSError) as raised:
+            resource.load(LateFailure(encoded))
+        self.assertIs(raised.exception, failure)
+
+    def test_fragmented_total_limit_stops_after_one_extra_byte(self):
+        from unittest.mock import patch
+        stream = FragmentedReader(b"{}" + b" " * 30, 2)
+        with patch.object(resource, "MAX_INPUT_BYTES", 9):
+            with self.assertRaisesRegex(resource.InvalidInventory, "byte limit"):
+                resource.load(stream)
+        self.assertEqual(stream.tell(), 10)
+        self.assertEqual(stream.requests, [10, 8, 6, 4, 2])
+
+    def test_exact_byte_limit_checks_eof_without_exceeding_budget(self):
+        from unittest.mock import patch
+        stream = FragmentedReader(b"{}", 1)
+        with patch.object(resource, "MAX_INPUT_BYTES", 2):
+            self.assertEqual(resource.load(stream), {})
+        self.assertEqual(stream.requests, [3, 2, 1])
+        self.assertEqual(stream.tell(), 2)
+
+    def test_nonblocking_or_invalid_read_results_fail_explicitly(self):
+        class InvalidReader:
+            def __init__(self, result):
+                self.result = result
+            def read(self, size=-1):
+                return self.result
+        for value in (None, "{}", 0, bytearray(b"{}")):
+            with self.subTest(value=repr(value)):
+                with self.assertRaisesRegex(resource.InvalidInventory, "blocking binary"):
+                    resource.load(InvalidReader(value))
+        from unittest.mock import patch
+        with patch.object(resource, "MAX_INPUT_BYTES", 2):
+            with self.assertRaisesRegex(resource.InvalidInventory, "supplied byte budget"):
+                resource.load(InvalidReader(b"{}  "))
+
+
 if __name__ == "__main__":
     unittest.main()
