@@ -54,3 +54,6 @@ mod inspection_cancellation_tests;
 mod inspection_waiter_tests;
 
 pub use crate::store::cas::preparation::{CaptureMethod, CaptureMode};
+
+/// Read-only namespace inspection; public mutation remains unactivated.
+pub mod topology;

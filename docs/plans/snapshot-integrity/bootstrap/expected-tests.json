@@ -10,7 +10,27 @@
       "machines": [
         "x86_64",
         "amd64"
-      ]
+      ],
+      "required_tests": {
+        "lightr_store": [
+          "store::foundation::topology::tests::unix::topology_rejects_equal_containing_and_contained_protected_roots",
+          "store::foundation::topology::tests::unix::topology_sibling_prefix_is_not_ancestry_and_all_roots_are_checked",
+          "store::foundation::topology::tests::unix::topology_rejects_source_destination_overlap_in_both_directions",
+          "store::foundation::topology::tests::unix::topology_directory_alias_uses_native_identity_not_its_spelling",
+          "store::foundation::topology::tests::unix::topology_parent_segment_is_resolved_after_directory_alias",
+          "store::foundation::topology::tests::unix::topology_dot_segments_without_alias_keep_native_object",
+          "store::foundation::topology::tests::unix::topology_regular_file_trailing_slash_and_dot_are_not_erased",
+          "store::foundation::topology::tests::unix::topology_missing_destination_uses_existing_alias_anchor_without_creating",
+          "store::foundation::topology::tests::unix::topology_missing_suffix_dot_and_dangling_link_are_explicitly_rejected",
+          "store::foundation::topology::tests::unix::topology_retained_source_and_revalidation_detect_replacement",
+          "store::foundation::topology::tests::unix::topology_regular_aliases_are_rejected_instead_of_guessed",
+          "store::foundation::topology::tests::unix::topology_non_utf8_name_matches_native_representation",
+          "store::foundation::topology::tests::unix::topology_unresolved_source_keeps_native_error_and_no_destination",
+          "store::foundation::topology::tests::unix::topology_unqualified_shapes_and_empty_inventory_fail_closed",
+          "store::foundation::topology::tests::unix::topology_missing_name_representation_is_not_guessed",
+          "store::foundation::topology::tests::unix::topology_observed_source_is_read_only"
+        ]
+      }
     },
     "linux-aarch64": {
       "runner": "ubuntu-24.04-arm",
@@ -18,14 +38,54 @@
       "machines": [
         "aarch64",
         "arm64"
-      ]
+      ],
+      "required_tests": {
+        "lightr_store": [
+          "store::foundation::topology::tests::unix::topology_rejects_equal_containing_and_contained_protected_roots",
+          "store::foundation::topology::tests::unix::topology_sibling_prefix_is_not_ancestry_and_all_roots_are_checked",
+          "store::foundation::topology::tests::unix::topology_rejects_source_destination_overlap_in_both_directions",
+          "store::foundation::topology::tests::unix::topology_directory_alias_uses_native_identity_not_its_spelling",
+          "store::foundation::topology::tests::unix::topology_parent_segment_is_resolved_after_directory_alias",
+          "store::foundation::topology::tests::unix::topology_dot_segments_without_alias_keep_native_object",
+          "store::foundation::topology::tests::unix::topology_regular_file_trailing_slash_and_dot_are_not_erased",
+          "store::foundation::topology::tests::unix::topology_missing_destination_uses_existing_alias_anchor_without_creating",
+          "store::foundation::topology::tests::unix::topology_missing_suffix_dot_and_dangling_link_are_explicitly_rejected",
+          "store::foundation::topology::tests::unix::topology_retained_source_and_revalidation_detect_replacement",
+          "store::foundation::topology::tests::unix::topology_regular_aliases_are_rejected_instead_of_guessed",
+          "store::foundation::topology::tests::unix::topology_non_utf8_name_matches_native_representation",
+          "store::foundation::topology::tests::unix::topology_unresolved_source_keeps_native_error_and_no_destination",
+          "store::foundation::topology::tests::unix::topology_unqualified_shapes_and_empty_inventory_fail_closed",
+          "store::foundation::topology::tests::unix::topology_missing_name_representation_is_not_guessed",
+          "store::foundation::topology::tests::unix::topology_observed_source_is_read_only"
+        ]
+      }
     },
     "macos-x86_64": {
       "runner": "macos-15-intel",
       "host": "x86_64-apple-darwin",
       "machines": [
         "x86_64"
-      ]
+      ],
+      "required_tests": {
+        "lightr_store": [
+          "store::foundation::topology::tests::unix::topology_rejects_equal_containing_and_contained_protected_roots",
+          "store::foundation::topology::tests::unix::topology_sibling_prefix_is_not_ancestry_and_all_roots_are_checked",
+          "store::foundation::topology::tests::unix::topology_rejects_source_destination_overlap_in_both_directions",
+          "store::foundation::topology::tests::unix::topology_directory_alias_uses_native_identity_not_its_spelling",
+          "store::foundation::topology::tests::unix::topology_parent_segment_is_resolved_after_directory_alias",
+          "store::foundation::topology::tests::unix::topology_dot_segments_without_alias_keep_native_object",
+          "store::foundation::topology::tests::unix::topology_regular_file_trailing_slash_and_dot_are_not_erased",
+          "store::foundation::topology::tests::unix::topology_missing_destination_uses_existing_alias_anchor_without_creating",
+          "store::foundation::topology::tests::unix::topology_missing_suffix_dot_and_dangling_link_are_explicitly_rejected",
+          "store::foundation::topology::tests::unix::topology_retained_source_and_revalidation_detect_replacement",
+          "store::foundation::topology::tests::unix::topology_regular_aliases_are_rejected_instead_of_guessed",
+          "store::foundation::topology::tests::unix::topology_non_utf8_name_matches_native_representation",
+          "store::foundation::topology::tests::unix::topology_unresolved_source_keeps_native_error_and_no_destination",
+          "store::foundation::topology::tests::unix::topology_unqualified_shapes_and_empty_inventory_fail_closed",
+          "store::foundation::topology::tests::unix::topology_missing_name_representation_is_not_guessed",
+          "store::foundation::topology::tests::unix::topology_observed_source_is_read_only"
+        ]
+      }
     },
     "macos-aarch64": {
       "runner": "macos-15",
@@ -33,7 +93,27 @@
       "machines": [
         "arm64",
         "aarch64"
-      ]
+      ],
+      "required_tests": {
+        "lightr_store": [
+          "store::foundation::topology::tests::unix::topology_rejects_equal_containing_and_contained_protected_roots",
+          "store::foundation::topology::tests::unix::topology_sibling_prefix_is_not_ancestry_and_all_roots_are_checked",
+          "store::foundation::topology::tests::unix::topology_rejects_source_destination_overlap_in_both_directions",
+          "store::foundation::topology::tests::unix::topology_directory_alias_uses_native_identity_not_its_spelling",
+          "store::foundation::topology::tests::unix::topology_parent_segment_is_resolved_after_directory_alias",
+          "store::foundation::topology::tests::unix::topology_dot_segments_without_alias_keep_native_object",
+          "store::foundation::topology::tests::unix::topology_regular_file_trailing_slash_and_dot_are_not_erased",
+          "store::foundation::topology::tests::unix::topology_missing_destination_uses_existing_alias_anchor_without_creating",
+          "store::foundation::topology::tests::unix::topology_missing_suffix_dot_and_dangling_link_are_explicitly_rejected",
+          "store::foundation::topology::tests::unix::topology_retained_source_and_revalidation_detect_replacement",
+          "store::foundation::topology::tests::unix::topology_regular_aliases_are_rejected_instead_of_guessed",
+          "store::foundation::topology::tests::unix::topology_non_utf8_name_matches_native_representation",
+          "store::foundation::topology::tests::unix::topology_unresolved_source_keeps_native_error_and_no_destination",
+          "store::foundation::topology::tests::unix::topology_unqualified_shapes_and_empty_inventory_fail_closed",
+          "store::foundation::topology::tests::unix::topology_missing_name_representation_is_not_guessed",
+          "store::foundation::topology::tests::unix::topology_observed_source_is_read_only"
+        ]
+      }
     },
     "windows-x86_64": {
       "runner": "windows-2022",
@@ -148,7 +228,10 @@
       "store::cas::preparation::file_capture::tests::file_capture_lease_composes_with_existing_publication_and_requalification",
       "store::cas::preparation::file_capture::tests::file_capture_fallback_classification_rejects_real_io_errors",
       "store::cas::preparation::file_capture::edge_tests::file_capture_opened_source_is_not_reinterpreted_by_path",
-      "store::cas::preparation::file_capture::edge_tests::file_capture_unknown_clone_scratch_blocks_cleanup_and_fallback"
+      "store::cas::preparation::file_capture::edge_tests::file_capture_unknown_clone_scratch_blocks_cleanup_and_fallback",
+      "store::foundation::topology::tests::topology_precancel_precedes_platform_and_path_access",
+      "store::foundation::topology::tests::topology_expired_deadline_does_not_create_a_destination",
+      "store::foundation::topology::tests::topology_platform_capability_is_explicit"
     ],
     "lightr_index": [
       "index::tests::mod_tests_ops::test_snapshot_hydrate_roundtrip",
