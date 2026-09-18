@@ -57,3 +57,6 @@ pub use crate::store::cas::preparation::{CaptureMethod, CaptureMode};
 
 /// Read-only namespace inspection; public mutation remains unactivated.
 pub mod topology;
+
+#[cfg(test)]
+mod destination_tests;

@@ -40,32 +40,26 @@ No relation was removed by this maintenance update.
 
 ## Current increment map — 2026-09-18
 
-Inspection cancellation #161 and mandatory-name policy #163 are integrated.
-Live-file clone/copy preparation #164 is integrated as
-`90ce0dc12ab0af43bdc51b13a0aa7d5863e74c1d`; its fresh parent checks
-35313338751 and 35313338744 passed. The actual macOS clone and portable
-fallback evidence do not certify Linux reflink or ReFS clone capability.
+Inspection cancellation #161, its mandatory-name policy #163 and live-file
+clone/copy #164 are integrated. Resource estimation #166 is integrated as
+`7b3c802d2baac121bcf59320ad6a17df50e7d063`. Topology inspection #165 is integrated
+as `0d9d5069a9a518ad37c36c9d5c141c3f7bf1aa79`. Fresh #165 parent CI 35395588711,
+parent companion 35395588705, push bootstrap 35395584711 and push companion
+35395584652 all passed. Those observations do not qualify later commits.
 
-[Resource estimation](RESOURCE-ESTIMATE.md) was integrated through #166 as
-`7b3c802d2baac121bcf59320ad6a17df50e7d063`. Fresh parent CI 35375608714 and
-35375608715, plus push bootstrap 35375603718 and 35375603704, passed. The tool
-supplies bounded arithmetic and complete stream validation over an explicit
-caller inventory, not native capacity discovery, cleanup or recovery authority.
-Its superseded local patches must not be reapplied.
+[Destination-only inspection](DESTINATION-INSPECTION.md) is the current additive
+prerequisite for stored-snapshot materialization: do not invent a live source,
+and do not expose an existing ancestor as a missing output's directory handle.
+Its exact PR/head determines review and integration status. This remains read-only
+observation, not an anchored writer, namespace lock or writable capability.
 
-[Read-only topology inspection](evidence/SI-01-TOPOLOGY-INSPECTION.md) belongs to
-#165. This source includes its reconciliation with #166; the live PR records
-its exact reviewed candidate, gate results and integration state. It is an
-observation, NOT ValidatedTopology or a write/publication capability. Windows,
-cross-mount equivalence, missing protected roots, writable destination anchoring
-and recursive traversal remain outside this increment. Profile-specific test
-requirements enforce actual Linux/macOS observations separately from the
-explicit Windows Unsupported result. All prior required tests remain mandatory.
-
-All SI-01 criteria remain mandatory. CoW implementation is no longer missing,
-but native capability rows, complete C12, typed inventory/metadata consumers,
+The actual macOS CoW witness and portable fallback results do not certify Linux
+reflink or ReFS success. [Resource estimation](RESOURCE-ESTIMATE.md) is arithmetic
+on caller inputs, not native inventory discovery, cleanup or recovery authority.
+All original SI-01 criteria remain mandatory. Complete C12, destination writes,
+recursive traversal, Windows native inspection, typed inventory/metadata callers,
 resource/reaper implementation and actual constrained-resource E18 remain open.
-Neither this tool nor a passing CI establishes G-FOUNDATION or G-ACTIVATION.
+Neither this helper nor a passing CI establishes G-FOUNDATION or G-ACTIVATION.
 
 ## Earlier accepted inspection increment — historical evidence
 
