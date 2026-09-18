@@ -71,8 +71,8 @@ a reference only: `evidence_references_verified=false` always.
 ## Request shape (schema 1)
 
 All fields shown below are required; unknown fields and duplicate JSON keys are
-rejected. The numbers and hash strings here are SYNTHETIC EXAMPLES, not a measured
-platform profile and not input suitable for real recovery.
+rejected. The numbers and hash strings below are SYNTHETIC EXAMPLES, not
+filesystem observations or input suitable for real recovery.
 
 ```json
 {
