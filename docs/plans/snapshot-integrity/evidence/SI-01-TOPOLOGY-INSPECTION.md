@@ -128,3 +128,45 @@ They explain syscall semantics, not empirical qualification of this repository.
 
 `production_protocol_enabled=false`; G-FOUNDATION/G-ACTIVATION are not established.
 #147 and #152 stay open; #146 stays draft. No main merge, release or migration.
+
+## Reconciliation with the accepted estimator — 2026-09-18
+
+The resumed coordinator review uses a separate clean worktree. The existing
+source d1df4c896b24aedcfaf43a74c8a86b6ffac3cddd was merged with accepted #166
+base 7b3c802d2baac121bcf59320ad6a17df50e7d063 as local candidate
+f8eeabd90f56cda62a5110e88e14f2dbb3048820. The only conflict was DISPATCH.md;
+its current-state resolution keeps both deliveries and their separate limits.
+Every Rust byte remains equal to d1df4c8; all three estimator files remain equal
+to #166. Cargo, full CI, the technical plan, prior required names and allowed
+historical ignores are unchanged. The original source was not authored by this
+continuation; this is coordinator reconciliation and self-review, not an
+independent human approval.
+
+On the owner's Intel Mac in /tmp/lightr-si01-topology-review-4vu5_644/repo,
+Rust 1.96.0, two build jobs, denied warnings, isolated target, debug info and
+incremental disabled: full Store 208 passed / zero failed / zero ignored;
+all-target Store Clippy, formatting and three existing doctests passed.
+Python support passed 93 methods (including all 39 estimator methods and four
+topology-policy methods), and CI-policy passed 13. These totals overlap other
+suite results; this reconciliation adds no new Rust test methods.
+
+Four controls each compiled and failed the named assertion, followed by the
+restored 20-method topology selection passing. Raw logs and source snapshots
+were preserved separately from the clean worktree. Exact log hashes:
+
+| Check | SHA-256 |
+|---|---|
+| format | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
+| support | `75a18cce53165b40d1eb29da57bd83e9f5a8f782f7fea34c85b0cefc9e613f72` |
+| ci-policy | `2bff9fccf1f1d1feb262ca9172c557c3ac27454fd479aba29885878f692e942d` |
+| store | `94e3c7bc31490067f292d22983774b359b1dea5a503fc4a7668ef1f3dfdacdc8` |
+| clippy | `66ccd5d73d419bebd813c7926dc0647f0e5c80af7a3a327ec6b26819f3dbfd76` |
+| doctests | `fc953c7bacb05b0a87b8fb74fc69b2d6b1b06b92c627ce6e13c129c4cabde125` |
+| topology-controls | `c7dc38861f5a113c988adb34f812e9727cd658cfb7969bdb4dcf7803d7245c60` |
+
+Execution-input fingerprint: `32e177b818fa6fb0cf30fe62943d3dd510f5a4143bc507ee96690bfc9030e0e2`.
+This receipt changes no executable inputs. Remote checks must still execute on
+the published candidate and its current integration base. The live #165 review
+records exact remote runs and the final disposition; the earlier 09ada62/d1df4c8
+observations are not relabeled as current-head CI. Do not infer full C12,
+Windows implementation, E18, G-FOUNDATION or activation from this increment.
