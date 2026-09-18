@@ -55,19 +55,27 @@ impl<'a> Layout<'a> {
 
     /// A receipt never exempts its payload from validation across operations.
     /// A corrupt existing object is not silently repaired using caller bytes.
-    pub(super) fn inspect(&self, digest: Digest) -> io::Result<(Option<File>, bool, u64)> {
+    /// Checkpoints surround bounded receipt decoding and each payload hash read.
+    /// They do not preempt a synchronous filesystem call already in progress.
+    pub(super) fn inspect(
+        &self,
+        digest: Digest,
+        checkpoint: &dyn Fn() -> io::Result<()>,
+    ) -> io::Result<(Option<File>, bool, u64)> {
+        checkpoint()?;
         let ready = self
             .receipt
             .open_file(&self.name)?
             .map(|mut f| Readiness::read(&mut f))
             .transpose()?;
+        checkpoint()?;
         let Some(mut file) = self.payload.open_file(&self.name)? else {
             if ready.is_some() {
                 return Err(invalid("receipt exists without payload"));
             }
             return Ok((None, false, 0));
         };
-        let (actual, length) = Digest::of_reader(&mut file)?;
+        let (actual, length) = Digest::of_reader_checked(&mut file, checkpoint)?;
         if actual != digest {
             return Err(invalid("existing payload digest mismatch"));
         }
@@ -87,6 +95,7 @@ impl<'a> Layout<'a> {
                 }
             }
         }
+        checkpoint()?;
         Ok((Some(file), ready.is_some(), length))
     }
     pub(super) fn new_receipt(
