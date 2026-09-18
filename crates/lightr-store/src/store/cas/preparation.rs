@@ -98,6 +98,35 @@ impl StagedFile {
             .map_err(|error| failure(Phase::Stage, error))?;
         let copied = copy_bounded_checked(reader, &mut file, checkpoint)
             .map_err(|error| failure(Phase::Stage, error))?;
+        Self::finish_capture(
+            owned,
+            file,
+            copied,
+            expected,
+            operation_id,
+            sync,
+            checkpoint,
+        )
+    }
+
+    fn finish_capture(
+        owned: OwnedTemp,
+        mut file: File,
+        copied: u64,
+        expected: Option<(Digest, u64)>,
+        operation_id: [u8; 16],
+        sync: impl FnOnce(&File) -> io::Result<()>,
+        checkpoint: &dyn Fn() -> io::Result<()>,
+    ) -> Result<Self, PublicationFailure> {
+        let failure = |phase, cause| {
+            PublicationFailure::new(
+                operation_id,
+                PublicationOutcome::NotPublished,
+                phase,
+                Some(PathBuf::from("payload")),
+                cause,
+            )
+        };
         file.rewind()
             .map_err(|error| failure(Phase::Verify, error))?;
         let (digest, length) = Digest::of_reader_checked(&mut file, checkpoint)
@@ -258,3 +287,7 @@ mod tests;
 #[cfg(test)]
 #[path = "preparation_cancellation_tests.rs"]
 mod cancellation_tests;
+
+#[path = "file_capture.rs"]
+mod file_capture;
+pub use file_capture::{CaptureMethod, CaptureMode};

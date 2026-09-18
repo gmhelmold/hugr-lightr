@@ -82,6 +82,49 @@ impl<'a> LeasedStagedFile<'a> {
             _lease: lease,
         })
     }
+    /// Capture a caller-validated opened LIVE file, using a native clone when
+    /// supported. This is not C12 preflight and MUST NOT requalify unconfirmed
+    /// CAS data. Source is consumed; no source pathname is reopened or modified.
+    /// Returns the actual clone/copy result. Cancellation is cooperative only.
+    pub fn capture_file(
+        lease: &'a StoreLease,
+        source: std::fs::File,
+        mode: super::CaptureMode,
+        expected: Option<(Digest, u64)>,
+        wait: Wait<'_>,
+        operation_id: [u8; 16],
+    ) -> Result<(Self, super::CaptureMethod), PublicationFailure> {
+        let fail = |cause| {
+            PublicationFailure::new(
+                operation_id,
+                PublicationOutcome::NotPublished,
+                Phase::Stage,
+                None,
+                cause,
+            )
+        };
+        wait.check().map_err(fail)?;
+        let parent = lease.staging().map_err(fail)?;
+        let (stage, method) = StagedFile::capture_checked(
+            parent.path(),
+            source,
+            mode,
+            expected,
+            operation_id,
+            &|| wait.check(),
+        )?;
+        parent.verify().map_err(fail)?;
+        wait.check().map_err(fail)?;
+        Ok((
+            Self {
+                stage,
+                _parent: parent,
+                _lease: lease,
+            },
+            method,
+        ))
+    }
+
     pub fn digest(&self) -> Digest {
         self.stage.digest()
     }
