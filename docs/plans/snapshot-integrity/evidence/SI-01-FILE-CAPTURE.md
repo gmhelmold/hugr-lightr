@@ -193,3 +193,10 @@ in its own 13-method native suite. No test was renamed or removed to hide this
 failure. A Python regression checks the harness namespace and fixed count.
 The new file-capture controls job already passed at d3ce3b8; complete candidate
 qualification must still be rerun on the corrective head.
+
+Local verification with warnings denied additionally exposed a pre-existing
+mutation-harness limitation: its existence-only mutant stopped compiling when
+`ready` became unused. That is NOT counted as a causal kill. The two relevant
+mutants now explicitly consume `ready` while retaining their exact defective
+branch decisions and required assertions. Production source is unchanged and
+warnings remain denied; the original compile-failure log is retained.
