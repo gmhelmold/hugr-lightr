@@ -24,7 +24,7 @@ CASES = [
      "if source.contains(destination) || destination.contains(source) {",
      "if false && (source.contains(destination) || destination.contains(source)) {",
      "unix::topology_rejects_source_destination_overlap_in_both_directions", "paired overlap was accepted"),
-    ("identity-revalidation", "topology_native.rs", "if !self", "if false && !self",
+    ("identity-revalidation", "topology_native.rs", "if !self\n            .observed", "if false && !self\n            .observed",
      "unix::topology_retained_source_and_revalidation_detect_replacement", "changed topology was accepted"),
     ("unresolved-parent", "topology_native.rs",
      'if tail.iter().any(|p| *p == b"." || *p == b"..") {',
@@ -44,6 +44,20 @@ CASES = [
      "observed.revalidate(wait)", "{ let _ = observed; wait.check() }",
      "store::foundation::destination_tests::unix::destination_revalidation_detects_replacement_without_retargeting_handle",
      "changed destination was accepted"),
+    ("planned-root-resolution", "topology_native.rs",
+     "ProtectedRoot::PlannedDirectory(path) => (path, Kind::ProposedDirectory),",
+     "ProtectedRoot::PlannedDirectory(path) => (path, Kind::Directory),",
+     "store::foundation::planned_roots_tests::unix::planned_roots_accept_absent_inventory_without_creating_names",
+     "planned root inspection failed"),
+    ("planned-root-native-ambiguity", "topology_native.rs",
+     "if !self.missing.is_empty()", "if false && !self.missing.is_empty()",
+     "store::foundation::planned_roots_tests::unix::planned_roots_reject_unproven_sibling_names",
+     "unresolved sibling disjointness was guessed"),
+    ("planned-root-public-ancestor", "topology_native.rs",
+     "if protected.contains(subject) || subject.contains(protected) {",
+     "if false && (protected.contains(subject) || subject.contains(protected)) {",
+     "store::foundation::planned_roots_tests::unix::planned_roots_reject_public_ancestors",
+     "planned root ancestor accepted"),
 ]
 
 
@@ -79,6 +93,8 @@ def main():
     expected = r"test result: ok\. 20 passed; 0 failed; 0 ignored;"
     destination_suite = cargo + ["store::foundation::destination_tests::", "--", "--nocapture"]
     destination_expected = r"test result: ok\. 11 passed; 0 failed; 0 ignored;"
+    planned_suite = cargo + ["store::foundation::planned_roots_tests::", "--", "--nocapture"]
+    planned_expected = r"test result: ok\. 17 passed; 0 failed; 0 ignored;"
     try:
         require(not git("status", "--porcelain", "--untracked-files=no"), "tracked source dirty")
         archive = subprocess.check_output(["git", "archive", "--format=zip", "HEAD"], cwd=ROOT)
@@ -93,6 +109,8 @@ def main():
             require(code == 0 and re.search(expected, text), "pristine suite absent or failed")
             code, text = run(root, destination_suite, "destination-pristine")
             require(code == 0 and re.search(destination_expected, text), "destination pristine suite absent or failed")
+            code, text = run(root, planned_suite, "planned-pristine")
+            require(code == 0 and re.search(planned_expected, text), "planned-root pristine suite absent or failed")
             for label, name, old, new, test, message in CASES:
                 path = root / BASE / name
                 original = path.read_text()
@@ -113,6 +131,8 @@ def main():
             require(code == 0 and re.search(expected, text), "restored suite failed")
             code, text = run(root, destination_suite, "destination-restored")
             require(code == 0 and re.search(destination_expected, text), "destination restored suite failed")
+            code, text = run(root, planned_suite, "planned-restored")
+            require(code == 0 and re.search(planned_expected, text), "planned-root restored suite failed")
         receipt["status"] = "TOPOLOGY_CONTROLS_PASSED"
     except Exception as error:
         receipt["status"] = "FAILED"
