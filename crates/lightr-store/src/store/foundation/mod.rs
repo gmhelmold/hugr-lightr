@@ -72,3 +72,6 @@ mod planned_roots_tests;
 
 /// Owned, create-only staging handles; no public destination writer.
 pub mod anchored_scratch;
+
+/// Whole logical-name probing in private scratch, not actual-destination approval.
+pub mod scratch_name_probe;

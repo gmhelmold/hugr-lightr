@@ -53,6 +53,9 @@ CASES = [('duplicates',
   'assertion `left == right` failed')]
 
 
+NAME_CASES = [('name-probe-depth', 'scratch_name_probe.rs', 'if depth > limits.max_depth || depth > 64 {', 'if false && (depth > limits.max_depth || depth > 64) {', 'store::foundation::scratch_name_probe::tests::name_probe_whole_plan_budgets_precede_allocation', 'name budget accepted'), ('name-probe-terminal-cancel', 'scratch_name_probe.rs', 'observe(Step::AfterCleanup, "").and_then(|()| wait.check())', 'observe(Step::AfterCleanup, "")', 'store::foundation::scratch_name_probe::tests::unix::name_probe_terminal_cancellation_after_cleanup_is_not_success', 'terminal cancellation accepted'), ('name-probe-cleanup', 'scratch_name_probe.rs', 'if primary.is_some() || !cleanup.is_empty() {', 'if primary.is_some() {', 'store::foundation::scratch_name_probe::tests::unix::name_probe_cleanup_failure_alone_prevents_an_observation', 'failed cleanup accepted')]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, required=True)
@@ -83,6 +86,8 @@ def main():
     cargo = ["cargo", "+1.96.0", "test", "--locked", "-p", "lightr-store", "--lib"]
     suite = cargo + [PREFIX, "--", "--nocapture"]
     expected = r"test result: ok\. 15 passed; 0 failed; 0 ignored;"
+    name_suite = cargo + ["store::foundation::scratch_name_probe::", "--", "--nocapture"]
+    name_expected = r"test result: ok\. 14 passed; 0 failed; 0 ignored;"
     try:
         require(not git("status", "--porcelain", "--untracked-files=no"), "tracked source dirty")
         archive = subprocess.check_output(["git", "archive", "--format=zip", "HEAD"], cwd=ROOT)
@@ -95,7 +100,9 @@ def main():
                 z.extractall(root)
             code, text = run(root, suite, "pristine")
             require(code == 0 and re.search(expected, text), "pristine suite absent or failed")
-            for label, name, old, new, test, message in CASES:
+            code, text = run(root, name_suite, "names-pristine")
+            require(code == 0 and re.search(name_expected, text), "name-probe pristine suite absent or failed")
+            for label, name, old, new, test, message in CASES + NAME_CASES:
                 path = root / BASE / name
                 original = path.read_text()
                 require(original.count(old) == 1, "mutation seam mismatch: " + label)
@@ -113,6 +120,8 @@ def main():
                     path.write_text(original)
             code, text = run(root, suite, "restored")
             require(code == 0 and re.search(expected, text), "restored suite failed")
+            code, text = run(root, name_suite, "names-restored")
+            require(code == 0 and re.search(name_expected, text), "name-probe restored suite failed")
         receipt["status"] = "TREE_PLAN_CONTROLS_PASSED"
     except Exception as error:
         receipt["status"] = "FAILED"
