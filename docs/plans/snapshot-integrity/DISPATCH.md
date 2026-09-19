@@ -1,6 +1,6 @@
 # Snapshot integrity — current execution and integration state
 
-**Updated:** 2026-09-18. **Campaign:** #152. **Integration:** PR #146,
+**Updated:** 2026-09-19. **Campaign:** #152. **Integration:** PR #146,
 `fix/snapshot-integrity`; main remains unchanged by this campaign.
 **Technical contract:** [v2.2](../SNAPSHOT-INTEGRITY-REMEDIATION.md) at
 `e30811971f6a1c2a1e2fdb0a91dc8ccf9a06879d`; Accepted design ADR-0020.
@@ -26,7 +26,7 @@ G-ACTIVATION and SI-05 qualification. No coding subagent was launched.
 | Package | Issue | Current state |
 |---|---|---|
 | SI-00 | #153 | COMPLETED; #154 merged as `0c48886d2c82e671c33466ca0d5ff1640f90985d` |
-| SI-01 | #147 | IN PROGRESS; foundation/metadata #155/#156, inspection/policy #161/#163, capture #164 and estimator #166 integrated; topology #165 carries its live acceptance record; full package not accepted |
+| SI-01 | #147 | IN PROGRESS; foundation/metadata #155/#156, inspection/policy #161/#163, capture #164 and estimator #166 integrated; topology #165, destination #167, tree #168 and Windows links/PTY #169 integrated; full package not accepted |
 | SI-02 | #148 | Isolated portion permitted after SI-00; full integration/DoD waits for G-FOUNDATION |
 | SI-03 | #149 | Waits for accepted SI-01/02; owns coordinated public activation |
 | SI-04 | #150 | Qualifies actual SI-03 activated candidate, not nonexistent behavior |
@@ -38,7 +38,20 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Current Windows link increment — 2026-09-18
+## Current watchdog follow-up — 2026-09-19
+
+Windows links and Darwin PTY ownership #169 are integrated in
+`624af3bdc208abab9153a1ed5b630c99e073ca60`. Fresh parent complete CI35424345235
+and four-profile PTY35424345289 passed. The raw macOS14 receipt records35 CRI
+methods passing; this is not certification of the full storage campaign.
+
+The [watchdog evidence repair](evidence/CI-169-WATCHDOG-FAILURE-EVIDENCE.md)
+is a separate follow-up on that base. It retains failed-command receipts when
+cleanup also fails, preserving all native obligations. Its own delivery PR
+owns candidate and post-merge qualification; older green results do not qualify
+it. Supersedes the unpublished 97e3f09-based patch, not the runtime repair.
+
+## Integrated Windows link increment — historical prerequisite
 
 Logical tree preflight #168 is integrated as `2b912812a35aa1d866a89843821ed3ff7fad2af3`;
 its fresh parent CI35405841908 and companion35405841913, push bootstrap35405838633
@@ -46,8 +59,8 @@ and companion35405838627 passed. Those checks do not qualify this later candidat
 
 [Windows link planning](WINDOWS-LINK-PLAN.md) derives the creation kind from the
 captured tree and rejects unsupported static syntax without live target lookup.
-Native creation is a distinct Windows-only mandatory witness. The current PR/head
-owns actual acceptance status. It is not the native collision probe or anchored
+Native creation is a distinct Windows-only mandatory witness, qualified in
+merged #169. That PR retains the exact candidate evidence. It is not the native collision probe or anchored
 writer; no public path activation or full C07/C12 acceptance is claimed.
 
 ## Current increment map — 2026-09-18

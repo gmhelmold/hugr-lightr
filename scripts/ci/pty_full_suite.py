@@ -21,25 +21,78 @@ DESCRIPTOR_TESTS = ["stream_io::descriptor_tests::" + name for name in (
     "pty_descriptors_are_absent_after_unrelated_exec")]
 
 
+def error_record(error):
+    """Serializable native/process error; errno and timeout are not inferred."""
+    record = {"type": type(error).__name__, "message": str(error)}
+    for name in ("errno", "timeout"):
+        value = getattr(error, name, None)
+        if value is not None:
+            record[name] = value
+    return record
+
+
+def terminate_and_reap(child, record):
+    """One termination request and a bounded wait, not a cleanup guarantee."""
+    try:
+        os.killpg(child.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass  # It may have exited between the initial timeout and the signal.
+    except OSError as error:
+        record["errors"]["terminate"] = error_record(error)
+    try:
+        record["exit"] = child.wait(timeout=30)
+        record["reaped"] = True
+    except (subprocess.TimeoutExpired, OSError) as error:
+        # In particular, a second timeout must not erase the first failure.
+        # A child blocked in native code may remain unreaped. Report that fact;
+        # do not invent an exit code or retry until a green outcome appears.
+        record["errors"]["reap"] = error_record(error)
+
+
 def execute(command, root, env, log, limit):
-    """Keep command outcome even on timeout; never repeat a failed execution."""
+    """Retain spawn/wait/termination outcomes, including incomplete cleanup."""
     started = time.monotonic()
-    timed_out = False
+    record = {"command": command, "exit": None, "timed_out": False,
+              "reaped": False, "errors": {}, "limit_seconds": limit, "log": log.name}
     with log.open("wb") as stream:
-        child = subprocess.Popen(command, cwd=root, env=env, stdout=stream,
-                                 stderr=subprocess.STDOUT, start_new_session=True)
         try:
-            code = child.wait(timeout=limit)
-        except subprocess.TimeoutExpired:
-            timed_out = True
+            child = subprocess.Popen(command, cwd=root, env=env, stdout=stream,
+                                     stderr=subprocess.STDOUT, start_new_session=True)
+        except OSError as error:
+            record["errors"]["spawn"] = error_record(error)
+        else:
             try:
-                os.killpg(child.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            code = child.wait(timeout=30)
-    return {"command": command, "exit": code, "timed_out": timed_out,
-            "limit_seconds": limit, "seconds": round(time.monotonic() - started, 3),
-            "log": log.name, "sha256": hashlib.sha256(log.read_bytes()).hexdigest()}
+                record["exit"] = child.wait(timeout=limit)
+                record["reaped"] = True
+            except subprocess.TimeoutExpired:
+                record["timed_out"] = True
+                terminate_and_reap(child, record)
+            except OSError as error:
+                record["errors"]["wait"] = error_record(error)
+                terminate_and_reap(child, record)
+    # This is a point-in-time byte snapshot. An unreaped child or an escaped
+    # descendant can still hold the original log fd; do not claim a final log
+    # or process-tree cleanup from the direct child's reaped state alone.
+    data = log.read_bytes()
+    record.update(seconds=round(time.monotonic() - started, 3),
+                  sha256=hashlib.sha256(data).hexdigest(),
+                  log_snapshot_bytes=len(data), log_hash_scope="snapshot_at_return")
+    return record
+
+
+def test_progress(text, names):
+    """Diagnostic inventory only. Missing completion does not prove a hang."""
+    results = re.findall(r"^test ([^\r\n]+) \.\.\. (ok|FAILED|ignored)$", text, re.M)
+    observed = {name for name, _ in results}
+    long_running = set(re.findall(
+        r"^test ([^\r\n]+) has been running for over [0-9]+ seconds$", text, re.M))
+    return {
+        "passed": [name for name, status in results if status == "ok"],
+        "failed": [name for name, status in results if status == "FAILED"],
+        "ignored": [name for name, status in results if status == "ignored"],
+        "without_result": [name for name in names if name not in observed],
+        "long_running": [name for name in names if name in long_running],
+    }
 
 
 def listed_tests(text):
@@ -50,7 +103,7 @@ def listed_tests(text):
 
 
 def validate_full_suite(record, text, names):
-    if record["timed_out"] or record["exit"] != 0:
+    if record["timed_out"] or record["exit"] != 0 or record.get("errors"):
         raise ValueError("full native CRI suite failed or timed out")
     observed = re.findall(r"^test ([^\r\n]+) \.\.\. ok$", text, re.M)
     if sorted(observed) != sorted(names):
@@ -95,8 +148,12 @@ def main():
     def run(command, label, limit):
         record = execute(command, ROOT, env, out / (label + ".log"), limit)
         receipt["commands"].append(dict(label=label, **record))
+        if label == "full-cri-suite":
+            receipt["test_progress"] = test_progress(
+                (out / record["log"]).read_text(errors="replace"),
+                receipt.get("required_methods", []))
         (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
-        if record["timed_out"] or record["exit"] != 0:
+        if record["timed_out"] or record["exit"] != 0 or record.get("errors"):
             raise RuntimeError("native command failed or timed out: " + label)
         return record, (out / record["log"]).read_text(errors="replace")
 
