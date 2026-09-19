@@ -63,6 +63,22 @@ class AnchoredScratchPolicyTests(unittest.TestCase):
         finally:
             sys.path.pop(0)
 
+    def test_composition_keeps_descendant_and_scratch_controls_and_suites(self):
+        import ast
+        text = (ROOT / "scripts/si01/topology_controls.py").read_text()
+        tree = ast.parse(text)
+        controls = [n for n in ast.walk(tree) if isinstance(n, ast.For)
+                    and isinstance(n.target, ast.Tuple)
+                    and any(isinstance(item, ast.Name) and item.id == "label"
+                            for item in n.target.elts)]
+        self.assertEqual(len(controls), 1)
+        names = [n.id for n in ast.walk(controls[0].iter) if isinstance(n, ast.Name)]
+        self.assertCountEqual(names, ["CASES", "EMPTY_CASES", "DESCENDANT_CASES", "SCRATCH_CASES"])
+        for family, count in (("descendant", 13), ("scratch", 15)):
+            self.assertIn(f'{family}_expected = r"test result: ok\\. {count} passed;', text)
+            for stage in ("pristine", "restored"):
+                self.assertEqual(text.count(f'run(root, {family}_suite, "{family}-{stage}")'), 1)
+
     def test_complete_synthetic_receipt_is_not_runtime_qualification(self):
         result = self.fixture().validate()
         self.assertEqual(result["passed"], len(REQUIRED) + 1)

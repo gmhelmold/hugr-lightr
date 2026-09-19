@@ -64,8 +64,9 @@ CASES = [
 EMPTY_CASES = [('empty-independent-offset', 'topology_empty.rs', 'let scan = open_at(directory, b".", true)?;', 'let _ = open_at; let scan = directory.try_clone()?;', 'store::foundation::topology::topology_empty::tests::empty_destination_scan_has_an_independent_directory_offset', 'called `Result::unwrap_err()` on an `Ok` value'), ('empty-post-eof-cancellation', 'topology_empty.rs', 'wait.check()?; // Cancellation after EOF is still cancellation.', '// Deliberately omitted post-read checkpoint for this causal control.', 'store::foundation::topology::topology_empty::tests::empty_destination_scan_checks_cancellation_after_eof', 'called `Result::unwrap_err()` on an `Ok` value')]
 
 
-SCRATCH_CASES = [('scratch-exclusive-file', 'anchored_scratch_native.rs', 'flags | libc::O_EXCL', 'flags', 'store::foundation::anchored_scratch::tests::unix::scratch_existing_names_are_never_adopted_or_truncated', 'existing file was adopted'), ('scratch-cleanup-identity', 'anchored_scratch_native.rs', 'if identity(&self.parent, &self.name)? != self.identity {', 'if false && identity(&self.parent, &self.name)? != self.identity {', 'store::foundation::anchored_scratch::tests::unix::scratch_cleanup_preserves_replacement_entries', 'replacement was removed'), ('scratch-collision-budget', 'anchored_scratch_native.rs', 'for _ in 0..32 {', 'for _ in 0..33 {', 'store::foundation::anchored_scratch::native::tests::scratch_atomic_reservation_has_a_finite_collision_budget', 'assertion `left == right` failed')]
+DESCENDANT_CASES = [('descendant-no-follow', 'topology_descendant.rs', '| libc::O_NOFOLLOW', '| 0', 'store::foundation::topology::topology_descendant::tests::descendant_rejects_links_at_every_component', 'descendant symbolic link was followed'), ('descendant-component-identity', 'topology_descendant.rs', 'if key(&current)? != opened[index].1 {', 'if false && key(&current)? != opened[index].1 {', 'store::foundation::topology::topology_descendant::tests::descendant_revalidates_each_component_after_opening', 'substituted descendant directory accepted'), ('descendant-hardlink', 'topology_descendant.rs', 'if !directory && metadata.nlink() != 1 {', 'if false && !directory && metadata.nlink() != 1 {', 'store::foundation::topology::topology_descendant::tests::descendant_native_missing_type_and_hardlink_errors_are_preserved', 'called `Result::unwrap_err()` on an `Ok` value')]
 
+SCRATCH_CASES = [('scratch-exclusive-file', 'anchored_scratch_native.rs', 'flags | libc::O_EXCL', 'flags', 'store::foundation::anchored_scratch::tests::unix::scratch_existing_names_are_never_adopted_or_truncated', 'existing file was adopted'), ('scratch-cleanup-identity', 'anchored_scratch_native.rs', 'if identity(&self.parent, &self.name)? != self.identity {', 'if false && identity(&self.parent, &self.name)? != self.identity {', 'store::foundation::anchored_scratch::tests::unix::scratch_cleanup_preserves_replacement_entries', 'replacement was removed'), ('scratch-collision-budget', 'anchored_scratch_native.rs', 'for _ in 0..32 {', 'for _ in 0..33 {', 'store::foundation::anchored_scratch::native::tests::scratch_atomic_reservation_has_a_finite_collision_budget', 'assertion `left == right` failed')]
 
 def main():
     parser = argparse.ArgumentParser()
@@ -103,6 +104,8 @@ def main():
     planned_expected = r"test result: ok\. 17 passed; 0 failed; 0 ignored;"
     empty_suite = cargo + [PREFIX + "topology_empty::tests::", "--", "--nocapture"]
     empty_expected = r"test result: ok\. 12 passed; 0 failed; 0 ignored;"
+    descendant_suite = cargo + [PREFIX + "topology_descendant::tests::", "--", "--nocapture"]
+    descendant_expected = r"test result: ok\. 13 passed; 0 failed; 0 ignored;"
     scratch_suite = cargo + ["store::foundation::anchored_scratch::", "--", "--nocapture"]
     scratch_expected = r"test result: ok\. 15 passed; 0 failed; 0 ignored;"
     try:
@@ -123,9 +126,11 @@ def main():
             require(code == 0 and re.search(planned_expected, text), "planned-root pristine suite absent or failed")
             code, text = run(root, empty_suite, "empty-pristine")
             require(code == 0 and re.search(empty_expected, text), "empty pristine suite absent or failed")
+            code, text = run(root, descendant_suite, "descendant-pristine")
+            require(code == 0 and re.search(descendant_expected, text), "descendant pristine suite absent or failed")
             code, text = run(root, scratch_suite, "scratch-pristine")
             require(code == 0 and re.search(scratch_expected, text), "scratch pristine suite absent or failed")
-            for label, name, old, new, test, message in CASES + EMPTY_CASES + SCRATCH_CASES:
+            for label, name, old, new, test, message in CASES + EMPTY_CASES + DESCENDANT_CASES + SCRATCH_CASES:
                 path = root / BASE / name
                 original = path.read_text()
                 require(original.count(old) == 1, "mutation seam mismatch: " + label)
@@ -149,6 +154,8 @@ def main():
             require(code == 0 and re.search(planned_expected, text), "planned-root restored suite failed")
             code, text = run(root, empty_suite, "empty-restored")
             require(code == 0 and re.search(empty_expected, text), "empty restored suite failed")
+            code, text = run(root, descendant_suite, "descendant-restored")
+            require(code == 0 and re.search(descendant_expected, text), "descendant restored suite absent or failed")
             code, text = run(root, scratch_suite, "scratch-restored")
             require(code == 0 and re.search(scratch_expected, text), "scratch restored suite failed")
         receipt["status"] = "TOPOLOGY_CONTROLS_PASSED"

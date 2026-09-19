@@ -38,21 +38,30 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Active increment — anchored managed scratch
+## Current increment — anchored managed scratch #175
 
 [Anchored scratch](ANCHORED-SCRATCH.md) borrows the existing Store lease and
-creates only private staged names through retained handles. This is the base for
-native reservation/probe work, not full representability or a public writer.
-Exact candidate Actions and review remain mandatory before integration.
+creates private, exclusive staged names through retained handles. Its candidate
+is reconciled with #174; both test/control families remain mandatory. This is a
+prerequisite for native reservation/probes, not full representability or a public
+writer. New exact-candidate Actions and review are required before integration.
 
-## Integrated destination emptiness #173 — 2026-09-19
+## Integrated source descendants #174 — 2026-09-19
 
-Destination emptiness is integrated as `671e3b7fec267fbf8ba5e015da7de680b7ddd709`.
-The new parent CI35457979402, PTY35457979597, parent companion35457979401,
-push bootstrap35457977181 and push companion35457977114 passed; the delivery
-branch was retired. Earlier emptiness attachments are historical, not patches to
-reapply. Native checks bind the integrated tree; they do not qualify later code.
-[Destination emptiness](DESTINATION-EMPTINESS.md) remains observation only.
+[Source-descendant acquisition](SOURCE-DESCENDANTS.md) is integrated in
+`b06a621b4e04f86404f933d38ae646ca8178c28a`. Five fresh post-merge workflows
+passed: CI35462070233, PTY35462070250, parent companion35462070384,
+push bootstrap35462067887 and companion35462067783. Its branch was retired.
+Read-only no-follow acquisition is not recursive capture, output authority or
+whole-tree representation. That green does not qualify later scratch changes.
+
+## Integrated destination-emptiness #173 — 2026-09-19
+
+#173 is merged as671e3b7fec267fbf8ba5e015da7de680b7ddd709. Its new parent
+CI35457979402, PTY35457979597 and companion35457979401, plus push bootstrap
+35457977181 and companion35457977114 passed; the completed branch was retired.
+The read-only occupancy check composes with #172; prior attached patches are
+superseded and must not be reapplied. This does not qualify later source changes.
 
 ## Integrated planned-root increment #172 — 2026-09-19
 

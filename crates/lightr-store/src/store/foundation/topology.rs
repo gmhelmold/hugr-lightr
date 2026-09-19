@@ -115,6 +115,44 @@ impl TopologyInspection {
         }
     }
 
+    /// Open a normal relative file/directory path from the retained source root.
+    ///
+    /// The source must be a directory. Unlike public-path resolution, descendant
+    /// paths must have only normal components: no absolute path, dot, parent,
+    /// empty component or trailing slash. No symbolic link is followed, including
+    /// intermediate components. Bounds: 4096 path bytes and 128 components.
+    /// Revalidate the original topology and each retained descendant identity.
+    ///
+    /// The returned read-only File has an independent offset. It keeps the opened
+    /// object, not the pathname, alive; it is NOT a lease, frozen-content proof or
+    /// namespace lock. O_RDONLY does not forbid every metadata operation on File.
+    /// Link capture, enumeration, output writing and hostile-directory confinement
+    /// remain separate. No public Store/capture/hydrate route calls this adapter.
+    ///
+    /// ```no_run
+    /// use lightr_store::store::foundation::{topology::{SourcePath, TopologyInspection}, Wait};
+    /// use std::{io, path::Path};
+    /// fn open_input(inspection: &TopologyInspection) -> io::Result<std::fs::File> {
+    ///     inspection.open_source_descendant(SourcePath::File(Path::new("data/input")), Wait::Try)
+    /// }
+    /// ```
+    pub fn open_source_descendant(
+        &self,
+        relative: SourcePath<'_>,
+        wait: Wait<'_>,
+    ) -> io::Result<File> {
+        wait.check()?;
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            topology_descendant::open(self, relative, wait)
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = relative;
+            Err(unsupported())
+        }
+    }
+
     pub fn destination_is_missing(&self) -> bool {
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
@@ -289,3 +327,7 @@ mod topology_native;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[path = "topology_empty.rs"]
 mod topology_empty;
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[path = "topology_descendant.rs"]
+mod topology_descendant;

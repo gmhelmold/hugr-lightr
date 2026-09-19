@@ -95,3 +95,38 @@ Native references: POSIX mkdirat/openat/unlinkat descriptor-relative semantics;
 Rust File::try_clone and File::drop ownership/error behavior. See
 https://pubs.opengroup.org/onlinepubs/9799919799/functions/mkdir.html and
 https://doc.rust-lang.org/std/fs/struct.File.html .
+
+## Reconciliation after #174 — 2026-09-19
+
+The candidate now includes accepted integration b06a621. Three textual conflicts
+(dispatch, required-name policy and the control runner) were resolved without
+changing Rust. All prior native source/tests, the ten original topology controls,
+two emptiness controls and three descendant controls remain. Three scratch
+controls are additive: 18 total. Original20/destination11/planned17/empty12 and
+descendant13 Linux selections keep their counts; scratch15 runs separately both
+before and after the controls. A portable regression guards this composition.
+The two compile-fail lifetime examples remain mandatory. Previous branch CI is
+historical; the reconciled tree requires its own local and Actions qualification.
+
+### Reconciled local evidence
+
+Owner's Intel Mac, Rust1.96.0, isolated source/build target, denied warnings and
+configured Swift rpath: Store302 passed (zero failed/ignored/filtered), eleven
+doctests including the two new lifetime compile-fail examples, Clippy all Store
+targets and rustfmt passed. Python3.14.5: support132 and CI-policy30 passed.
+Removing either the descendant or scratch family from the composed control loop
+parses but fails the new composition assertion; both pristine and restored pass.
+Those two portable controls are not additional native executions. Rust files and
+previous test bodies from both branches are unchanged by the reconciliation.
+One initial grouped test invocation was blocked before execution; the subsequent
+individual test commands produced the actual results above. No blocked command
+was counted as a test. New-head Actions remain required before merge.
+
+Local raw logs are retained outside the repository. SHA256:
+
+- `store.log`: `bb81848311cad456906e7ce5dff6f77744ce4283bced468078d7116069d35980`
+- `doctests.log`: `297b90233c7986031116f4a02d3ea3997db88eeb667250589f542c8f1fbd64ef`
+- `support.log`: `8dab7c3548e8f5763e6d89fd61736d860bafde314a48b02d7dc7ccb426db7fe3`
+- `ci-policy.log`: `2265aea600bb843b4298c38ac8063f7e6b4c3714c94186b9393f4fb012ec10ef`
+- `clippy.log`: `04a5dd030834268f7dcb661e8764c4134c531267f96009ae6f117b0526cef073`
+- `composition-controls.log`: `1f5e884daa2f94706ed337c9da90dd9d0da78596cf4b6853bc4beab495162d30`
