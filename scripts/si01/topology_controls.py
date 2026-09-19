@@ -61,6 +61,9 @@ CASES = [
 ]
 
 
+EMPTY_CASES = [('empty-independent-offset', 'topology_empty.rs', 'let scan = open_at(directory, b".", true)?;', 'let _ = open_at; let scan = directory.try_clone()?;', 'store::foundation::topology::topology_empty::tests::empty_destination_scan_has_an_independent_directory_offset', 'called `Result::unwrap_err()` on an `Ok` value'), ('empty-post-eof-cancellation', 'topology_empty.rs', 'wait.check()?; // Cancellation after EOF is still cancellation.', '// Deliberately omitted post-read checkpoint for this causal control.', 'store::foundation::topology::topology_empty::tests::empty_destination_scan_checks_cancellation_after_eof', 'called `Result::unwrap_err()` on an `Ok` value')]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, required=True)
@@ -89,12 +92,14 @@ def main():
         return code, path.read_text(errors="replace")
 
     cargo = ["cargo", "+1.96.0", "test", "--locked", "-p", "lightr-store", "--lib"]
-    suite = cargo + [PREFIX, "--", "--nocapture"]
+    suite = cargo + [PREFIX + "tests::", "--", "--nocapture"]
     expected = r"test result: ok\. 20 passed; 0 failed; 0 ignored;"
     destination_suite = cargo + ["store::foundation::destination_tests::", "--", "--nocapture"]
     destination_expected = r"test result: ok\. 11 passed; 0 failed; 0 ignored;"
     planned_suite = cargo + ["store::foundation::planned_roots_tests::", "--", "--nocapture"]
     planned_expected = r"test result: ok\. 17 passed; 0 failed; 0 ignored;"
+    empty_suite = cargo + [PREFIX + "topology_empty::tests::", "--", "--nocapture"]
+    empty_expected = r"test result: ok\. 12 passed; 0 failed; 0 ignored;"
     try:
         require(not git("status", "--porcelain", "--untracked-files=no"), "tracked source dirty")
         archive = subprocess.check_output(["git", "archive", "--format=zip", "HEAD"], cwd=ROOT)
@@ -111,7 +116,9 @@ def main():
             require(code == 0 and re.search(destination_expected, text), "destination pristine suite absent or failed")
             code, text = run(root, planned_suite, "planned-pristine")
             require(code == 0 and re.search(planned_expected, text), "planned-root pristine suite absent or failed")
-            for label, name, old, new, test, message in CASES:
+            code, text = run(root, empty_suite, "empty-pristine")
+            require(code == 0 and re.search(empty_expected, text), "empty pristine suite absent or failed")
+            for label, name, old, new, test, message in CASES + EMPTY_CASES:
                 path = root / BASE / name
                 original = path.read_text()
                 require(original.count(old) == 1, "mutation seam mismatch: " + label)
@@ -133,6 +140,8 @@ def main():
             require(code == 0 and re.search(destination_expected, text), "destination restored suite failed")
             code, text = run(root, planned_suite, "planned-restored")
             require(code == 0 and re.search(planned_expected, text), "planned-root restored suite failed")
+            code, text = run(root, empty_suite, "empty-restored")
+            require(code == 0 and re.search(empty_expected, text), "empty restored suite failed")
         receipt["status"] = "TOPOLOGY_CONTROLS_PASSED"
     except Exception as error:
         receipt["status"] = "FAILED"

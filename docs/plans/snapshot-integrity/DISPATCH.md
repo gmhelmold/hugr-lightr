@@ -38,14 +38,25 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Current planned-root increment — 2026-09-19
+## Current qualification candidate — destination emptiness #173, 2026-09-19
+
+[Destination emptiness](DESTINATION-EMPTINESS.md) composes with the planned-root
+API integrated by #172 as762221fbf35644621b11e5df25ddbefbc18bfe8b. It adds a
+read-only occupancy check through retained handles, not write authority.
+Eleven Unix methods plus one Linux-only case cover the scan and planned-root
+composition. All ten existing topology controls and their assertions remain;
+two additional emptiness controls and a separate12-case Linux family are added.
+Native/full/causal Actions must qualify this reconciled tree before integration;
+old green results do not qualify a new combination. Main/public routing unchanged.
+
+## Integrated planned-root increment #172 — 2026-09-19
 
 Watchdog #171 is integrated in `408dd9436ef05a612dfec4cd8bea7948e6bf767d`.
 Its fresh parent CI35427136801, PTY35427136794 and companion35427136835 passed;
 the completed branch was retired. Prior watchdog attachments are superseded.
 
-[Planned protected-root inspection](PLANNED-ROOTS.md) is the next inactive C12
-increment. Explicit ExistingDirectory/PlannedDirectory policies share the native
+[Planned protected-root inspection](PLANNED-ROOTS.md) is an integrated inactive C12
+prerequisite. Explicit ExistingDirectory/PlannedDirectory policies share the native
 walker; strict old APIs are preserved. Missing-root observation does not create
 output, establish native representation or authorize writing. Its delivery PR
 owns new-source qualification; older integrated checks are not acceptance.

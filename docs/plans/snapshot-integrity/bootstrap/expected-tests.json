@@ -51,7 +51,19 @@
           "store::foundation::planned_roots_tests::unix::planned_roots_revalidation_detects_parent_replacement",
           "store::foundation::planned_roots_tests::unix::planned_roots_mixed_inventory_checks_each_root",
           "store::foundation::planned_roots_tests::unix::planned_roots_preserve_inventory_bounds",
-          "store::foundation::planned_roots_tests::unix::planned_roots_retained_source_is_not_reopened"
+          "store::foundation::planned_roots_tests::unix::planned_roots_retained_source_is_not_reopened",
+          "store::foundation::topology::topology_empty::tests::empty_destination_existing_and_missing_are_checked_without_creation",
+          "store::foundation::topology::topology_empty::tests::empty_destination_counts_hidden_files_directories_and_dangling_links",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_has_an_independent_directory_offset",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rechecks_contents_without_freezing_them",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rejects_replacement_and_missing_target_adoption",
+          "store::foundation::topology::topology_empty::tests::empty_destination_alias_parent_keeps_native_not_lexical_target",
+          "store::foundation::topology::topology_empty::tests::empty_destination_cancellation_and_deadline_do_not_modify_output",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_checks_cancellation_after_eof",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_preserves_read_errors_and_bounds_dot_streams",
+          "store::foundation::topology::topology_empty::tests::empty_destination_with_planned_root_keeps_absent_paths_absent",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rejects_a_planned_root_created_since_inspection",
+          "store::foundation::topology::topology_empty::tests::empty_destination_non_utf8_name_is_an_entry_not_an_omission"
         ]
       }
     },
@@ -102,7 +114,19 @@
           "store::foundation::planned_roots_tests::unix::planned_roots_revalidation_detects_parent_replacement",
           "store::foundation::planned_roots_tests::unix::planned_roots_mixed_inventory_checks_each_root",
           "store::foundation::planned_roots_tests::unix::planned_roots_preserve_inventory_bounds",
-          "store::foundation::planned_roots_tests::unix::planned_roots_retained_source_is_not_reopened"
+          "store::foundation::planned_roots_tests::unix::planned_roots_retained_source_is_not_reopened",
+          "store::foundation::topology::topology_empty::tests::empty_destination_existing_and_missing_are_checked_without_creation",
+          "store::foundation::topology::topology_empty::tests::empty_destination_counts_hidden_files_directories_and_dangling_links",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_has_an_independent_directory_offset",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rechecks_contents_without_freezing_them",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rejects_replacement_and_missing_target_adoption",
+          "store::foundation::topology::topology_empty::tests::empty_destination_alias_parent_keeps_native_not_lexical_target",
+          "store::foundation::topology::topology_empty::tests::empty_destination_cancellation_and_deadline_do_not_modify_output",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_checks_cancellation_after_eof",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_preserves_read_errors_and_bounds_dot_streams",
+          "store::foundation::topology::topology_empty::tests::empty_destination_with_planned_root_keeps_absent_paths_absent",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rejects_a_planned_root_created_since_inspection",
+          "store::foundation::topology::topology_empty::tests::empty_destination_non_utf8_name_is_an_entry_not_an_omission"
         ]
       }
     },
@@ -152,7 +176,18 @@
           "store::foundation::planned_roots_tests::unix::planned_roots_revalidation_detects_parent_replacement",
           "store::foundation::planned_roots_tests::unix::planned_roots_mixed_inventory_checks_each_root",
           "store::foundation::planned_roots_tests::unix::planned_roots_preserve_inventory_bounds",
-          "store::foundation::planned_roots_tests::unix::planned_roots_retained_source_is_not_reopened"
+          "store::foundation::planned_roots_tests::unix::planned_roots_retained_source_is_not_reopened",
+          "store::foundation::topology::topology_empty::tests::empty_destination_existing_and_missing_are_checked_without_creation",
+          "store::foundation::topology::topology_empty::tests::empty_destination_counts_hidden_files_directories_and_dangling_links",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_has_an_independent_directory_offset",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rechecks_contents_without_freezing_them",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rejects_replacement_and_missing_target_adoption",
+          "store::foundation::topology::topology_empty::tests::empty_destination_alias_parent_keeps_native_not_lexical_target",
+          "store::foundation::topology::topology_empty::tests::empty_destination_cancellation_and_deadline_do_not_modify_output",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_checks_cancellation_after_eof",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_preserves_read_errors_and_bounds_dot_streams",
+          "store::foundation::topology::topology_empty::tests::empty_destination_with_planned_root_keeps_absent_paths_absent",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rejects_a_planned_root_created_since_inspection"
         ]
       }
     },
@@ -203,7 +238,18 @@
           "store::foundation::planned_roots_tests::unix::planned_roots_revalidation_detects_parent_replacement",
           "store::foundation::planned_roots_tests::unix::planned_roots_mixed_inventory_checks_each_root",
           "store::foundation::planned_roots_tests::unix::planned_roots_preserve_inventory_bounds",
-          "store::foundation::planned_roots_tests::unix::planned_roots_retained_source_is_not_reopened"
+          "store::foundation::planned_roots_tests::unix::planned_roots_retained_source_is_not_reopened",
+          "store::foundation::topology::topology_empty::tests::empty_destination_existing_and_missing_are_checked_without_creation",
+          "store::foundation::topology::topology_empty::tests::empty_destination_counts_hidden_files_directories_and_dangling_links",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_has_an_independent_directory_offset",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rechecks_contents_without_freezing_them",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rejects_replacement_and_missing_target_adoption",
+          "store::foundation::topology::topology_empty::tests::empty_destination_alias_parent_keeps_native_not_lexical_target",
+          "store::foundation::topology::topology_empty::tests::empty_destination_cancellation_and_deadline_do_not_modify_output",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_checks_cancellation_after_eof",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_preserves_read_errors_and_bounds_dot_streams",
+          "store::foundation::topology::topology_empty::tests::empty_destination_with_planned_root_keeps_absent_paths_absent",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rejects_a_planned_root_created_since_inspection"
         ]
       }
     },
