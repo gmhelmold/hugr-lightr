@@ -38,6 +38,18 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
+## Current Windows link increment — 2026-09-18
+
+Logical tree preflight #168 is integrated as `2b912812a35aa1d866a89843821ed3ff7fad2af3`;
+its fresh parent CI35405841908 and companion35405841913, push bootstrap35405838633
+and companion35405838627 passed. Those checks do not qualify this later candidate.
+
+[Windows link planning](WINDOWS-LINK-PLAN.md) derives the creation kind from the
+captured tree and rejects unsupported static syntax without live target lookup.
+Native creation is a distinct Windows-only mandatory witness. The current PR/head
+owns actual acceptance status. It is not the native collision probe or anchored
+writer; no public path activation or full C07/C12 acceptance is claimed.
+
 ## Current increment map — 2026-09-18
 
 [Whole-tree structural preflight](TREE-PLAN.md) is the current additive

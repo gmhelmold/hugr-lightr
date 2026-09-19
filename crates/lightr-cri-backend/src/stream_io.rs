@@ -100,16 +100,14 @@ fn make_pipe() -> std::io::Result<(std::fs::File, std::fs::File)> {
 /// Duplicate a file descriptor into a fresh owned `File` (transcribed from the
 /// fake's `dup_file`).
 pub(crate) fn dup_file(f: &std::fs::File) -> std::io::Result<std::fs::File> {
-    use std::os::unix::io::{AsRawFd, FromRawFd};
-    let fd = unsafe { libc::dup(f.as_raw_fd()) };
-    if fd < 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    Ok(unsafe { std::fs::File::from_raw_fd(fd) })
+    // The standard clone atomically sets close-on-exec. Command still performs
+    // intentional stdio transfers; unrelated children must not retain these fds.
+    f.try_clone()
 }
 
 /// Open a pty pair, returning (master, slave) as owned `File`s. Uses
 /// `libc::openpty` (avoids a `nix` dependency; present on macOS + Linux).
+#[cfg(not(target_os = "macos"))]
 pub(crate) fn open_pty() -> std::io::Result<(std::fs::File, std::fs::File)> {
     use std::os::unix::io::FromRawFd;
     let mut master: libc::c_int = -1;
@@ -268,3 +266,16 @@ impl LightrBackend {
         self.io_table.lock().unwrap().insert(id.0.clone(), io);
     }
 }
+
+#[cfg(target_os = "macos")]
+#[path = "stream_pty.rs"]
+mod darwin_pty;
+
+#[cfg(target_os = "macos")]
+pub(crate) fn open_pty() -> std::io::Result<(std::fs::File, std::fs::File)> {
+    darwin_pty::open()
+}
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "stream_descriptor_tests.rs"]
+mod descriptor_tests;

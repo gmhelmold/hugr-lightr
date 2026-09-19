@@ -172,3 +172,23 @@ jobs:
           path: si01-tree-plan-evidence/
           if-no-files-found: error
           retention-days: 30
+
+  windows-link-controls:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Pinned compiler
+        run: rustup toolchain install 1.96.0 --profile minimal
+      - name: Verify static Windows link-kind derivation controls
+        run: python3 scripts/si01/windows_link_controls.py --out si01-windows-link-evidence
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: si01-windows-link-${{ github.sha }}
+          path: si01-windows-link-evidence/
+          if-no-files-found: error
+          retention-days: 30

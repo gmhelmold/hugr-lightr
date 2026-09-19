@@ -157,7 +157,12 @@
       "machines": [
         "amd64",
         "x86_64"
-      ]
+      ],
+      "required_tests": {
+        "lightr_store": [
+          "store::foundation::windows_link_plan::tests::native::windows_link_plan_native_creation_keeps_manifest_derived_kind_after_target_removal"
+        ]
+      }
     }
   },
   "required_tests": {
@@ -285,7 +290,20 @@
       "store::foundation::tree_plan::tests::tree_plan_caller_budgets_include_repeated_components_and_link_text",
       "store::foundation::tree_plan::tests::tree_plan_entry_cancellation_and_deadline_precede_validation",
       "store::foundation::tree_plan::tests::tree_plan_every_checkpoint_failure_is_terminal_without_input_mutation",
-      "store::foundation::tree_plan::tests::tree_plan_small_tree_results_match_independent_pairwise_oracle"
+      "store::foundation::tree_plan::tests::tree_plan_small_tree_results_match_independent_pairwise_oracle",
+      "store::foundation::windows_link_plan::tests::windows_link_plan_derives_file_explicit_implied_and_root_directory_kinds",
+      "store::foundation::windows_link_plan::tests::windows_link_plan_relative_parent_segments_preserve_original_target_text",
+      "store::foundation::windows_link_plan::tests::windows_link_plan_missing_intermediate_or_final_targets_are_not_guessed",
+      "store::foundation::windows_link_plan::tests::windows_link_plan_chains_self_cycles_and_link_before_parent_are_rejected",
+      "store::foundation::windows_link_plan::tests::windows_link_plan_file_components_cannot_be_walked_through",
+      "store::foundation::windows_link_plan::tests::windows_link_plan_parent_resolution_never_leaves_captured_root",
+      "store::foundation::windows_link_plan::tests::windows_link_plan_rejects_nonportable_target_syntax_without_rewriting",
+      "store::foundation::windows_link_plan::tests::windows_link_plan_checks_names_of_every_entry_even_without_links",
+      "store::foundation::windows_link_plan::tests::windows_link_plan_reserved_devices_and_extensions_are_rejected",
+      "store::foundation::windows_link_plan::tests::windows_link_plan_exact_case_and_unicode_do_not_claim_native_alias_qualification",
+      "store::foundation::windows_link_plan::tests::windows_link_plan_empty_tree_and_long_names_remain_static_only",
+      "store::foundation::windows_link_plan::tests::windows_link_plan_all_entry_orders_preserve_link_order_and_kinds",
+      "store::foundation::windows_link_plan::tests::windows_link_plan_every_checkpoint_is_terminal_and_preserves_input"
     ],
     "lightr_index": [
       "index::tests::mod_tests_ops::test_snapshot_hydrate_roundtrip",

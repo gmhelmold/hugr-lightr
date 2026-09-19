@@ -63,3 +63,6 @@ mod destination_tests;
 
 /// Logical tree checks only; native representation and writing remain separate.
 pub mod tree_plan;
+
+/// Static Windows link-kind derivation; native capability and output stay separate.
+pub mod windows_link_plan;
