@@ -141,3 +141,19 @@ Raw local logs remain outside the checkout. Selected SHA256 values:
 - `name-probe-cleanup-test.log`: `95f6d81145a2008583e2070d8aa9a056a7ce1f2974b4ca28e7dc489a77b3505a`.
 - `name-probe-cleanup-restored.log`: `5fbc219e4daddeaf18fa858d224666613fba64cd2d8a9be4df64b74b2bbe14a3`.
 - `name-probe-restored.log`: `d726737ab31c4acd8e705277ba6b4f427715c844b1e876b68b522922797e6c8e`.
+
+## Composition with accepted source listing #180
+
+Reconciled against `aac0e8174ca6a8076bb62cc61a0c67302af83f46` by an ordinary
+merge, without rewriting either branch. Only DISPATCH and the native required-name
+registry conflicted. Both Rust implementations and all old test bodies remain
+byte-identical; removing only scratch-name requirements reproduces the accepted
+#180 policy exactly. The structural/name control runner (6 + 3 controls) and the
+accepted topology runner (26 controls) remain unchanged and run separately.
+
+On the owner Intel Mac / Python 3.14.5, the combined support suite ran 185 methods:
+184 passed and one existing Linux-only case was skipped. All 30 CI-policy methods
+and pinned Rust 1.96.0 formatting passed. Full Store/doctest/Clippy execution and
+exact-head Actions qualification are tracked in the PR; no older candidate green
+qualifies this composition. Public routing/main and the five acceptance groups
+above remain unchanged. Exact results and review belong to the current PR head.

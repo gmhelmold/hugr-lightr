@@ -46,6 +46,15 @@ siblings coexist for native collision detection. Leaf markers do not qualify
 link semantics or the actual destination directory's name policy. The new source
 requires its own full/native/causal Actions before reviewed integration.
 
+## Integrated source-directory listing #180
+
+[SOURCE-LISTING.md](SOURCE-LISTING.md) is integrated as
+`aac0e8174ca6a8076bb62cc61a0c67302af83f46`; candidate and fresh parent CI passed,
+and its delivery branch was retired. Its seventeen Linux/sixteen Unix listing
+methods and four causal controls remain intact in this composition with #179.
+Listing observes names; it is not coherent capture or output-writing authority.
+The scratch-name probe requires NEW exact-composition Actions before integration.
+
 ## Integrated partial-counter consistency #178
 
 #178 is integrated as `deae93539a1ae0bd14b1c7f088f9159df5480341`; its fresh parent

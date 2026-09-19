@@ -361,3 +361,7 @@ mod topology_descendant;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[path = "topology_link.rs"]
 mod topology_link;
+
+#[path = "topology_listing.rs"]
+mod topology_listing;
+pub use topology_listing::DirectoryLimits;

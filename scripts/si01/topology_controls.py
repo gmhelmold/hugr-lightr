@@ -70,6 +70,8 @@ SCRATCH_CASES = [('scratch-exclusive-file', 'anchored_scratch_native.rs', 'flags
 
 LINK_CASES = [('link-leaf-identity', 'topology_link.rs', 'if key(&current)? != expected {', 'if false && key(&current)? != expected {', 'store::foundation::topology::topology_link::tests::source_link_detects_replacement_after_read', 'replaced source link accepted'), ('link-byte-bound', 'topology_link.rs', 'if used > limit {', 'if false && used > limit {', 'store::foundation::topology::topology_link::tests::source_link_exact_byte_budget_never_accepts_truncation', 'called `Result::unwrap_err()` on an `Ok` value'), ('link-final-cancellation', 'topology_link.rs', 'wait.check()?; // Source-link final checkpoint, including completed reads.', '// Deliberately omitted terminal checkpoint for causal control.', 'store::foundation::topology::topology_link::tests::source_link_cancellation_after_completed_validation_is_not_success', 'completed cancelled link read accepted'), ('link-pin-no-follow', 'topology_link.rs', 'libc::O_PATH | libc::O_NOFOLLOW | libc::O_CLOEXEC', 'libc::O_PATH | libc::O_CLOEXEC', 'store::foundation::topology::topology_link::tests::source_link_preserves_dangling_and_exact_target_text', 'dangling link text not preserved')]
 
+LISTING_CASES = [('listing-independent-offset', 'topology_listing_native.rs', 'let scan = open_at(&directory, b".", true)?;', 'let _ = open_at; let scan = directory.try_clone()?;', 'store::foundation::topology::topology_listing::native::tests::listing_ignores_an_offset_previously_advanced_on_the_held_source', 'assertion `left == right` failed'), ('listing-strict-utf8', 'topology_listing_native.rs', 'let name =\n            std::str::from_utf8(name).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;', 'let lossy = String::from_utf8_lossy(name); let name = lossy.as_ref();', 'store::foundation::topology::topology_listing::native::tests::listing_non_utf8_native_name_is_an_error_not_an_omission', 'called `Result::unwrap_err()` on an `Ok` value'), ('listing-eof-cancellation', 'topology_listing_native.rs', 'wait.check()?; // EOF does not erase a cancellation/deadline.\n        let Some(name) = entry else { break };', 'let Some(name) = entry else { return Ok(names) };\n        wait.check()?;', 'store::foundation::topology::topology_listing::native::tests::collection::listing_cancellation_after_eof_rejects_the_result', 'called `Result::unwrap_err()` on an `Ok` value'), ('listing-nested-binding', 'topology_listing_native.rs', 'if key(&current)? != identity {', 'if false && key(&current)? != identity {', 'store::foundation::topology::topology_listing::native::tests::listing_revalidates_nested_binding_after_native_enumeration', 'called `Result::unwrap_err()` on an `Ok` value')]
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, required=True)
@@ -112,6 +114,8 @@ def main():
     scratch_expected = r"test result: ok\. 15 passed; 0 failed; 0 ignored;"
     link_suite = cargo + [PREFIX + "topology_link::tests::", "--", "--nocapture"]
     link_expected = r"test result: ok\. 16 passed; 0 failed; 0 ignored;"
+    listing_suite = cargo + [PREFIX + "topology_listing::native::tests::", "--", "--nocapture"]
+    listing_expected = r"test result: ok\. 17 passed; 0 failed; 0 ignored;"
     try:
         require(not git("status", "--porcelain", "--untracked-files=no"), "tracked source dirty")
         archive = subprocess.check_output(["git", "archive", "--format=zip", "HEAD"], cwd=ROOT)
@@ -136,7 +140,9 @@ def main():
             require(code == 0 and re.search(scratch_expected, text), "scratch pristine suite absent or failed")
             code, text = run(root, link_suite, "link-pristine")
             require(code == 0 and re.search(link_expected, text), "link pristine suite failed")
-            for label, name, old, new, test, message in CASES + EMPTY_CASES + DESCENDANT_CASES + SCRATCH_CASES + LINK_CASES:
+            code, text = run(root, listing_suite, "listing-pristine")
+            require(code == 0 and re.search(listing_expected, text), "listing pristine suite failed")
+            for label, name, old, new, test, message in CASES + EMPTY_CASES + DESCENDANT_CASES + SCRATCH_CASES + LINK_CASES + LISTING_CASES:
                 path = root / BASE / name
                 original = path.read_text()
                 require(original.count(old) == 1, "mutation seam mismatch: " + label)
@@ -166,6 +172,8 @@ def main():
             require(code == 0 and re.search(scratch_expected, text), "scratch restored suite failed")
             code, text = run(root, link_suite, "link-restored")
             require(code == 0 and re.search(link_expected, text), "link restored suite failed")
+            code, text = run(root, listing_suite, "listing-restored")
+            require(code == 0 and re.search(listing_expected, text), "listing restored suite failed")
         receipt["status"] = "TOPOLOGY_CONTROLS_PASSED"
     except Exception as error:
         receipt["status"] = "FAILED"
