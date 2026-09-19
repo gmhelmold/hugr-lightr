@@ -104,7 +104,24 @@
           "store::foundation::topology::topology_link::tests::source_link_scoped_errors_preserve_original_cause",
           "store::foundation::topology::topology_link::tests::source_link_pinned_handle_is_symlink_and_close_on_exec",
           "store::foundation::topology::topology_link::tests::linux::source_link_linux_raw_name_is_not_lossily_rewritten",
-          "store::foundation::topology::topology_link::tests::linux::source_link_linux_non_utf8_target_is_rejected_not_recoded"
+          "store::foundation::topology::topology_link::tests::linux::source_link_linux_non_utf8_target_is_rejected_not_recoded",
+          "store::foundation::topology::topology_listing::native::tests::listing_empty_directory_fits_zero_budgets",
+          "store::foundation::topology::topology_listing::native::tests::listing_keeps_hidden_directory_and_dangling_link_names",
+          "store::foundation::topology::topology_listing::native::tests::listing_nested_directory_uses_no_follow_descendant_acquisition",
+          "store::foundation::topology::topology_listing::native::tests::listing_native_entry_and_utf8_byte_budgets_are_exact",
+          "store::foundation::topology::topology_listing::native::tests::listing_ignores_an_offset_previously_advanced_on_the_held_source",
+          "store::foundation::topology::topology_listing::native::tests::listing_revalidates_source_root_after_native_enumeration",
+          "store::foundation::topology::topology_listing::native::tests::listing_revalidates_nested_binding_after_native_enumeration",
+          "store::foundation::topology::topology_listing::native::tests::listing_observations_are_fresh_but_do_not_freeze_contents",
+          "store::foundation::topology::topology_listing::native::tests::listing_precancel_and_expired_deadline_are_terminal",
+          "store::foundation::topology::topology_listing::native::tests::listing_missing_directory_and_file_source_keep_native_errors",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_read_failure_after_a_name_is_not_partial_success",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_cancellation_after_eof_rejects_the_result",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_duplicates_and_malformed_names_are_not_silently_omitted",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_budget_failure_stops_without_scanning_the_remaining_names",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_empty_stream_and_single_dot_variants_are_accepted",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_checked_close_rejects_success_and_preserves_prior_error",
+          "store::foundation::topology::topology_listing::native::tests::listing_non_utf8_native_name_is_an_error_not_an_omission"
         ]
       }
     },
@@ -208,7 +225,24 @@
           "store::foundation::topology::topology_link::tests::source_link_scoped_errors_preserve_original_cause",
           "store::foundation::topology::topology_link::tests::source_link_pinned_handle_is_symlink_and_close_on_exec",
           "store::foundation::topology::topology_link::tests::linux::source_link_linux_raw_name_is_not_lossily_rewritten",
-          "store::foundation::topology::topology_link::tests::linux::source_link_linux_non_utf8_target_is_rejected_not_recoded"
+          "store::foundation::topology::topology_link::tests::linux::source_link_linux_non_utf8_target_is_rejected_not_recoded",
+          "store::foundation::topology::topology_listing::native::tests::listing_empty_directory_fits_zero_budgets",
+          "store::foundation::topology::topology_listing::native::tests::listing_keeps_hidden_directory_and_dangling_link_names",
+          "store::foundation::topology::topology_listing::native::tests::listing_nested_directory_uses_no_follow_descendant_acquisition",
+          "store::foundation::topology::topology_listing::native::tests::listing_native_entry_and_utf8_byte_budgets_are_exact",
+          "store::foundation::topology::topology_listing::native::tests::listing_ignores_an_offset_previously_advanced_on_the_held_source",
+          "store::foundation::topology::topology_listing::native::tests::listing_revalidates_source_root_after_native_enumeration",
+          "store::foundation::topology::topology_listing::native::tests::listing_revalidates_nested_binding_after_native_enumeration",
+          "store::foundation::topology::topology_listing::native::tests::listing_observations_are_fresh_but_do_not_freeze_contents",
+          "store::foundation::topology::topology_listing::native::tests::listing_precancel_and_expired_deadline_are_terminal",
+          "store::foundation::topology::topology_listing::native::tests::listing_missing_directory_and_file_source_keep_native_errors",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_read_failure_after_a_name_is_not_partial_success",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_cancellation_after_eof_rejects_the_result",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_duplicates_and_malformed_names_are_not_silently_omitted",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_budget_failure_stops_without_scanning_the_remaining_names",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_empty_stream_and_single_dot_variants_are_accepted",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_checked_close_rejects_success_and_preserves_prior_error",
+          "store::foundation::topology::topology_listing::native::tests::listing_non_utf8_native_name_is_an_error_not_an_omission"
         ]
       }
     },
@@ -307,7 +341,23 @@
           "store::foundation::topology::topology_link::tests::source_link_cancellation_and_deadline_precede_access",
           "store::foundation::topology::topology_link::tests::source_link_cancellation_after_completed_validation_is_not_success",
           "store::foundation::topology::topology_link::tests::source_link_scoped_errors_preserve_original_cause",
-          "store::foundation::topology::topology_link::tests::source_link_pinned_handle_is_symlink_and_close_on_exec"
+          "store::foundation::topology::topology_link::tests::source_link_pinned_handle_is_symlink_and_close_on_exec",
+          "store::foundation::topology::topology_listing::native::tests::listing_empty_directory_fits_zero_budgets",
+          "store::foundation::topology::topology_listing::native::tests::listing_keeps_hidden_directory_and_dangling_link_names",
+          "store::foundation::topology::topology_listing::native::tests::listing_nested_directory_uses_no_follow_descendant_acquisition",
+          "store::foundation::topology::topology_listing::native::tests::listing_native_entry_and_utf8_byte_budgets_are_exact",
+          "store::foundation::topology::topology_listing::native::tests::listing_ignores_an_offset_previously_advanced_on_the_held_source",
+          "store::foundation::topology::topology_listing::native::tests::listing_revalidates_source_root_after_native_enumeration",
+          "store::foundation::topology::topology_listing::native::tests::listing_revalidates_nested_binding_after_native_enumeration",
+          "store::foundation::topology::topology_listing::native::tests::listing_observations_are_fresh_but_do_not_freeze_contents",
+          "store::foundation::topology::topology_listing::native::tests::listing_precancel_and_expired_deadline_are_terminal",
+          "store::foundation::topology::topology_listing::native::tests::listing_missing_directory_and_file_source_keep_native_errors",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_read_failure_after_a_name_is_not_partial_success",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_cancellation_after_eof_rejects_the_result",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_duplicates_and_malformed_names_are_not_silently_omitted",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_budget_failure_stops_without_scanning_the_remaining_names",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_empty_stream_and_single_dot_variants_are_accepted",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_checked_close_rejects_success_and_preserves_prior_error"
         ]
       }
     },
@@ -407,7 +457,23 @@
           "store::foundation::topology::topology_link::tests::source_link_cancellation_and_deadline_precede_access",
           "store::foundation::topology::topology_link::tests::source_link_cancellation_after_completed_validation_is_not_success",
           "store::foundation::topology::topology_link::tests::source_link_scoped_errors_preserve_original_cause",
-          "store::foundation::topology::topology_link::tests::source_link_pinned_handle_is_symlink_and_close_on_exec"
+          "store::foundation::topology::topology_link::tests::source_link_pinned_handle_is_symlink_and_close_on_exec",
+          "store::foundation::topology::topology_listing::native::tests::listing_empty_directory_fits_zero_budgets",
+          "store::foundation::topology::topology_listing::native::tests::listing_keeps_hidden_directory_and_dangling_link_names",
+          "store::foundation::topology::topology_listing::native::tests::listing_nested_directory_uses_no_follow_descendant_acquisition",
+          "store::foundation::topology::topology_listing::native::tests::listing_native_entry_and_utf8_byte_budgets_are_exact",
+          "store::foundation::topology::topology_listing::native::tests::listing_ignores_an_offset_previously_advanced_on_the_held_source",
+          "store::foundation::topology::topology_listing::native::tests::listing_revalidates_source_root_after_native_enumeration",
+          "store::foundation::topology::topology_listing::native::tests::listing_revalidates_nested_binding_after_native_enumeration",
+          "store::foundation::topology::topology_listing::native::tests::listing_observations_are_fresh_but_do_not_freeze_contents",
+          "store::foundation::topology::topology_listing::native::tests::listing_precancel_and_expired_deadline_are_terminal",
+          "store::foundation::topology::topology_listing::native::tests::listing_missing_directory_and_file_source_keep_native_errors",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_read_failure_after_a_name_is_not_partial_success",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_cancellation_after_eof_rejects_the_result",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_duplicates_and_malformed_names_are_not_silently_omitted",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_budget_failure_stops_without_scanning_the_remaining_names",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_empty_stream_and_single_dot_variants_are_accepted",
+          "store::foundation::topology::topology_listing::native::tests::collection::listing_checked_close_rejects_success_and_preserves_prior_error"
         ]
       }
     },
