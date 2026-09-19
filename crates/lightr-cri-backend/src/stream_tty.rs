@@ -17,7 +17,7 @@ pub(super) unsafe fn configure_child() -> io::Result<()> {
     if unsafe { libc::setsid() } < 0 {
         return Err(io::Error::last_os_error());
     }
-    if unsafe { libc::ioctl(libc::STDIN_FILENO, libc::TIOCSCTTY, 0) } < 0 {
+    if unsafe { libc::ioctl(libc::STDIN_FILENO, libc::TIOCSCTTY as libc::c_ulong, 0) } < 0 {
         return Err(io::Error::last_os_error());
     }
     let terminal = unsafe {
