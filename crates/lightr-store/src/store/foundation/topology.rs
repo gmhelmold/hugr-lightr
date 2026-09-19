@@ -15,6 +15,15 @@ pub enum SourcePath<'a> {
     File(&'a Path),
 }
 
+/// Explicit configured-root policy. Existing roots retain their strict contract.
+/// Planned roots may be absent; their nearest existing ancestor and unresolved
+/// suffix are observed without creating directories or granting write authority.
+#[derive(Clone, Copy)]
+pub enum ProtectedRoot<'a> {
+    ExistingDirectory(&'a Path),
+    PlannedDirectory(&'a Path),
+}
+
 /// One retained, read-only observation. This is not ValidatedTopology, a Store
 /// lease, a writable destination handle, or a PreparedObject constructor.
 pub struct TopologyInspection {
@@ -40,6 +49,35 @@ impl TopologyInspection {
         {
             Ok(Self {
                 inner: topology_native::Inspection::inspect(protected, source, destination, wait)?,
+            })
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = (protected, source, destination);
+            Err(unsupported())
+        }
+    }
+
+    /// Inspect an explicit inventory which may include not-yet-created roots.
+    /// Missing paths sharing a nearest existing ancestor are rejected when their
+    /// disjointness would require guessing native case/Unicode alias semantics.
+    /// Bounds and unsupported profiles are unchanged; no path is created.
+    pub fn inspect_configured(
+        protected: &[ProtectedRoot<'_>],
+        source: SourcePath<'_>,
+        destination: Option<&Path>,
+        wait: Wait<'_>,
+    ) -> io::Result<Self> {
+        wait.check()?;
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            Ok(Self {
+                inner: topology_native::Inspection::inspect_configured(
+                    protected,
+                    Some(source),
+                    destination,
+                    wait,
+                )?,
             })
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -127,6 +165,33 @@ impl DestinationInspection {
                 inner: topology_native::Inspection::inspect_destination(
                     protected,
                     destination,
+                    wait,
+                )?,
+            })
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = (protected, destination);
+            Err(unsupported())
+        }
+    }
+
+    /// Inspect a destination against existing and explicitly planned roots.
+    /// No source is invented. A planned root appearing later invalidates this
+    /// observation; acquire a new one instead of silently retargeting it.
+    pub fn inspect_configured(
+        protected: &[ProtectedRoot<'_>],
+        destination: &Path,
+        wait: Wait<'_>,
+    ) -> io::Result<Self> {
+        wait.check()?;
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            Ok(Self {
+                inner: topology_native::Inspection::inspect_configured(
+                    protected,
+                    None,
+                    Some(destination),
                     wait,
                 )?,
             })

@@ -225,6 +225,44 @@ fn empty_destination_scan_preserves_read_errors_and_bounds_dot_streams() {
     assert_eq!(calls, 3);
 }
 
+#[test]
+fn empty_destination_with_planned_root_keeps_absent_paths_absent() {
+    use crate::store::foundation::topology::ProtectedRoot;
+    let (_root, store, output) = fixture();
+    let planned = store.join("future-store");
+    let roots = [ProtectedRoot::PlannedDirectory(&planned)];
+    let present = DestinationInspection::inspect_configured(&roots, &output, Wait::Try).unwrap();
+    present.require_empty(Wait::Try).unwrap();
+    let missing = output.join("future-output/leaf");
+    let absent = DestinationInspection::inspect_configured(&roots, &missing, Wait::Try).unwrap();
+    absent.require_empty(Wait::Try).unwrap();
+    assert!(!planned.exists());
+    assert!(!output.join("future-output").exists());
+    assert_eq!(fs::read(store.join("sentinel")).unwrap(), b"retained");
+}
+
+#[test]
+fn empty_destination_rejects_a_planned_root_created_since_inspection() {
+    use crate::store::foundation::topology::ProtectedRoot;
+    let (_root, store, output) = fixture();
+    let planned = store.join("future-store");
+    let observed = DestinationInspection::inspect_configured(
+        &[ProtectedRoot::PlannedDirectory(&planned)],
+        &output,
+        Wait::Try,
+    )
+    .unwrap();
+    observed.require_empty(Wait::Try).unwrap();
+    fs::create_dir(&planned).unwrap();
+    assert_eq!(
+        observed.require_empty(Wait::Try).unwrap_err().kind(),
+        io::ErrorKind::InvalidData
+    );
+    assert!(planned.is_dir());
+    assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
+    assert_eq!(fs::read(store.join("sentinel")).unwrap(), b"retained");
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn empty_destination_non_utf8_name_is_an_entry_not_an_omission() {

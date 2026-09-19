@@ -1,6 +1,6 @@
 # C12 destination-emptiness observation
 
-Date: 2026-09-19. Base408dd9436ef05a612dfec4cd8bea7948e6bf767d;
+Date: 2026-09-19. Initial base408dd943; reconciled on planned-root integration762221f;
 SI-01 #147 / campaign #152 / integration #146. An inactive prerequisite,
 not the anchored writer and not final C12 or G-FOUNDATION acceptance.
 
@@ -29,7 +29,8 @@ This is an observation, not namespace exclusion or write authority. Concurrent
 insertions remain possible. The future writer must hold its own guards and use
 exclusive anchored creation. No public Store/hydrate/CLI/GC route is changed;
 Windows native topology remains Unsupported. No new dependency or workflow.
-Planned-root work in #172 must be preserved when reconciling the integration base.
+Planned-root #172 is preserved. Two added composition methods require absent paths
+to stay absent and reject a protected root appearing after inspection.
 
 ## Success Criteria
 
@@ -41,19 +42,19 @@ changed topology fails without replacing the retained handle.
 
 Existing/absent targets, hidden/regular/directory/dangling entries, independent
 offsets, content changes, replacement/adoption, native alias-parent resolution,
-cancellation/deadline/EOF, read errors and bounded dot streams. Nine new methods
-are mandatory on every Linux/macOS profile; a tenth non-UTF-8 case is Linux-only.
+cancellation/deadline/EOF, read errors and bounded dot streams. Eleven new Unix methods
+are mandatory on every Linux/macOS profile; a twelfth non-UTF-8 case is Linux-only.
 No native Windows success is inferred from compilation. All old cases remain.
 
 ## Quality Standards
 
 Rust1.96.0, formatter, deny-warnings Clippy, native Store suites and exact-head
 Actions. Unsafe ownership/errno paths receive explicit review. Isolated fixtures
-use no process-global failure hooks. The existing seven topology controls stay
+use no process-global failure hooks. The existing ten topology controls stay
 required; two added mutants must compile and fail their exact new assertions:
 shared offset, and omitted EOF checkpoint. Original topology selection is scoped
 to its own tests module, preserving20 cases instead of absorbing the new family.
-The new family gets separate pristine/restored10-case Linux runs. A Python test
+The new family gets separate pristine/restored12-case Linux runs. A Python test
 pins that separation and all registered native names.
 
 ## Invariants
@@ -88,3 +89,7 @@ Historical conversation-Linux C primitive experiments and Python policy results
 remain in the prior candidate attachment; they are not new Rust runs or proof
 of macOS behavior. Publication/qualification status is recorded in the delivery
 PR, not inferred from the preceding integration's green badge.
+
+Reconciliation preserves all ten prior control tuples and the original planned-root
+policy assertions unchanged. EMPTY_CASES adds two independent controls; combined
+execution covers12. The two new composition tests add behavior, not relaxed counts.

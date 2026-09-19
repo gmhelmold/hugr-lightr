@@ -11,6 +11,7 @@ from evidence import InvalidEvidence
 ROOT = Path(__file__).resolve().parents[2]
 PREFIX = 'store::foundation::topology::topology_empty::tests::'
 COMMON = ['empty_destination_existing_and_missing_are_checked_without_creation', 'empty_destination_counts_hidden_files_directories_and_dangling_links', 'empty_destination_scan_has_an_independent_directory_offset', 'empty_destination_rechecks_contents_without_freezing_them', 'empty_destination_rejects_replacement_and_missing_target_adoption', 'empty_destination_alias_parent_keeps_native_not_lexical_target', 'empty_destination_cancellation_and_deadline_do_not_modify_output', 'empty_destination_scan_checks_cancellation_after_eof', 'empty_destination_scan_preserves_read_errors_and_bounds_dot_streams']
+COMMON += ['empty_destination_with_planned_root_keeps_absent_paths_absent', 'empty_destination_rejects_a_planned_root_created_since_inspection']
 LINUX = ['empty_destination_non_utf8_name_is_an_entry_not_an_omission']
 REQUIRED = [PREFIX + name for name in COMMON + LINUX]
 
@@ -59,8 +60,8 @@ class DestinationEmptyPolicyTests(unittest.TestCase):
                         values[target.id] = ast.unparse(node.value)
         self.assertEqual(values["suite"], "cargo + [PREFIX + 'tests::', '--', '--nocapture']")
         self.assertEqual(values["empty_suite"], "cargo + [PREFIX + 'topology_empty::tests::', '--', '--nocapture']")
-        self.assertIn('"empty-independent-offset"', source)
-        self.assertIn('"empty-post-eof-cancellation"', source)
+        self.assertIn('empty-independent-offset', source)
+        self.assertIn('empty-post-eof-cancellation', source)
 
     def test_complete_synthetic_receipt_is_not_runtime_qualification(self):
         result = self.fixture().validate()

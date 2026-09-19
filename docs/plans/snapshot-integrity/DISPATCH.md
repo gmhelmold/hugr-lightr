@@ -38,33 +38,28 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Current qualification candidate — destination emptiness, 2026-09-19
+## Current qualification candidate — destination emptiness #173, 2026-09-19
 
-[Destination emptiness](DESTINATION-EMPTINESS.md) adds a read-only check through
-DestinationInspection's retained handle, never a write guard. It has nine Unix
-methods plus one Linux-only method, mandatory native names and two compiled
-controls. All original topology cases and controls remain; family selectors are
-kept separate to avoid absorbing new tests into old exact-count witnesses.
+[Destination emptiness](DESTINATION-EMPTINESS.md) composes with the planned-root
+API integrated by #172 as762221fbf35644621b11e5df25ddbefbc18bfe8b. It adds a
+read-only occupancy check through retained handles, not write authority.
+Eleven Unix methods plus one Linux-only case cover the scan and planned-root
+composition. All ten existing topology controls and their assertions remain;
+two additional emptiness controls and a separate12-case Linux family are added.
+Native/full/causal Actions must qualify this reconciled tree before integration;
+old green results do not qualify a new combination. Main/public routing unchanged.
 
-Local Intel Rust checks passed; the delivery PR owns exact-head full/native/causal
-Actions qualification, reviewed integration and fresh parent CI. Planned roots
-#172 remain separate concurrent work to preserve during base reconciliation.
-The watchdog #171 is integrated in408dd943 and its post-merge CI35427136801 passed;
-its old attachments and retired branch are not work to reapply. Main and public
-routing stay unchanged; native representation and anchored writing remain open.
+## Integrated planned-root increment #172 — 2026-09-19
 
-## Watchdog follow-up — historical pre-integration record
+Watchdog #171 is integrated in `408dd9436ef05a612dfec4cd8bea7948e6bf767d`.
+Its fresh parent CI35427136801, PTY35427136794 and companion35427136835 passed;
+the completed branch was retired. Prior watchdog attachments are superseded.
 
-Windows links and Darwin PTY ownership #169 are integrated in
-`624af3bdc208abab9153a1ed5b630c99e073ca60`. Fresh parent complete CI35424345235
-and four-profile PTY35424345289 passed. The raw macOS14 receipt records35 CRI
-methods passing; this is not certification of the full storage campaign.
-
-The [watchdog evidence repair](evidence/CI-169-WATCHDOG-FAILURE-EVIDENCE.md)
-is a separate follow-up on that base. It retains failed-command receipts when
-cleanup also fails, preserving all native obligations. Its own delivery PR
-owns candidate and post-merge qualification; older green results do not qualify
-it. Supersedes the unpublished 97e3f09-based patch, not the runtime repair.
+[Planned protected-root inspection](PLANNED-ROOTS.md) is an integrated inactive C12
+prerequisite. Explicit ExistingDirectory/PlannedDirectory policies share the native
+walker; strict old APIs are preserved. Missing-root observation does not create
+output, establish native representation or authorize writing. Its delivery PR
+owns new-source qualification; older integrated checks are not acceptance.
 
 ## Integrated Windows link increment — historical prerequisite
 
