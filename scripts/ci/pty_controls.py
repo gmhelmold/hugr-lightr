@@ -65,6 +65,10 @@ def main():
                 and re.search(r"test result: ok\. 1 passed; 0 failed; 0 ignored;", text),
                 "original unmodified echo witness failed: " + label)
 
+        code, text = run(root, cargo + ["stream_io::descriptor_tests::", "--", "--test-threads=4"], label + "-descriptors")
+        require(code == 0 and re.search(r"test result: ok\. 4 passed; 0 failed; 0 ignored;", text),
+                "descriptor suite failed or missing: " + label)
+
     try:
         require(os.uname().sysname == "Darwin", "native Darwin required, never a skipped capability pass")
         require(not git("status", "--porcelain", "--untracked-files=no"), "tracked source dirty")
@@ -97,6 +101,36 @@ def main():
                 receipt["control"] = {"build_exit": 0, "test_exit": 101, "name": name}
             finally:
                 source.write_text(original)
+            variants = [
+                ("inheritable-open", "crates/lightr-cri-backend/src/stream_pty.rs",
+                 " | libc::O_CLOEXEC", "", "pty_descriptors_are_absent_after_unrelated_exec",
+                 "unrelated child retained a PTY descriptor"),
+                ("inheritable-duplicate", "crates/lightr-cri-backend/src/stream_io.rs",
+                 "    f.try_clone()", """    use std::os::fd::{AsRawFd, FromRawFd};
+    let fd = unsafe { libc::dup(f.as_raw_fd()) };
+    if fd < 0 { return Err(std::io::Error::last_os_error()); }
+    Ok(unsafe { std::fs::File::from_raw_fd(fd) })""",
+                 "pty_descriptor_duplicates_are_close_on_exec", "PTY descriptor survives exec"),
+            ]
+            receipt["descriptor_controls"] = []
+            for label, path, old, wrong, method, assertion in variants:
+                source = root / path
+                correct = source.read_text()
+                require(correct.count(old) == 1, "descriptor control seam changed: " + label)
+                source.write_text(correct.replace(old, wrong, 1))
+                try:
+                    code, _ = run(root, cargo + ["--no-run"], label + "-build")
+                    require(code == 0, "descriptor control must compile: " + label)
+                    name = "stream_io::descriptor_tests::" + method
+                    code, text = run(root, cargo + [name, "--", "--exact"], label + "-test", 60)
+                    require(code == 101 and "test " + name + " ... FAILED" in text
+                            and assertion in text
+                            and re.search(r"test result: FAILED\. 0 passed; 1 failed; 0 ignored;", text),
+                            "descriptor control missed its assertion: " + label)
+                    receipt["descriptor_controls"].append({"name": name, "label": label,
+                                                           "build_exit": 0, "test_exit": 101})
+                finally:
+                    source.write_text(correct)
             suites(root, "restored")
         receipt["status"] = "NATIVE_PTY_CONTROLS_PASSED"
     except Exception as error:

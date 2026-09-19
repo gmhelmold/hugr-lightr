@@ -6,7 +6,7 @@ import sys
 import tempfile
 import unittest
 
-from pty_full_suite import (ORIGINAL, REGRESSION, execute, listed_tests,
+from pty_full_suite import (ORIGINAL, REGRESSION, DESCRIPTOR_TESTS, execute, listed_tests,
                             select_executable, validate_full_suite)
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -14,10 +14,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class PtyFullSuiteTests(unittest.TestCase):
     def setUp(self):
-        self.names = [ORIGINAL, REGRESSION, "other::existing_test"]
+        self.names = [ORIGINAL, REGRESSION, "other::existing_test", *DESCRIPTOR_TESTS]
         self.record = {"exit": 0, "timed_out": False}
         self.text = "".join(f"test {n} ... ok\n" for n in self.names)
-        self.text += "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;\n"
+        self.text += f"test result: ok. {len(self.names)} passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;\n"
 
     def test_complete_suite_and_inventory_are_accepted(self):
         self.assertEqual(listed_tests("".join(n + ": test\n" for n in self.names)), self.names)
@@ -78,6 +78,12 @@ class PtyFullSuiteTests(unittest.TestCase):
             self.assertFalse(record["timed_out"])
             self.assertEqual(record["exit"], 0)
             self.assertEqual((root / "output.log").read_text(), "captured output\n")
+
+    def test_each_descriptor_witness_is_mandatory(self):
+        for missing in DESCRIPTOR_TESTS:
+            names = [name for name in self.names if name != missing]
+            with self.subTest(missing=missing), self.assertRaises(ValueError):
+                listed_tests("".join(name + ": test\n" for name in names))
 
     def test_native_matrix_contains_all_complete_ci_macos_versions(self):
         text = (ROOT / ".github/workflows/pty-drain.yml").read_text()

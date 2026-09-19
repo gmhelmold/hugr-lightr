@@ -15,6 +15,10 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 ORIGINAL = "stream::tests::open_exec_tty_uses_pty_master_no_stderr"
 REGRESSION = "stream::tty_setup::tests::delayed_reader_keeps_output_after_all_child_stdio_close"
+DESCRIPTOR_TESTS = ["stream_io::descriptor_tests::" + name for name in (
+    "pty_descriptors_are_close_on_exec_at_return",
+    "pty_descriptor_duplicates_are_close_on_exec",
+    "pty_descriptors_are_absent_after_unrelated_exec")]
 
 
 def execute(command, root, env, log, limit):
@@ -40,7 +44,7 @@ def execute(command, root, env, log, limit):
 
 def listed_tests(text):
     names = re.findall(r"^([^\r\n]+): test$", text, re.M)
-    if len(names) != len(set(names)) or not {ORIGINAL, REGRESSION} <= set(names):
+    if len(names) != len(set(names)) or not {ORIGINAL, REGRESSION, *DESCRIPTOR_TESTS} <= set(names):
         raise ValueError("required native methods missing or duplicate in test inventory")
     return names
 
