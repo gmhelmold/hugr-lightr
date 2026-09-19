@@ -38,13 +38,26 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Current increment — anchored source-link text
+## Current increment — C13 capacity-counter observation
+
+[Capacity observation](RESOURCE-CAPACITY.md) measures an existing directory through
+one retained descriptor, preserving unknown quota/pool/profile information and
+native failure/close context. It is read-only support, not resource reservation,
+full inventory, a recovery retry, a reaper or public output writing. The delivery
+PR owns exact-head qualification and reviewed integration. No previous green
+candidate is reused. Main/public storage routing and original criteria stay unchanged.
+
+## Integrated source-link text #176 — 2026-09-19
+
+Source-link text is integrated as `239ead0d4fba64f1409a4ab20b29881c36426215`.
+Its PR owns post-merge qualification and branch hygiene; do not reapply that work.
+
 
 [Source-link text](SOURCE-LINK-TEXT.md) adds bounded exact target observation from
 retained source parents. It does not follow the final link or silently truncate/
 recode text. It is an inactive prerequisite, not output writing, whole-tree native
-representation or Windows source-kind certification. Its new candidate must pass
-all applicable Actions and review before integration.
+representation or Windows source-kind certification. Its recorded candidate and
+post-merge checks remain separate from this later capacity increment.
 
 ## Integrated private scratch #175 — 2026-09-19
 
