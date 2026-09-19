@@ -38,7 +38,16 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Current increment — C13 partial-counter consistency
+## Current candidate — bounded source-directory names
+
+[SOURCE-LISTING.md](SOURCE-LISTING.md) defines a bounded read-only directory-name
+adapter. Its own PR and Actions qualify exact-source native behavior; prior local
+attachments and integrated green checks do not certify this candidate.
+Seventeen listing methods and four separate controls preserve old requirements.
+Concurrent scratch-name probe #179 is a separate delivery, not overwritten here.
+This is not tree coherence, native destination representation or write authority.
+
+## Integrated C13 partial-counter consistency #178
 
 The capacity collector is integrated by #177 as `fbabc05859c4caa440b2a41f3c42aaed865bb909`.
 The [partial-counter repair](evidence/C13-PARTIAL-COUNTERS.md) preserves every known
