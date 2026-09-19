@@ -130,8 +130,9 @@ impl TopologyInspection {
 /// Read-only destination inspection for materializing a stored snapshot.
 ///
 /// No live source is accepted or inferred. This is NOT a writable destination
-/// capability: it neither checks emptiness nor creates output, acquires a Store
-/// lease, or excludes namespace/content changes. C12 write adapters remain separate.
+/// capability: initial inspection does not check emptiness; require_empty performs
+/// a separate observation. Neither creates output, acquires a Store lease, or
+/// excludes namespace/content changes. C12 write adapters remain separate.
 /// The same conservative native profile limits as TopologyInspection apply.
 ///
 /// ```no_run
@@ -216,6 +217,36 @@ impl DestinationInspection {
         }
     }
 
+    /// Require the observed destination to be absent or currently empty.
+    ///
+    /// Resolve/revalidate before and after enumeration. Existing directories are
+    /// enumerated through the retained handle, with a fresh stream offset; hidden
+    /// names, dangling links and non-UTF-8 names all count as occupied entries.
+    /// A nonempty destination returns the native ENOTEMPTY error on Linux/macOS.
+    /// Nothing is created, removed, truncated or rewritten. Reading may update
+    /// directory access time according to the filesystem's policy.
+    ///
+    /// This is a cancellable observation, NOT an exclusion guard or write token.
+    /// Concurrent insertions after observation are possible. The eventual writer
+    /// must retain its own namespace guards and use exclusive anchored creation.
+    /// A missing destination stays missing; an old observation never adopts a
+    /// newly created directory. Native reads cannot be asynchronously interrupted.
+    pub fn require_empty(&self, wait: Wait<'_>) -> io::Result<()> {
+        wait.check()?;
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            self.inner.revalidate(wait)?;
+            if let Some(directory) = self.inner.destination_handle() {
+                topology_empty::require_empty(directory, wait)?;
+            }
+            self.inner.revalidate(wait)
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            Err(unsupported())
+        }
+    }
+
     /// Borrow only the exact existing target. None means the destination was
     /// absent; its ancestor is NOT an output directory. O_RDONLY restricts data
     /// I/O, not all metadata operations on File. No emptiness/freshness is implied.
@@ -254,3 +285,7 @@ mod topology_io;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[path = "topology_native.rs"]
 mod topology_native;
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[path = "topology_empty.rs"]
+mod topology_empty;
