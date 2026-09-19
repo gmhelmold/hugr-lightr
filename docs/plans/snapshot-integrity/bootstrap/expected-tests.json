@@ -88,7 +88,23 @@
           "store::foundation::anchored_scratch::tests::unix::scratch_allocations_progress_independently",
           "store::foundation::anchored_scratch::tests::unix::scratch_modes_and_lease_exclusion_remain_private",
           "store::foundation::anchored_scratch::native::tests::scratch_atomic_reservation_has_a_finite_collision_budget",
-          "store::foundation::anchored_scratch::native::tests::scratch_owned_descriptors_are_close_on_exec"
+          "store::foundation::anchored_scratch::native::tests::scratch_owned_descriptors_are_close_on_exec",
+          "store::foundation::topology::topology_link::tests::source_link_preserves_dangling_and_exact_target_text",
+          "store::foundation::topology::topology_link::tests::source_link_reads_file_directory_and_protected_target_without_following",
+          "store::foundation::topology::topology_link::tests::source_link_rejects_intermediate_aliases_and_cycles",
+          "store::foundation::topology::topology_link::tests::source_link_rejects_non_normal_paths_and_work_budgets",
+          "store::foundation::topology::topology_link::tests::source_link_exact_byte_budget_never_accepts_truncation",
+          "store::foundation::topology::topology_link::tests::source_link_preserves_missing_and_wrong_type_errors",
+          "store::foundation::topology::topology_link::tests::source_link_detects_replacement_after_read",
+          "store::foundation::topology::topology_link::tests::source_link_detects_replaced_parent_without_retargeting",
+          "store::foundation::topology::topology_link::tests::source_link_detects_original_source_replacement",
+          "store::foundation::topology::topology_link::tests::source_link_returned_text_does_not_depend_on_later_target_existence",
+          "store::foundation::topology::topology_link::tests::source_link_cancellation_and_deadline_precede_access",
+          "store::foundation::topology::topology_link::tests::source_link_cancellation_after_completed_validation_is_not_success",
+          "store::foundation::topology::topology_link::tests::source_link_scoped_errors_preserve_original_cause",
+          "store::foundation::topology::topology_link::tests::source_link_pinned_handle_is_symlink_and_close_on_exec",
+          "store::foundation::topology::topology_link::tests::linux::source_link_linux_raw_name_is_not_lossily_rewritten",
+          "store::foundation::topology::topology_link::tests::linux::source_link_linux_non_utf8_target_is_rejected_not_recoded"
         ]
       }
     },
@@ -176,7 +192,23 @@
           "store::foundation::anchored_scratch::tests::unix::scratch_allocations_progress_independently",
           "store::foundation::anchored_scratch::tests::unix::scratch_modes_and_lease_exclusion_remain_private",
           "store::foundation::anchored_scratch::native::tests::scratch_atomic_reservation_has_a_finite_collision_budget",
-          "store::foundation::anchored_scratch::native::tests::scratch_owned_descriptors_are_close_on_exec"
+          "store::foundation::anchored_scratch::native::tests::scratch_owned_descriptors_are_close_on_exec",
+          "store::foundation::topology::topology_link::tests::source_link_preserves_dangling_and_exact_target_text",
+          "store::foundation::topology::topology_link::tests::source_link_reads_file_directory_and_protected_target_without_following",
+          "store::foundation::topology::topology_link::tests::source_link_rejects_intermediate_aliases_and_cycles",
+          "store::foundation::topology::topology_link::tests::source_link_rejects_non_normal_paths_and_work_budgets",
+          "store::foundation::topology::topology_link::tests::source_link_exact_byte_budget_never_accepts_truncation",
+          "store::foundation::topology::topology_link::tests::source_link_preserves_missing_and_wrong_type_errors",
+          "store::foundation::topology::topology_link::tests::source_link_detects_replacement_after_read",
+          "store::foundation::topology::topology_link::tests::source_link_detects_replaced_parent_without_retargeting",
+          "store::foundation::topology::topology_link::tests::source_link_detects_original_source_replacement",
+          "store::foundation::topology::topology_link::tests::source_link_returned_text_does_not_depend_on_later_target_existence",
+          "store::foundation::topology::topology_link::tests::source_link_cancellation_and_deadline_precede_access",
+          "store::foundation::topology::topology_link::tests::source_link_cancellation_after_completed_validation_is_not_success",
+          "store::foundation::topology::topology_link::tests::source_link_scoped_errors_preserve_original_cause",
+          "store::foundation::topology::topology_link::tests::source_link_pinned_handle_is_symlink_and_close_on_exec",
+          "store::foundation::topology::topology_link::tests::linux::source_link_linux_raw_name_is_not_lossily_rewritten",
+          "store::foundation::topology::topology_link::tests::linux::source_link_linux_non_utf8_target_is_rejected_not_recoded"
         ]
       }
     },
@@ -261,7 +293,21 @@
           "store::foundation::anchored_scratch::tests::unix::scratch_allocations_progress_independently",
           "store::foundation::anchored_scratch::tests::unix::scratch_modes_and_lease_exclusion_remain_private",
           "store::foundation::anchored_scratch::native::tests::scratch_atomic_reservation_has_a_finite_collision_budget",
-          "store::foundation::anchored_scratch::native::tests::scratch_owned_descriptors_are_close_on_exec"
+          "store::foundation::anchored_scratch::native::tests::scratch_owned_descriptors_are_close_on_exec",
+          "store::foundation::topology::topology_link::tests::source_link_preserves_dangling_and_exact_target_text",
+          "store::foundation::topology::topology_link::tests::source_link_reads_file_directory_and_protected_target_without_following",
+          "store::foundation::topology::topology_link::tests::source_link_rejects_intermediate_aliases_and_cycles",
+          "store::foundation::topology::topology_link::tests::source_link_rejects_non_normal_paths_and_work_budgets",
+          "store::foundation::topology::topology_link::tests::source_link_exact_byte_budget_never_accepts_truncation",
+          "store::foundation::topology::topology_link::tests::source_link_preserves_missing_and_wrong_type_errors",
+          "store::foundation::topology::topology_link::tests::source_link_detects_replacement_after_read",
+          "store::foundation::topology::topology_link::tests::source_link_detects_replaced_parent_without_retargeting",
+          "store::foundation::topology::topology_link::tests::source_link_detects_original_source_replacement",
+          "store::foundation::topology::topology_link::tests::source_link_returned_text_does_not_depend_on_later_target_existence",
+          "store::foundation::topology::topology_link::tests::source_link_cancellation_and_deadline_precede_access",
+          "store::foundation::topology::topology_link::tests::source_link_cancellation_after_completed_validation_is_not_success",
+          "store::foundation::topology::topology_link::tests::source_link_scoped_errors_preserve_original_cause",
+          "store::foundation::topology::topology_link::tests::source_link_pinned_handle_is_symlink_and_close_on_exec"
         ]
       }
     },
@@ -347,7 +393,21 @@
           "store::foundation::anchored_scratch::tests::unix::scratch_allocations_progress_independently",
           "store::foundation::anchored_scratch::tests::unix::scratch_modes_and_lease_exclusion_remain_private",
           "store::foundation::anchored_scratch::native::tests::scratch_atomic_reservation_has_a_finite_collision_budget",
-          "store::foundation::anchored_scratch::native::tests::scratch_owned_descriptors_are_close_on_exec"
+          "store::foundation::anchored_scratch::native::tests::scratch_owned_descriptors_are_close_on_exec",
+          "store::foundation::topology::topology_link::tests::source_link_preserves_dangling_and_exact_target_text",
+          "store::foundation::topology::topology_link::tests::source_link_reads_file_directory_and_protected_target_without_following",
+          "store::foundation::topology::topology_link::tests::source_link_rejects_intermediate_aliases_and_cycles",
+          "store::foundation::topology::topology_link::tests::source_link_rejects_non_normal_paths_and_work_budgets",
+          "store::foundation::topology::topology_link::tests::source_link_exact_byte_budget_never_accepts_truncation",
+          "store::foundation::topology::topology_link::tests::source_link_preserves_missing_and_wrong_type_errors",
+          "store::foundation::topology::topology_link::tests::source_link_detects_replacement_after_read",
+          "store::foundation::topology::topology_link::tests::source_link_detects_replaced_parent_without_retargeting",
+          "store::foundation::topology::topology_link::tests::source_link_detects_original_source_replacement",
+          "store::foundation::topology::topology_link::tests::source_link_returned_text_does_not_depend_on_later_target_existence",
+          "store::foundation::topology::topology_link::tests::source_link_cancellation_and_deadline_precede_access",
+          "store::foundation::topology::topology_link::tests::source_link_cancellation_after_completed_validation_is_not_success",
+          "store::foundation::topology::topology_link::tests::source_link_scoped_errors_preserve_original_cause",
+          "store::foundation::topology::topology_link::tests::source_link_pinned_handle_is_symlink_and_close_on_exec"
         ]
       }
     },

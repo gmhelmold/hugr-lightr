@@ -38,13 +38,22 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Current increment — anchored managed scratch #175
+## Current increment — anchored source-link text
 
-[Anchored scratch](ANCHORED-SCRATCH.md) borrows the existing Store lease and
-creates private, exclusive staged names through retained handles. Its candidate
-is reconciled with #174; both test/control families remain mandatory. This is a
-prerequisite for native reservation/probes, not full representability or a public
-writer. New exact-candidate Actions and review are required before integration.
+[Source-link text](SOURCE-LINK-TEXT.md) adds bounded exact target observation from
+retained source parents. It does not follow the final link or silently truncate/
+recode text. It is an inactive prerequisite, not output writing, whole-tree native
+representation or Windows source-kind certification. Its new candidate must pass
+all applicable Actions and review before integration.
+
+## Integrated private scratch #175 — 2026-09-19
+
+[Anchored scratch](ANCHORED-SCRATCH.md) is integrated as
+`a66dc86426160eacbf5c48fc997fda42c1677659`. Fresh parent CI35465720321,
+PTY35465720333, companion35465720328, push bootstrap35465718554 and
+companion35465718553 passed; the delivery branch was retired. The scoped private
+reservation does not authorize arbitrary public destinations. Earlier attachments
+are historical evidence, not an additional patch to apply.
 
 ## Integrated source descendants #174 — 2026-09-19
 

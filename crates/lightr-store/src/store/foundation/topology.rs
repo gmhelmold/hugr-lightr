@@ -153,6 +153,32 @@ impl TopologyInspection {
         }
     }
 
+    /// Read exact UTF-8 link text from a normal relative path in the source directory.
+    /// Intermediate links are rejected, the final link is not followed, and a
+    /// dangling target is valid. Names use the descendant path bounds; the caller
+    /// supplies a target budget of 1..=65535 bytes. Truncation and invalid UTF-8 fail.
+    /// Retained parent/link identities and the original topology are rechecked.
+    /// This observes link text, not a frozen tree, lease or native Windows kind.
+    /// Concurrent hostile ABA replacement is outside the observation contract.
+    /// No public capture/hydrate route is activated by this additive adapter.
+    pub fn read_source_link(
+        &self,
+        relative: &Path,
+        max_target_bytes: usize,
+        wait: Wait<'_>,
+    ) -> io::Result<String> {
+        wait.check()?;
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            topology_link::read(self, relative, max_target_bytes, wait)
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = (relative, max_target_bytes);
+            Err(unsupported())
+        }
+    }
+
     pub fn destination_is_missing(&self) -> bool {
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
@@ -331,3 +357,7 @@ mod topology_empty;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[path = "topology_descendant.rs"]
 mod topology_descendant;
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[path = "topology_link.rs"]
+mod topology_link;
