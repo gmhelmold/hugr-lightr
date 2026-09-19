@@ -38,7 +38,15 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Current increment — C13 capacity-counter observation
+## Current increment — C13 partial-counter consistency
+
+The capacity collector is integrated by #177 as `fbabc05859c4caa440b2a41f3c42aaed865bb909`.
+The [partial-counter repair](evidence/C13-PARTIAL-COUNTERS.md) preserves every known
+ordering constraint when another block/inode counter is unknown. Its own PR and
+Actions must qualify this follow-up; #177's green checks do not approve new code.
+Native syscalls, quota/pool uncertainty and public routing are unchanged.
+
+## Integrated capacity-counter observation #177
 
 [Capacity observation](RESOURCE-CAPACITY.md) measures an existing directory through
 one retained descriptor, preserving unknown quota/pool/profile information and

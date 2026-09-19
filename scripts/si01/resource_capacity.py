@@ -70,7 +70,11 @@ def decode_counters(raw: dict) -> tuple[dict, list[str]]:
     for total, free, available in (("f_blocks", "f_bfree", "f_bavail"),
                                    ("f_files", "f_ffree", "f_favail")):
         counts = [raw[name] for name in (total, free, available)]
-        if all(known(n) for n in counts) and not counts[2] <= counts[1] <= counts[0]:
+        # Unknown observations remove only their own comparison. All remaining
+        # finite counters must still obey total >= free >= available, including
+        # total versus available when the intermediate free count is unknown.
+        finite = [n for n in counts if known(n)]
+        if any(upper < lower for upper, lower in zip(finite, finite[1:])):
             raise InvalidInventory("inconsistent native counters: " + available)
     unit, available = raw["f_frsize"], raw["f_bavail"]
     if known(unit) and unit > 0 and known(available):
