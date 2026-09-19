@@ -5,6 +5,8 @@ on:
     paths:
       - 'crates/lightr-cri-backend/src/stream*.rs'
       - 'scripts/ci/pty_controls.py'
+      - 'scripts/ci/pty_full_suite.py'
+      - 'scripts/ci/test_pty_full_suite.py'
       - '.github/workflows/pty-drain.yml'
 permissions:
   contents: read
@@ -13,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-15-intel, macos-15]
+        runner: [macos-15-intel, macos-15, macos-14, macos-latest]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
     steps:
@@ -23,12 +25,18 @@ jobs:
           fetch-depth: 2
       - name: Install pinned Rust
         run: rustup toolchain install 1.96.0 --profile minimal
+      - name: Verify bounded full-suite gate controls
+        run: python3 -m unittest discover -s scripts/ci -p test_pty_full_suite.py -v
+      - name: Verify complete CRI library with bounded runtime
+        run: python3 scripts/ci/pty_full_suite.py --out pty-full-suite
       - name: Verify real PTY drain and a compiled missing-reference control
         run: python3 scripts/ci/pty_controls.py --out pty-evidence
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: pty-drain-${{ matrix.runner }}-${{ github.sha }}
-          path: pty-evidence/
+          path: |
+            pty-evidence/
+            pty-full-suite/
           if-no-files-found: error
           retention-days: 30
