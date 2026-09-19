@@ -76,7 +76,19 @@
           "store::foundation::topology::topology_descendant::tests::descendant_opened_file_remains_the_original_after_later_rename",
           "store::foundation::topology::topology_descendant::tests::descendant_cancellation_deadline_and_scoped_errors_are_terminal",
           "store::foundation::topology::topology_descendant::tests::descendant_preserves_native_name_bytes_and_does_not_acquire_a_lease",
-          "store::foundation::topology::topology_descendant::tests::descendant_linux_non_utf8_name_is_preserved"
+          "store::foundation::topology::topology_descendant::tests::descendant_linux_non_utf8_name_is_preserved",
+          "store::foundation::anchored_scratch::tests::unix::scratch_round_trip_and_checked_cleanup",
+          "store::foundation::anchored_scratch::tests::unix::scratch_existing_names_are_never_adopted_or_truncated",
+          "store::foundation::anchored_scratch::tests::unix::scratch_invalid_components_do_not_access_other_paths",
+          "store::foundation::anchored_scratch::tests::unix::scratch_anchor_ignores_replaced_path_spelling",
+          "store::foundation::anchored_scratch::tests::unix::scratch_cleanup_preserves_replacement_entries",
+          "store::foundation::anchored_scratch::tests::unix::scratch_unknown_children_prevent_recursive_cleanup",
+          "store::foundation::anchored_scratch::tests::unix::scratch_drop_removes_only_owned_names",
+          "store::foundation::anchored_scratch::tests::unix::scratch_child_cancellation_does_not_allocate",
+          "store::foundation::anchored_scratch::tests::unix::scratch_allocations_progress_independently",
+          "store::foundation::anchored_scratch::tests::unix::scratch_modes_and_lease_exclusion_remain_private",
+          "store::foundation::anchored_scratch::native::tests::scratch_atomic_reservation_has_a_finite_collision_budget",
+          "store::foundation::anchored_scratch::native::tests::scratch_owned_descriptors_are_close_on_exec"
         ]
       }
     },
@@ -152,7 +164,19 @@
           "store::foundation::topology::topology_descendant::tests::descendant_opened_file_remains_the_original_after_later_rename",
           "store::foundation::topology::topology_descendant::tests::descendant_cancellation_deadline_and_scoped_errors_are_terminal",
           "store::foundation::topology::topology_descendant::tests::descendant_preserves_native_name_bytes_and_does_not_acquire_a_lease",
-          "store::foundation::topology::topology_descendant::tests::descendant_linux_non_utf8_name_is_preserved"
+          "store::foundation::topology::topology_descendant::tests::descendant_linux_non_utf8_name_is_preserved",
+          "store::foundation::anchored_scratch::tests::unix::scratch_round_trip_and_checked_cleanup",
+          "store::foundation::anchored_scratch::tests::unix::scratch_existing_names_are_never_adopted_or_truncated",
+          "store::foundation::anchored_scratch::tests::unix::scratch_invalid_components_do_not_access_other_paths",
+          "store::foundation::anchored_scratch::tests::unix::scratch_anchor_ignores_replaced_path_spelling",
+          "store::foundation::anchored_scratch::tests::unix::scratch_cleanup_preserves_replacement_entries",
+          "store::foundation::anchored_scratch::tests::unix::scratch_unknown_children_prevent_recursive_cleanup",
+          "store::foundation::anchored_scratch::tests::unix::scratch_drop_removes_only_owned_names",
+          "store::foundation::anchored_scratch::tests::unix::scratch_child_cancellation_does_not_allocate",
+          "store::foundation::anchored_scratch::tests::unix::scratch_allocations_progress_independently",
+          "store::foundation::anchored_scratch::tests::unix::scratch_modes_and_lease_exclusion_remain_private",
+          "store::foundation::anchored_scratch::native::tests::scratch_atomic_reservation_has_a_finite_collision_budget",
+          "store::foundation::anchored_scratch::native::tests::scratch_owned_descriptors_are_close_on_exec"
         ]
       }
     },
@@ -225,7 +249,19 @@
           "store::foundation::topology::topology_descendant::tests::descendant_revalidates_each_component_after_opening",
           "store::foundation::topology::topology_descendant::tests::descendant_opened_file_remains_the_original_after_later_rename",
           "store::foundation::topology::topology_descendant::tests::descendant_cancellation_deadline_and_scoped_errors_are_terminal",
-          "store::foundation::topology::topology_descendant::tests::descendant_preserves_native_name_bytes_and_does_not_acquire_a_lease"
+          "store::foundation::topology::topology_descendant::tests::descendant_preserves_native_name_bytes_and_does_not_acquire_a_lease",
+          "store::foundation::anchored_scratch::tests::unix::scratch_round_trip_and_checked_cleanup",
+          "store::foundation::anchored_scratch::tests::unix::scratch_existing_names_are_never_adopted_or_truncated",
+          "store::foundation::anchored_scratch::tests::unix::scratch_invalid_components_do_not_access_other_paths",
+          "store::foundation::anchored_scratch::tests::unix::scratch_anchor_ignores_replaced_path_spelling",
+          "store::foundation::anchored_scratch::tests::unix::scratch_cleanup_preserves_replacement_entries",
+          "store::foundation::anchored_scratch::tests::unix::scratch_unknown_children_prevent_recursive_cleanup",
+          "store::foundation::anchored_scratch::tests::unix::scratch_drop_removes_only_owned_names",
+          "store::foundation::anchored_scratch::tests::unix::scratch_child_cancellation_does_not_allocate",
+          "store::foundation::anchored_scratch::tests::unix::scratch_allocations_progress_independently",
+          "store::foundation::anchored_scratch::tests::unix::scratch_modes_and_lease_exclusion_remain_private",
+          "store::foundation::anchored_scratch::native::tests::scratch_atomic_reservation_has_a_finite_collision_budget",
+          "store::foundation::anchored_scratch::native::tests::scratch_owned_descriptors_are_close_on_exec"
         ]
       }
     },
@@ -299,7 +335,19 @@
           "store::foundation::topology::topology_descendant::tests::descendant_revalidates_each_component_after_opening",
           "store::foundation::topology::topology_descendant::tests::descendant_opened_file_remains_the_original_after_later_rename",
           "store::foundation::topology::topology_descendant::tests::descendant_cancellation_deadline_and_scoped_errors_are_terminal",
-          "store::foundation::topology::topology_descendant::tests::descendant_preserves_native_name_bytes_and_does_not_acquire_a_lease"
+          "store::foundation::topology::topology_descendant::tests::descendant_preserves_native_name_bytes_and_does_not_acquire_a_lease",
+          "store::foundation::anchored_scratch::tests::unix::scratch_round_trip_and_checked_cleanup",
+          "store::foundation::anchored_scratch::tests::unix::scratch_existing_names_are_never_adopted_or_truncated",
+          "store::foundation::anchored_scratch::tests::unix::scratch_invalid_components_do_not_access_other_paths",
+          "store::foundation::anchored_scratch::tests::unix::scratch_anchor_ignores_replaced_path_spelling",
+          "store::foundation::anchored_scratch::tests::unix::scratch_cleanup_preserves_replacement_entries",
+          "store::foundation::anchored_scratch::tests::unix::scratch_unknown_children_prevent_recursive_cleanup",
+          "store::foundation::anchored_scratch::tests::unix::scratch_drop_removes_only_owned_names",
+          "store::foundation::anchored_scratch::tests::unix::scratch_child_cancellation_does_not_allocate",
+          "store::foundation::anchored_scratch::tests::unix::scratch_allocations_progress_independently",
+          "store::foundation::anchored_scratch::tests::unix::scratch_modes_and_lease_exclusion_remain_private",
+          "store::foundation::anchored_scratch::native::tests::scratch_atomic_reservation_has_a_finite_collision_budget",
+          "store::foundation::anchored_scratch::native::tests::scratch_owned_descriptors_are_close_on_exec"
         ]
       }
     },
@@ -458,7 +506,10 @@
       "store::foundation::windows_link_plan::tests::windows_link_plan_every_checkpoint_is_terminal_and_preserves_input",
       "store::foundation::planned_roots_tests::planned_roots_precancel_precedes_path_access",
       "store::foundation::planned_roots_tests::planned_roots_deadline_precedes_path_access",
-      "store::foundation::planned_roots_tests::planned_roots_platform_support_is_explicit"
+      "store::foundation::planned_roots_tests::planned_roots_platform_support_is_explicit",
+      "store::foundation::anchored_scratch::tests::scratch_precancel_precedes_allocation",
+      "store::foundation::anchored_scratch::tests::scratch_expired_deadline_precedes_allocation",
+      "store::foundation::anchored_scratch::tests::scratch_platform_contract_is_explicit"
     ],
     "lightr_index": [
       "index::tests::mod_tests_ops::test_snapshot_hydrate_roundtrip",

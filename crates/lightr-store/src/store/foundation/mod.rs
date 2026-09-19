@@ -69,3 +69,6 @@ pub mod windows_link_plan;
 
 #[cfg(test)]
 mod planned_roots_tests;
+
+/// Owned, create-only staging handles; no public destination writer.
+pub mod anchored_scratch;

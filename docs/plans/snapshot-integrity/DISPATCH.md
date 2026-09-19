@@ -38,12 +38,22 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Current increment — anchored source descendants, 2026-09-19
+## Current increment — anchored managed scratch #175
 
-[Source-descendant acquisition](SOURCE-DESCENDANTS.md) adds retained-parent,
-read-only opens with explicit no-follow and component-identity checks. It is not
-recursive capture, native tree representability, namespace exclusion or an output
-writer. Its own exact candidate requires full/native/causal qualification.
+[Anchored scratch](ANCHORED-SCRATCH.md) borrows the existing Store lease and
+creates private, exclusive staged names through retained handles. Its candidate
+is reconciled with #174; both test/control families remain mandatory. This is a
+prerequisite for native reservation/probes, not full representability or a public
+writer. New exact-candidate Actions and review are required before integration.
+
+## Integrated source descendants #174 — 2026-09-19
+
+[Source-descendant acquisition](SOURCE-DESCENDANTS.md) is integrated in
+`b06a621b4e04f86404f933d38ae646ca8178c28a`. Five fresh post-merge workflows
+passed: CI35462070233, PTY35462070250, parent companion35462070384,
+push bootstrap35462067887 and companion35462067783. Its branch was retired.
+Read-only no-follow acquisition is not recursive capture, output authority or
+whole-tree representation. That green does not qualify later scratch changes.
 
 ## Integrated destination-emptiness #173 — 2026-09-19
 
