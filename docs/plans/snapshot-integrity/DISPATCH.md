@@ -38,7 +38,22 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Current watchdog follow-up — 2026-09-19
+## Current qualification candidate — destination emptiness, 2026-09-19
+
+[Destination emptiness](DESTINATION-EMPTINESS.md) adds a read-only check through
+DestinationInspection's retained handle, never a write guard. It has nine Unix
+methods plus one Linux-only method, mandatory native names and two compiled
+controls. All original topology cases and controls remain; family selectors are
+kept separate to avoid absorbing new tests into old exact-count witnesses.
+
+Local Intel Rust checks passed; the delivery PR owns exact-head full/native/causal
+Actions qualification, reviewed integration and fresh parent CI. Planned roots
+#172 remain separate concurrent work to preserve during base reconciliation.
+The watchdog #171 is integrated in408dd943 and its post-merge CI35427136801 passed;
+its old attachments and retired branch are not work to reapply. Main and public
+routing stay unchanged; native representation and anchored writing remain open.
+
+## Watchdog follow-up — historical pre-integration record
 
 Windows links and Darwin PTY ownership #169 are integrated in
 `624af3bdc208abab9153a1ed5b630c99e073ca60`. Fresh parent complete CI35424345235

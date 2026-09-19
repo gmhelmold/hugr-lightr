@@ -37,7 +37,17 @@
           "store::foundation::destination_tests::unix::destination_revalidation_detects_replacement_without_retargeting_handle",
           "store::foundation::destination_tests::unix::destination_missing_protected_root_and_regular_file_are_not_created_or_adopted",
           "store::foundation::destination_tests::unix::destination_revalidation_observes_cancellation_and_deadline",
-          "store::foundation::destination_tests::unix::destination_only_does_not_change_source_only_or_paired_inspection"
+          "store::foundation::destination_tests::unix::destination_only_does_not_change_source_only_or_paired_inspection",
+          "store::foundation::topology::topology_empty::tests::empty_destination_existing_and_missing_are_checked_without_creation",
+          "store::foundation::topology::topology_empty::tests::empty_destination_counts_hidden_files_directories_and_dangling_links",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_has_an_independent_directory_offset",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rechecks_contents_without_freezing_them",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rejects_replacement_and_missing_target_adoption",
+          "store::foundation::topology::topology_empty::tests::empty_destination_alias_parent_keeps_native_not_lexical_target",
+          "store::foundation::topology::topology_empty::tests::empty_destination_cancellation_and_deadline_do_not_modify_output",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_checks_cancellation_after_eof",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_preserves_read_errors_and_bounds_dot_streams",
+          "store::foundation::topology::topology_empty::tests::empty_destination_non_utf8_name_is_an_entry_not_an_omission"
         ]
       }
     },
@@ -74,7 +84,17 @@
           "store::foundation::destination_tests::unix::destination_revalidation_detects_replacement_without_retargeting_handle",
           "store::foundation::destination_tests::unix::destination_missing_protected_root_and_regular_file_are_not_created_or_adopted",
           "store::foundation::destination_tests::unix::destination_revalidation_observes_cancellation_and_deadline",
-          "store::foundation::destination_tests::unix::destination_only_does_not_change_source_only_or_paired_inspection"
+          "store::foundation::destination_tests::unix::destination_only_does_not_change_source_only_or_paired_inspection",
+          "store::foundation::topology::topology_empty::tests::empty_destination_existing_and_missing_are_checked_without_creation",
+          "store::foundation::topology::topology_empty::tests::empty_destination_counts_hidden_files_directories_and_dangling_links",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_has_an_independent_directory_offset",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rechecks_contents_without_freezing_them",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rejects_replacement_and_missing_target_adoption",
+          "store::foundation::topology::topology_empty::tests::empty_destination_alias_parent_keeps_native_not_lexical_target",
+          "store::foundation::topology::topology_empty::tests::empty_destination_cancellation_and_deadline_do_not_modify_output",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_checks_cancellation_after_eof",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_preserves_read_errors_and_bounds_dot_streams",
+          "store::foundation::topology::topology_empty::tests::empty_destination_non_utf8_name_is_an_entry_not_an_omission"
         ]
       }
     },
@@ -110,7 +130,16 @@
           "store::foundation::destination_tests::unix::destination_revalidation_detects_replacement_without_retargeting_handle",
           "store::foundation::destination_tests::unix::destination_missing_protected_root_and_regular_file_are_not_created_or_adopted",
           "store::foundation::destination_tests::unix::destination_revalidation_observes_cancellation_and_deadline",
-          "store::foundation::destination_tests::unix::destination_only_does_not_change_source_only_or_paired_inspection"
+          "store::foundation::destination_tests::unix::destination_only_does_not_change_source_only_or_paired_inspection",
+          "store::foundation::topology::topology_empty::tests::empty_destination_existing_and_missing_are_checked_without_creation",
+          "store::foundation::topology::topology_empty::tests::empty_destination_counts_hidden_files_directories_and_dangling_links",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_has_an_independent_directory_offset",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rechecks_contents_without_freezing_them",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rejects_replacement_and_missing_target_adoption",
+          "store::foundation::topology::topology_empty::tests::empty_destination_alias_parent_keeps_native_not_lexical_target",
+          "store::foundation::topology::topology_empty::tests::empty_destination_cancellation_and_deadline_do_not_modify_output",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_checks_cancellation_after_eof",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_preserves_read_errors_and_bounds_dot_streams"
         ]
       }
     },
@@ -147,7 +176,16 @@
           "store::foundation::destination_tests::unix::destination_revalidation_detects_replacement_without_retargeting_handle",
           "store::foundation::destination_tests::unix::destination_missing_protected_root_and_regular_file_are_not_created_or_adopted",
           "store::foundation::destination_tests::unix::destination_revalidation_observes_cancellation_and_deadline",
-          "store::foundation::destination_tests::unix::destination_only_does_not_change_source_only_or_paired_inspection"
+          "store::foundation::destination_tests::unix::destination_only_does_not_change_source_only_or_paired_inspection",
+          "store::foundation::topology::topology_empty::tests::empty_destination_existing_and_missing_are_checked_without_creation",
+          "store::foundation::topology::topology_empty::tests::empty_destination_counts_hidden_files_directories_and_dangling_links",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_has_an_independent_directory_offset",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rechecks_contents_without_freezing_them",
+          "store::foundation::topology::topology_empty::tests::empty_destination_rejects_replacement_and_missing_target_adoption",
+          "store::foundation::topology::topology_empty::tests::empty_destination_alias_parent_keeps_native_not_lexical_target",
+          "store::foundation::topology::topology_empty::tests::empty_destination_cancellation_and_deadline_do_not_modify_output",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_checks_cancellation_after_eof",
+          "store::foundation::topology::topology_empty::tests::empty_destination_scan_preserves_read_errors_and_bounds_dot_streams"
         ]
       }
     },
