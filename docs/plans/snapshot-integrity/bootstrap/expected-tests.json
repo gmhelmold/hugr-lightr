@@ -104,7 +104,17 @@
           "store::foundation::topology::topology_link::tests::source_link_scoped_errors_preserve_original_cause",
           "store::foundation::topology::topology_link::tests::source_link_pinned_handle_is_symlink_and_close_on_exec",
           "store::foundation::topology::topology_link::tests::linux::source_link_linux_raw_name_is_not_lossily_rewritten",
-          "store::foundation::topology::topology_link::tests::linux::source_link_linux_non_utf8_target_is_rejected_not_recoded"
+          "store::foundation::topology::topology_link::tests::linux::source_link_linux_non_utf8_target_is_rejected_not_recoded",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_whole_tree_preserves_exact_names_and_implicit_parents",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_sibling_markers_coexist_until_all_names_are_tested",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_case_and_unicode_results_follow_native_creation_not_folding",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_same_leaf_name_in_different_parents_is_not_a_collision",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_late_native_creation_failure_cleans_prior_allocations",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_post_creation_cancellation_is_cleaned_and_not_success",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_terminal_cancellation_after_cleanup_is_not_success",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_primary_and_cleanup_failures_are_both_preserved",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_cleanup_failure_alone_prevents_an_observation",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_replaced_marker_and_unknown_bytes_are_not_deleted"
         ]
       }
     },
@@ -208,7 +218,17 @@
           "store::foundation::topology::topology_link::tests::source_link_scoped_errors_preserve_original_cause",
           "store::foundation::topology::topology_link::tests::source_link_pinned_handle_is_symlink_and_close_on_exec",
           "store::foundation::topology::topology_link::tests::linux::source_link_linux_raw_name_is_not_lossily_rewritten",
-          "store::foundation::topology::topology_link::tests::linux::source_link_linux_non_utf8_target_is_rejected_not_recoded"
+          "store::foundation::topology::topology_link::tests::linux::source_link_linux_non_utf8_target_is_rejected_not_recoded",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_whole_tree_preserves_exact_names_and_implicit_parents",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_sibling_markers_coexist_until_all_names_are_tested",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_case_and_unicode_results_follow_native_creation_not_folding",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_same_leaf_name_in_different_parents_is_not_a_collision",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_late_native_creation_failure_cleans_prior_allocations",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_post_creation_cancellation_is_cleaned_and_not_success",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_terminal_cancellation_after_cleanup_is_not_success",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_primary_and_cleanup_failures_are_both_preserved",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_cleanup_failure_alone_prevents_an_observation",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_replaced_marker_and_unknown_bytes_are_not_deleted"
         ]
       }
     },
@@ -307,7 +327,17 @@
           "store::foundation::topology::topology_link::tests::source_link_cancellation_and_deadline_precede_access",
           "store::foundation::topology::topology_link::tests::source_link_cancellation_after_completed_validation_is_not_success",
           "store::foundation::topology::topology_link::tests::source_link_scoped_errors_preserve_original_cause",
-          "store::foundation::topology::topology_link::tests::source_link_pinned_handle_is_symlink_and_close_on_exec"
+          "store::foundation::topology::topology_link::tests::source_link_pinned_handle_is_symlink_and_close_on_exec",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_whole_tree_preserves_exact_names_and_implicit_parents",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_sibling_markers_coexist_until_all_names_are_tested",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_case_and_unicode_results_follow_native_creation_not_folding",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_same_leaf_name_in_different_parents_is_not_a_collision",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_late_native_creation_failure_cleans_prior_allocations",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_post_creation_cancellation_is_cleaned_and_not_success",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_terminal_cancellation_after_cleanup_is_not_success",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_primary_and_cleanup_failures_are_both_preserved",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_cleanup_failure_alone_prevents_an_observation",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_replaced_marker_and_unknown_bytes_are_not_deleted"
         ]
       }
     },
@@ -407,7 +437,17 @@
           "store::foundation::topology::topology_link::tests::source_link_cancellation_and_deadline_precede_access",
           "store::foundation::topology::topology_link::tests::source_link_cancellation_after_completed_validation_is_not_success",
           "store::foundation::topology::topology_link::tests::source_link_scoped_errors_preserve_original_cause",
-          "store::foundation::topology::topology_link::tests::source_link_pinned_handle_is_symlink_and_close_on_exec"
+          "store::foundation::topology::topology_link::tests::source_link_pinned_handle_is_symlink_and_close_on_exec",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_whole_tree_preserves_exact_names_and_implicit_parents",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_sibling_markers_coexist_until_all_names_are_tested",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_case_and_unicode_results_follow_native_creation_not_folding",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_same_leaf_name_in_different_parents_is_not_a_collision",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_late_native_creation_failure_cleans_prior_allocations",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_post_creation_cancellation_is_cleaned_and_not_success",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_terminal_cancellation_after_cleanup_is_not_success",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_primary_and_cleanup_failures_are_both_preserved",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_cleanup_failure_alone_prevents_an_observation",
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_replaced_marker_and_unknown_bytes_are_not_deleted"
         ]
       }
     },
@@ -569,7 +609,11 @@
       "store::foundation::planned_roots_tests::planned_roots_platform_support_is_explicit",
       "store::foundation::anchored_scratch::tests::scratch_precancel_precedes_allocation",
       "store::foundation::anchored_scratch::tests::scratch_expired_deadline_precedes_allocation",
-      "store::foundation::anchored_scratch::tests::scratch_platform_contract_is_explicit"
+      "store::foundation::anchored_scratch::tests::scratch_platform_contract_is_explicit",
+      "store::foundation::scratch_name_probe::tests::name_probe_precancel_precedes_scratch_allocation",
+      "store::foundation::scratch_name_probe::tests::name_probe_expired_deadline_precedes_scratch_allocation",
+      "store::foundation::scratch_name_probe::tests::name_probe_whole_plan_budgets_precede_allocation",
+      "store::foundation::scratch_name_probe::tests::name_probe_empty_tree_platform_contract_is_explicit"
     ],
     "lightr_index": [
       "index::tests::mod_tests_ops::test_snapshot_hydrate_roundtrip",

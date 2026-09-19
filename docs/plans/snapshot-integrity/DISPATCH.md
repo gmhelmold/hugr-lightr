@@ -38,12 +38,26 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Current increment — C13 partial-counter consistency
+## Current increment — native scratch-name probe
+
+[Scratch-name probe](SCRATCH-NAME-PROBE.md) composes TreePlan and borrowed private
+scratch to exercise every directory/leaf name without public output writes. All
+siblings coexist for native collision detection. Leaf markers do not qualify
+link semantics or the actual destination directory's name policy. The new source
+requires its own full/native/causal Actions before reviewed integration.
+
+## Integrated partial-counter consistency #178
+
+#178 is integrated as `deae93539a1ae0bd14b1c7f088f9159df5480341`; its fresh parent
+CI35470501231, PTY35470501221, parent companion35470501270, push bootstrap35470498284
+and companion35470498360 passed; its delivery branch was retired. That repair is
+not an unapplied attachment and does not qualify this later probe increment.
+
 
 The capacity collector is integrated by #177 as `fbabc05859c4caa440b2a41f3c42aaed865bb909`.
 The [partial-counter repair](evidence/C13-PARTIAL-COUNTERS.md) preserves every known
-ordering constraint when another block/inode counter is unknown. Its own PR and
-Actions must qualify this follow-up; #177's green checks do not approve new code.
+ordering constraint when another block/inode counter is unknown. The accepted #178 PR records
+its own qualification; #177's green checks were not reused for the correction.
 Native syscalls, quota/pool uncertainty and public routing are unchanged.
 
 ## Integrated capacity-counter observation #177
