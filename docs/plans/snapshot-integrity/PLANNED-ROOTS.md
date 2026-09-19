@@ -98,3 +98,14 @@ Raw local log identities (SHA-256; logs retained outside the repository):
 - `doctests.log`: `d7f1d80af4c2bb1f3962bc7037b52ef40ebc896d4327c3d82be4d73ec9fbee4d`
 - `support.log`: `8b17b6afff3b16876bcc2ea2f8f9d5a2f8ea410c1ad6082e3431ca5c688d3869`
 - `ci-policy.log`: `596202679ea3a7646f77cdb210bfa80a059d7cb4c8c76ba57ac42e32be87f51d`
+
+### Control-selector review
+
+The first candidate made the older `if !self` mutation ambiguous: it matched
+both the new missing-suffix check and the old identity revalidation. Scope that
+older selector to its following `.observed` access, preserving its behavioral
+assertion and required disposition. A fourth policy method now requires exactly
+one source seam for each of all ten controls. The revised support suite passed
+114 methods locally; no Rust behavior, count, native assertion or gate was removed.
+
+- `support-scoped-controls.log` SHA-256: `e9a2a42a308459f5cf191565761125347872403daa7ca9c792a317304a94a5bd`

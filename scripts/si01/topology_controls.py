@@ -24,7 +24,7 @@ CASES = [
      "if source.contains(destination) || destination.contains(source) {",
      "if false && (source.contains(destination) || destination.contains(source)) {",
      "unix::topology_rejects_source_destination_overlap_in_both_directions", "paired overlap was accepted"),
-    ("identity-revalidation", "topology_native.rs", "if !self", "if false && !self",
+    ("identity-revalidation", "topology_native.rs", "if !self\n            .observed", "if false && !self\n            .observed",
      "unix::topology_retained_source_and_revalidation_detect_replacement", "changed topology was accepted"),
     ("unresolved-parent", "topology_native.rs",
      'if tail.iter().any(|p| *p == b"." || *p == b"..") {',

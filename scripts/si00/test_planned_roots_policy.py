@@ -1,4 +1,5 @@
 """Additive planned-root registration; synthetic controls are not native execution."""
+import ast
 import json
 from pathlib import Path
 import re
@@ -28,6 +29,19 @@ class PlannedRootsPolicyTests(unittest.TestCase):
             expected = [PREFIX + "unix::" + n for n in self.native] if name.startswith(("linux-", "macos-")) else []
             with self.subTest(profile=name):
                 self.assertEqual(actual, expected)
+
+    def test_each_topology_mutation_has_one_exact_source_seam(self):
+        path = ROOT / "scripts/si01/topology_controls.py"
+        declaration = next(node for node in ast.parse(path.read_text()).body
+                           if isinstance(node, ast.Assign) and any(
+                               isinstance(target, ast.Name) and target.id == "CASES"
+                               for target in node.targets))
+        cases = ast.literal_eval(declaration.value)
+        self.assertEqual(len(cases), 10)
+        for label, name, old, _new, _test, _message in cases:
+            source = (ROOT / "crates/lightr-store/src/store/foundation" / name).read_text()
+            with self.subTest(control=label):
+                self.assertEqual(source.count(old), 1)
 
     def test_causal_controls_have_exact_planned_and_preserved_suite_selectors(self):
         text = (ROOT / "scripts/si01/topology_controls.py").read_text()
