@@ -38,18 +38,17 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Current watchdog follow-up — 2026-09-19
+## Current planned-root increment — 2026-09-19
 
-Windows links and Darwin PTY ownership #169 are integrated in
-`624af3bdc208abab9153a1ed5b630c99e073ca60`. Fresh parent complete CI35424345235
-and four-profile PTY35424345289 passed. The raw macOS14 receipt records35 CRI
-methods passing; this is not certification of the full storage campaign.
+Watchdog #171 is integrated in `408dd9436ef05a612dfec4cd8bea7948e6bf767d`.
+Its fresh parent CI35427136801, PTY35427136794 and companion35427136835 passed;
+the completed branch was retired. Prior watchdog attachments are superseded.
 
-The [watchdog evidence repair](evidence/CI-169-WATCHDOG-FAILURE-EVIDENCE.md)
-is a separate follow-up on that base. It retains failed-command receipts when
-cleanup also fails, preserving all native obligations. Its own delivery PR
-owns candidate and post-merge qualification; older green results do not qualify
-it. Supersedes the unpublished 97e3f09-based patch, not the runtime repair.
+[Planned protected-root inspection](PLANNED-ROOTS.md) is the next inactive C12
+increment. Explicit ExistingDirectory/PlannedDirectory policies share the native
+walker; strict old APIs are preserved. Missing-root observation does not create
+output, establish native representation or authorize writing. Its delivery PR
+owns new-source qualification; older integrated checks are not acceptance.
 
 ## Integrated Windows link increment — historical prerequisite
 

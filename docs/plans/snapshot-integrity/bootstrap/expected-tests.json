@@ -37,7 +37,21 @@
           "store::foundation::destination_tests::unix::destination_revalidation_detects_replacement_without_retargeting_handle",
           "store::foundation::destination_tests::unix::destination_missing_protected_root_and_regular_file_are_not_created_or_adopted",
           "store::foundation::destination_tests::unix::destination_revalidation_observes_cancellation_and_deadline",
-          "store::foundation::destination_tests::unix::destination_only_does_not_change_source_only_or_paired_inspection"
+          "store::foundation::destination_tests::unix::destination_only_does_not_change_source_only_or_paired_inspection",
+          "store::foundation::planned_roots_tests::unix::planned_roots_accept_absent_inventory_without_creating_names",
+          "store::foundation::planned_roots_tests::unix::planned_roots_keep_existing_directory_contract_strict",
+          "store::foundation::planned_roots_tests::unix::planned_roots_reject_public_ancestors",
+          "store::foundation::planned_roots_tests::unix::planned_roots_reject_equal_and_nested_missing_destinations",
+          "store::foundation::planned_roots_tests::unix::planned_roots_reject_unproven_sibling_names",
+          "store::foundation::planned_roots_tests::unix::planned_roots_allow_distinct_native_ancestors",
+          "store::foundation::planned_roots_tests::unix::planned_roots_preserve_native_alias_parent_resolution",
+          "store::foundation::planned_roots_tests::unix::planned_roots_reject_present_dangling_alias",
+          "store::foundation::planned_roots_tests::unix::planned_roots_preserve_type_and_unresolved_parent_errors",
+          "store::foundation::planned_roots_tests::unix::planned_roots_revalidation_detects_root_appearance",
+          "store::foundation::planned_roots_tests::unix::planned_roots_revalidation_detects_parent_replacement",
+          "store::foundation::planned_roots_tests::unix::planned_roots_mixed_inventory_checks_each_root",
+          "store::foundation::planned_roots_tests::unix::planned_roots_preserve_inventory_bounds",
+          "store::foundation::planned_roots_tests::unix::planned_roots_retained_source_is_not_reopened"
         ]
       }
     },
@@ -74,7 +88,21 @@
           "store::foundation::destination_tests::unix::destination_revalidation_detects_replacement_without_retargeting_handle",
           "store::foundation::destination_tests::unix::destination_missing_protected_root_and_regular_file_are_not_created_or_adopted",
           "store::foundation::destination_tests::unix::destination_revalidation_observes_cancellation_and_deadline",
-          "store::foundation::destination_tests::unix::destination_only_does_not_change_source_only_or_paired_inspection"
+          "store::foundation::destination_tests::unix::destination_only_does_not_change_source_only_or_paired_inspection",
+          "store::foundation::planned_roots_tests::unix::planned_roots_accept_absent_inventory_without_creating_names",
+          "store::foundation::planned_roots_tests::unix::planned_roots_keep_existing_directory_contract_strict",
+          "store::foundation::planned_roots_tests::unix::planned_roots_reject_public_ancestors",
+          "store::foundation::planned_roots_tests::unix::planned_roots_reject_equal_and_nested_missing_destinations",
+          "store::foundation::planned_roots_tests::unix::planned_roots_reject_unproven_sibling_names",
+          "store::foundation::planned_roots_tests::unix::planned_roots_allow_distinct_native_ancestors",
+          "store::foundation::planned_roots_tests::unix::planned_roots_preserve_native_alias_parent_resolution",
+          "store::foundation::planned_roots_tests::unix::planned_roots_reject_present_dangling_alias",
+          "store::foundation::planned_roots_tests::unix::planned_roots_preserve_type_and_unresolved_parent_errors",
+          "store::foundation::planned_roots_tests::unix::planned_roots_revalidation_detects_root_appearance",
+          "store::foundation::planned_roots_tests::unix::planned_roots_revalidation_detects_parent_replacement",
+          "store::foundation::planned_roots_tests::unix::planned_roots_mixed_inventory_checks_each_root",
+          "store::foundation::planned_roots_tests::unix::planned_roots_preserve_inventory_bounds",
+          "store::foundation::planned_roots_tests::unix::planned_roots_retained_source_is_not_reopened"
         ]
       }
     },
@@ -110,7 +138,21 @@
           "store::foundation::destination_tests::unix::destination_revalidation_detects_replacement_without_retargeting_handle",
           "store::foundation::destination_tests::unix::destination_missing_protected_root_and_regular_file_are_not_created_or_adopted",
           "store::foundation::destination_tests::unix::destination_revalidation_observes_cancellation_and_deadline",
-          "store::foundation::destination_tests::unix::destination_only_does_not_change_source_only_or_paired_inspection"
+          "store::foundation::destination_tests::unix::destination_only_does_not_change_source_only_or_paired_inspection",
+          "store::foundation::planned_roots_tests::unix::planned_roots_accept_absent_inventory_without_creating_names",
+          "store::foundation::planned_roots_tests::unix::planned_roots_keep_existing_directory_contract_strict",
+          "store::foundation::planned_roots_tests::unix::planned_roots_reject_public_ancestors",
+          "store::foundation::planned_roots_tests::unix::planned_roots_reject_equal_and_nested_missing_destinations",
+          "store::foundation::planned_roots_tests::unix::planned_roots_reject_unproven_sibling_names",
+          "store::foundation::planned_roots_tests::unix::planned_roots_allow_distinct_native_ancestors",
+          "store::foundation::planned_roots_tests::unix::planned_roots_preserve_native_alias_parent_resolution",
+          "store::foundation::planned_roots_tests::unix::planned_roots_reject_present_dangling_alias",
+          "store::foundation::planned_roots_tests::unix::planned_roots_preserve_type_and_unresolved_parent_errors",
+          "store::foundation::planned_roots_tests::unix::planned_roots_revalidation_detects_root_appearance",
+          "store::foundation::planned_roots_tests::unix::planned_roots_revalidation_detects_parent_replacement",
+          "store::foundation::planned_roots_tests::unix::planned_roots_mixed_inventory_checks_each_root",
+          "store::foundation::planned_roots_tests::unix::planned_roots_preserve_inventory_bounds",
+          "store::foundation::planned_roots_tests::unix::planned_roots_retained_source_is_not_reopened"
         ]
       }
     },
@@ -147,7 +189,21 @@
           "store::foundation::destination_tests::unix::destination_revalidation_detects_replacement_without_retargeting_handle",
           "store::foundation::destination_tests::unix::destination_missing_protected_root_and_regular_file_are_not_created_or_adopted",
           "store::foundation::destination_tests::unix::destination_revalidation_observes_cancellation_and_deadline",
-          "store::foundation::destination_tests::unix::destination_only_does_not_change_source_only_or_paired_inspection"
+          "store::foundation::destination_tests::unix::destination_only_does_not_change_source_only_or_paired_inspection",
+          "store::foundation::planned_roots_tests::unix::planned_roots_accept_absent_inventory_without_creating_names",
+          "store::foundation::planned_roots_tests::unix::planned_roots_keep_existing_directory_contract_strict",
+          "store::foundation::planned_roots_tests::unix::planned_roots_reject_public_ancestors",
+          "store::foundation::planned_roots_tests::unix::planned_roots_reject_equal_and_nested_missing_destinations",
+          "store::foundation::planned_roots_tests::unix::planned_roots_reject_unproven_sibling_names",
+          "store::foundation::planned_roots_tests::unix::planned_roots_allow_distinct_native_ancestors",
+          "store::foundation::planned_roots_tests::unix::planned_roots_preserve_native_alias_parent_resolution",
+          "store::foundation::planned_roots_tests::unix::planned_roots_reject_present_dangling_alias",
+          "store::foundation::planned_roots_tests::unix::planned_roots_preserve_type_and_unresolved_parent_errors",
+          "store::foundation::planned_roots_tests::unix::planned_roots_revalidation_detects_root_appearance",
+          "store::foundation::planned_roots_tests::unix::planned_roots_revalidation_detects_parent_replacement",
+          "store::foundation::planned_roots_tests::unix::planned_roots_mixed_inventory_checks_each_root",
+          "store::foundation::planned_roots_tests::unix::planned_roots_preserve_inventory_bounds",
+          "store::foundation::planned_roots_tests::unix::planned_roots_retained_source_is_not_reopened"
         ]
       }
     },
@@ -303,7 +359,10 @@
       "store::foundation::windows_link_plan::tests::windows_link_plan_exact_case_and_unicode_do_not_claim_native_alias_qualification",
       "store::foundation::windows_link_plan::tests::windows_link_plan_empty_tree_and_long_names_remain_static_only",
       "store::foundation::windows_link_plan::tests::windows_link_plan_all_entry_orders_preserve_link_order_and_kinds",
-      "store::foundation::windows_link_plan::tests::windows_link_plan_every_checkpoint_is_terminal_and_preserves_input"
+      "store::foundation::windows_link_plan::tests::windows_link_plan_every_checkpoint_is_terminal_and_preserves_input",
+      "store::foundation::planned_roots_tests::planned_roots_precancel_precedes_path_access",
+      "store::foundation::planned_roots_tests::planned_roots_deadline_precedes_path_access",
+      "store::foundation::planned_roots_tests::planned_roots_platform_support_is_explicit"
     ],
     "lightr_index": [
       "index::tests::mod_tests_ops::test_snapshot_hydrate_roundtrip",

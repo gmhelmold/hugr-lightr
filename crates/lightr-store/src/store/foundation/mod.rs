@@ -66,3 +66,6 @@ pub mod tree_plan;
 
 /// Static Windows link-kind derivation; native capability and output stay separate.
 pub mod windows_link_plan;
+
+#[cfg(test)]
+mod planned_roots_tests;

@@ -1,7 +1,7 @@
 //! Native, read-only C12 observations on a conservative supported subset.
 use super::super::Wait;
 use super::topology_io::{definitely_absent, key, open_at, unsupported, Key};
-use super::SourcePath;
+use super::{ProtectedRoot, SourcePath};
 use std::fs::File;
 use std::io;
 use std::os::unix::{ffi::OsStrExt, fs::MetadataExt};
@@ -32,6 +32,26 @@ impl Resolved {
             && self.missing == other.missing
             && self.directory == other.directory
     }
+    fn check_unresolved_overlap(&self, other: &Self) -> io::Result<()> {
+        if !self.missing.is_empty()
+            && !other.missing.is_empty()
+            && self.object_key == other.object_key
+        {
+            if self.missing.starts_with(&other.missing) || other.missing.starts_with(&self.missing)
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "planned protected root overlaps missing public destination",
+                ));
+            }
+            // No actual entries exist to compare. Different byte spellings do
+            // not establish disjoint native names on every supported volume.
+            return Err(unsupported(
+                "unresolved paths share an ancestor; native disjointness is unknown",
+            ));
+        }
+        Ok(())
+    }
     fn contains(&self, other: &Self) -> bool {
         self.missing.is_empty()
             && (self.object_key == other.object_key
@@ -53,7 +73,15 @@ impl Inspection {
         destination: Option<&Path>,
         wait: Wait<'_>,
     ) -> io::Result<Self> {
-        Self::inspect_paths(protected, Some(source), destination, wait)
+        Self::inspect_paths(
+            protected
+                .iter()
+                .copied()
+                .map(ProtectedRoot::ExistingDirectory),
+            Some(source),
+            destination,
+            wait,
+        )
     }
 
     pub(super) fn inspect_destination(
@@ -61,27 +89,50 @@ impl Inspection {
         destination: &Path,
         wait: Wait<'_>,
     ) -> io::Result<Self> {
-        Self::inspect_paths(protected, None, Some(destination), wait)
+        Self::inspect_paths(
+            protected
+                .iter()
+                .copied()
+                .map(ProtectedRoot::ExistingDirectory),
+            None,
+            Some(destination),
+            wait,
+        )
     }
 
-    fn inspect_paths(
-        protected: &[&Path],
+    pub(super) fn inspect_configured(
+        protected: &[ProtectedRoot<'_>],
         source: Option<SourcePath<'_>>,
         destination: Option<&Path>,
         wait: Wait<'_>,
     ) -> io::Result<Self> {
-        if protected.is_empty() || protected.len() > 32 {
+        Self::inspect_paths(protected.iter().copied(), source, destination, wait)
+    }
+
+    fn inspect_paths<'a>(
+        protected: impl ExactSizeIterator<Item = ProtectedRoot<'a>>,
+        source: Option<SourcePath<'_>>,
+        destination: Option<&Path>,
+        wait: Wait<'_>,
+    ) -> io::Result<Self> {
+        let roots = protected.len();
+        if roots == 0 || roots > 32 {
             return Err(unsupported(
-                "supply between 1 and 32 existing protected roots",
+                "supply between 1 and 32 configured protected roots",
             ));
         }
         wait.check()?;
         let cwd = File::open(".")?;
         let mut requests: Vec<_> = protected
-            .iter()
-            .map(|path| Request {
-                path: path.to_path_buf(),
-                kind: Kind::Directory,
+            .map(|root| {
+                let (path, kind) = match root {
+                    ProtectedRoot::ExistingDirectory(path) => (path, Kind::Directory),
+                    ProtectedRoot::PlannedDirectory(path) => (path, Kind::ProposedDirectory),
+                };
+                Request {
+                    path: path.to_path_buf(),
+                    kind,
+                }
             })
             .collect();
         if let Some(source) = source {
@@ -102,11 +153,11 @@ impl Inspection {
             });
             index
         });
-        let observed = snapshot(&cwd, &requests, protected.len(), wait)?;
+        let observed = snapshot(&cwd, &requests, roots, wait)?;
         let result = Self {
             cwd,
             requests,
-            roots: protected.len(),
+            roots,
             destination,
             observed,
         };
@@ -161,6 +212,7 @@ fn snapshot(
         .collect::<io::Result<_>>()?;
     for subject in &observed[roots..] {
         for protected in &observed[..roots] {
+            protected.check_unresolved_overlap(subject)?;
             if protected.contains(subject) || subject.contains(protected) {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
