@@ -1,4 +1,5 @@
-//! Native handles for additive SI-01 locks. Handles are never cloned or exposed.
+//! Native handles for additive SI-01 locks. Lock handles never escape.
+//! Managed directory handles may be borrowed by internal anchored staging.
 //! Requires stable, caller-managed local directories, not arbitrary public paths.
 use super::lease::Wait;
 use std::fs::{self, File, OpenOptions, TryLockError};
@@ -108,6 +109,12 @@ impl Directory {
     pub(super) fn path(&self) -> &Path {
         &self.path
     }
+    /// Internal directory anchor only; never the native lock descriptor.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub(super) fn anchored_handle(&self) -> &File {
+        &self._handle
+    }
+
     pub(super) fn id(&self) -> Identity {
         self.id
     }

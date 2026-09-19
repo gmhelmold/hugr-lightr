@@ -38,16 +38,21 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Current qualification candidate — destination emptiness #173, 2026-09-19
+## Active increment — anchored managed scratch
 
-[Destination emptiness](DESTINATION-EMPTINESS.md) composes with the planned-root
-API integrated by #172 as762221fbf35644621b11e5df25ddbefbc18bfe8b. It adds a
-read-only occupancy check through retained handles, not write authority.
-Eleven Unix methods plus one Linux-only case cover the scan and planned-root
-composition. All ten existing topology controls and their assertions remain;
-two additional emptiness controls and a separate12-case Linux family are added.
-Native/full/causal Actions must qualify this reconciled tree before integration;
-old green results do not qualify a new combination. Main/public routing unchanged.
+[Anchored scratch](ANCHORED-SCRATCH.md) borrows the existing Store lease and
+creates only private staged names through retained handles. This is the base for
+native reservation/probe work, not full representability or a public writer.
+Exact candidate Actions and review remain mandatory before integration.
+
+## Integrated destination emptiness #173 — 2026-09-19
+
+Destination emptiness is integrated as `671e3b7fec267fbf8ba5e015da7de680b7ddd709`.
+The new parent CI35457979402, PTY35457979597, parent companion35457979401,
+push bootstrap35457977181 and push companion35457977114 passed; the delivery
+branch was retired. Earlier emptiness attachments are historical, not patches to
+reapply. Native checks bind the integrated tree; they do not qualify later code.
+[Destination emptiness](DESTINATION-EMPTINESS.md) remains observation only.
 
 ## Integrated planned-root increment #172 — 2026-09-19
 
