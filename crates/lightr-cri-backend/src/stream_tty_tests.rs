@@ -205,7 +205,13 @@ fn setup_error_does_not_spawn_a_non_tty_workload() {
         }
         Err(error) => error,
     };
-    assert_eq!(error.raw_os_error(), Some(libc::ENOTTY));
+    // Darwin may reject TIOCSCTTY with ENOTTY or return ENODEV when
+    // /dev/tty cannot resolve a controlling terminal. Both are native failures,
+    // not successful setup; arbitrary errors are not accepted here.
+    assert!(matches!(
+        error.raw_os_error(),
+        Some(libc::ENOTTY) | Some(libc::ENODEV)
+    ));
 }
 
 #[test]
@@ -223,4 +229,29 @@ fn actual_exec_keeps_raw_master_merged_output_and_exit_code() {
     drop(session.pty_master.take());
     assert_eq!(session.waiter.wait().unwrap(), 11);
     assert_eq!(output.unwrap(), b"out\r\nerr\r\n");
+}
+
+#[test]
+fn invalid_slave_descriptor_preserves_ebadf() {
+    let mut command = Command::new("/bin/sh");
+    command.args(["-c", "exit 0"]);
+    command.stdin(Stdio::null());
+    // SAFETY: close only child fd0; configuration must reject it before exec.
+    unsafe {
+        command.pre_exec(|| {
+            if libc::close(libc::STDIN_FILENO) < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            configure_child()
+        });
+    }
+    let error = match command.spawn() {
+        Ok(child) => {
+            let mut child = OwnedChild(child);
+            let _ = child.finish();
+            panic!("invalid slave descriptor was accepted")
+        }
+        Err(error) => error,
+    };
+    assert_eq!(error.raw_os_error(), Some(libc::EBADF));
 }

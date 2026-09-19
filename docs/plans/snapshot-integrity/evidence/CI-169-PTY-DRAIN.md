@@ -78,8 +78,22 @@ https://github.com/apple-oss-distributions/xnu/tree/main/bsd/kern
 
 scripts/ci/pty_controls.py archives its exact source and records each command,
 exit code and raw log hash. Native PTY drain controls runs on macos-15-intel
-and macos-15 in addition to the existing complete CI. The six-method selection
-contains five behavior regressions plus one re-executed child helper. A timeout
+and macos-15 in addition to the existing complete CI. The seven-method selection
+contains six behavior regressions plus one re-executed child helper. A timeout
 or compiler failure is never accepted as the missing-reference control.
 Actions results, candidate SHA/tree and reviewed merge identity belong in the
 live PR review; writing this receipt alone does not qualify the repair.
+
+## Qualification findings retained
+
+The first repair candidate (7546c62) failed compilation before running tests:
+the pinned libc defines TIOCSCTTY as u32 but ioctl takes c_ulong. Commit f78efd0
+adds the explicit lossless request conversion; no error result is converted.
+
+On f78efd0 the ARM native suite executed six methods: five passed, while the
+non-terminal fixture expected ENOTTY but Darwin returned ENODEV (19). The
+workload did not launch. /dev/tty unavailability may report ENODEV after the
+ioctl stage; the test now accepts only that terminal-specific error or ENOTTY,
+not arbitrary failure. An additional closed-slave test requires exact EBADF
+and rejection before exec. The implementation is unchanged by this fixture
+correction. Prior failing artifacts remain historical evidence.

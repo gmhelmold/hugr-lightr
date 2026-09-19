@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PREFIX = "stream::tty_setup::tests::"
 TESTS = ["child_closes_standard_streams", "delayed_reader_keeps_output_after_all_child_stdio_close",
          "closing_the_master_releases_the_exiting_child", "empty_output_reaps_without_a_reader",
-         "setup_error_does_not_spawn_a_non_tty_workload", "actual_exec_keeps_raw_master_merged_output_and_exit_code"]
+         "setup_error_does_not_spawn_a_non_tty_workload", "actual_exec_keeps_raw_master_merged_output_and_exit_code", "invalid_slave_descriptor_preserves_ebadf"]
 ORIGINAL = "stream::tests::open_exec_tty_uses_pty_master_no_stderr"
 SOURCE = "crates/lightr-cri-backend/src/stream_tty.rs"
 
@@ -56,8 +56,8 @@ def main():
 
     def suites(root, label):
         code, text = run(root, cargo + [PREFIX, "--", "--test-threads=4"], label + "-regressions")
-        require(code == 0 and re.search(r"test result: ok\. 6 passed; 0 failed; 0 ignored;", text),
-                "six-method native suite failed or missing: " + label)
+        require(code == 0 and re.search(r"test result: ok\. 7 passed; 0 failed; 0 ignored;", text),
+                "seven-method native suite failed or missing: " + label)
         for name in TESTS:
             require("test " + PREFIX + name + " ... ok" in text, "required witness absent: " + name)
         code, text = run(root, cargo + [ORIGINAL, "--", "--exact"], label + "-original")
