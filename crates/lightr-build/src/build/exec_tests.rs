@@ -256,9 +256,9 @@ fn no_var_dockerfile_builds_and_is_stable() {
 }
 
 // ---- WP-DF-08: ARG instruction + --build-arg end-to-end MEMO-correctness ----
-// These tests pass the store + counter EXPLICITLY (build() does not read
-// LIGHTR_HOME and uses a nanos-unique temp work dir), so they need NO env mutation
-// and NO shared mutex — parallel-safe by construction (own tempdirs per test).
+// Explicit Store paths do not eliminate snapshot's global index-home read.
+// Keep the existing shared environment guard throughout each ARG fixture.
+// Readers still run concurrently; tests changing LIGHTR_HOME are excluded.
 
 struct ArgFix {
     _ctx: TempDir,
@@ -266,9 +266,11 @@ struct ArgFix {
     store: Store,
     counter: std::path::PathBuf,
     ctx_path: std::path::PathBuf,
+    _env: std::sync::RwLockReadGuard<'static, ()>,
 }
 
 fn arg_fix() -> ArgFix {
+    let _env = ENV_MUTEX.read().unwrap_or_else(|e| e.into_inner());
     let _ctx = TempDir::new().unwrap();
     let _store_tmp = TempDir::new().unwrap();
     let store = Store::open(_store_tmp.path().join("store")).unwrap();
@@ -280,6 +282,7 @@ fn arg_fix() -> ArgFix {
         store,
         counter,
         ctx_path,
+        _env,
     }
 }
 
@@ -370,5 +373,22 @@ fn global_arg_before_from_is_usable_in_from() {
         std::fs::read_to_string(&f.counter).unwrap(),
         "built\n",
         "global ARG must resolve the FROM ref and the build must run"
+    );
+}
+
+#[test]
+fn arg_fixture_excludes_global_home_mutation() {
+    let _fixture = arg_fix();
+    let blocked = std::thread::spawn(|| {
+        matches!(
+            ENV_MUTEX.try_write(),
+            Err(std::sync::TryLockError::WouldBlock)
+        )
+    })
+    .join()
+    .unwrap();
+    assert!(
+        blocked,
+        "ARG fixture must retain shared LIGHTR_HOME protection"
     );
 }

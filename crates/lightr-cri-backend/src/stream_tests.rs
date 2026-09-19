@@ -160,20 +160,18 @@ fn open_exec_tty_uses_pty_master_no_stderr() {
         "tty: write to the master, no separate stdin"
     );
 
-    // Drain the pty master on a thread (a master read can block until the slave
-    // closes, and the post-close behavior — EOF vs EIO — is platform-specific,
-    // so we read one chunk with a timeout rather than read_to_end). The echoed
-    // line is in the pty buffer once `echo` writes it.
-    let mut master = s.stdout.take().unwrap();
+    // Bound both bytes and elapsed time; preserve errors instead of converting
+    // them to empty successful output. The real echo command remains unchanged.
+    let master = s.stdout.take().unwrap();
     let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let mut buf = [0u8; 128];
-        let n = master.read(&mut buf).unwrap_or(0);
-        let _ = tx.send(buf[..n].to_vec());
+    let reader = std::thread::spawn(move || {
+        let _ = tx.send(read_pty_line(master));
     });
     let out = rx
         .recv_timeout(std::time::Duration::from_secs(5))
-        .expect("pty read timed out");
+        .expect("pty read timed out")
+        .expect("pty stream failed before a complete line");
+    reader.join().unwrap();
     let text = String::from_utf8_lossy(&out);
     assert!(text.contains("hello-tty"), "pty output: {text:?}");
 
@@ -291,4 +289,53 @@ fn parallel_exec_sessions_are_independent() {
     };
     assert_eq!(h1.join().unwrap(), 3);
     assert_eq!(h2.join().unwrap(), 5);
+}
+
+fn read_pty_line(reader: impl Read) -> std::io::Result<Vec<u8>> {
+    use std::io::BufRead;
+    let mut line = Vec::new();
+    // read_until handles short reads and Interrupted, but preserves other errors.
+    std::io::BufReader::new(reader.take(128)).read_until(b'\n', &mut line)?;
+    if line.last() != Some(&b'\n') {
+        return Err(std::io::ErrorKind::UnexpectedEof.into());
+    }
+    Ok(line)
+}
+
+#[test]
+fn pty_line_reader_handles_interruption_and_fragmentation() {
+    struct Chunks {
+        interrupted: bool,
+        bytes: std::io::Cursor<Vec<u8>>,
+    }
+    impl Read for Chunks {
+        fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+            if !self.interrupted {
+                self.interrupted = true;
+                return Err(std::io::ErrorKind::Interrupted.into());
+            }
+            let n = out.len().min(2);
+            self.bytes.read(&mut out[..n])
+        }
+    }
+    let reader = Chunks {
+        interrupted: false,
+        bytes: std::io::Cursor::new(b"hello-tty\r\n".to_vec()),
+    };
+    assert_eq!(read_pty_line(reader).unwrap(), b"hello-tty\r\n");
+}
+
+#[test]
+fn pty_line_reader_preserves_errors_and_bounds_incomplete_output() {
+    struct Broken;
+    impl Read for Broken {
+        fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::from_raw_os_error(5))
+        }
+    }
+    assert_eq!(read_pty_line(Broken).unwrap_err().raw_os_error(), Some(5));
+    assert_eq!(
+        read_pty_line(std::io::repeat(b'x')).unwrap_err().kind(),
+        std::io::ErrorKind::UnexpectedEof
+    );
 }
