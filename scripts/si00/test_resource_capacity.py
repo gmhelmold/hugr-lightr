@@ -319,5 +319,66 @@ class CapacityNativeTests(unittest.TestCase):
         self.assertEqual(list(self.root.iterdir()), [])
 
 
+class PartialCounterTests(unittest.TestCase):
+    """Unknown observations do not erase ordering facts among finite counters."""
+    def test_unknown_block_total_does_not_hide_available_above_free(self):
+        for sentinel in capacity.SENTINELS:
+            with self.subTest(sentinel=sentinel), self.assertRaisesRegex(
+                    fixtures.resource.InvalidInventory, "inconsistent"):
+                capacity.decode_counters(raw(f_blocks=sentinel, f_bfree=10, f_bavail=11))
+
+    def test_unknown_free_blocks_do_not_hide_available_above_total(self):
+        for sentinel in capacity.SENTINELS:
+            with self.subTest(sentinel=sentinel), self.assertRaisesRegex(
+                    fixtures.resource.InvalidInventory, "inconsistent"):
+                capacity.decode_counters(raw(f_blocks=10, f_bfree=sentinel, f_bavail=11))
+
+    def test_unknown_available_blocks_do_not_hide_free_above_total(self):
+        for sentinel in capacity.SENTINELS:
+            with self.subTest(sentinel=sentinel), self.assertRaisesRegex(
+                    fixtures.resource.InvalidInventory, "inconsistent"):
+                capacity.decode_counters(raw(f_blocks=10, f_bfree=11, f_bavail=sentinel))
+
+    def test_unknown_inode_counter_does_not_hide_known_contradiction(self):
+        for sentinel in capacity.SENTINELS:
+            for total, free, available in ((sentinel, 10, 11), (10, sentinel, 11),
+                                            (10, 11, sentinel)):
+                with self.subTest(counts=(total, free, available)), self.assertRaisesRegex(
+                        fixtures.resource.InvalidInventory, "inconsistent"):
+                    capacity.decode_counters(raw(f_files=total, f_ffree=free, f_favail=available))
+
+    def test_compatible_partial_counters_preserve_known_bytes_and_unknown_inodes(self):
+        for sentinel in capacity.SENTINELS:
+            for total, free, available in ((sentinel, 10, 9), (10, sentinel, 9),
+                                            (10, 9, sentinel), (sentinel, sentinel, 0),
+                                            (10, sentinel, sentinel),
+                                            (sentinel, 0, sentinel),
+                                            (sentinel, sentinel, sentinel)):
+                with self.subTest(counts=(total, free, available)):
+                    result, unknown = capacity.decode_counters(raw(
+                        f_blocks=total, f_bfree=free, f_bavail=available,
+                        f_files=total, f_ffree=free, f_favail=available))
+                    expected_bytes = None if available == sentinel else available * 512
+                    self.assertEqual(result['free_bytes'], expected_bytes)
+                    self.assertIsNone(result['free_inodes'])
+                    self.assertIsNone(result['quota_bytes'])
+                    self.assertIn('inode_accounting_unavailable', unknown)
+                    self.assertIn('quota_not_inspected', unknown)
+
+    def test_partial_contradiction_withholds_projection_and_closes_once(self):
+        native = FakeNative(counters=raw(f_blocks=-1, f_bfree=10, f_bavail=11))
+        result = capacity.observe_directory('synthetic fixture', native=native)
+        self.assertEqual(result['status'], 'OBSERVATION_FAILED')
+        self.assertEqual(result['exit_code'], 2)
+        self.assertFalse(result['observation_accepted'])
+        self.assertFalse(result['retry_authorized'])
+        self.assertIsNone(result['capacity'])
+        self.assertEqual(result['errors'][0]['phase'], 'decode')
+        self.assertEqual(result['errors'][0]['type'], 'InvalidInventory')
+        self.assertEqual(result['descriptor_cleanup'], 'closed')
+        self.assertEqual(native.calls.count(('close', 12345)), 1)
+        json.dumps(result, allow_nan=False)
+
+
 if __name__ == "__main__":
     unittest.main()
