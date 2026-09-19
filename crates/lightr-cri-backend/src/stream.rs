@@ -194,8 +194,15 @@ fn open_exec_tty(mut command: std::process::Command) -> Result<StreamSession> {
     command.stderr(slave_stderr);
     unsafe {
         command.pre_exec(|| {
-            libc::setsid();
-            Ok(())
+            #[cfg(target_os = "macos")]
+            {
+                tty_setup::configure_child()
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                libc::setsid();
+                Ok(())
+            }
         });
     }
 
@@ -299,3 +306,9 @@ impl LightrBackend {
 #[cfg(all(test, unix))]
 #[path = "stream_tests.rs"]
 mod tests;
+
+// Darwin needs the controlling-terminal reference before workload execution.
+// Linux namespace-child terminal setup remains in its existing engine path.
+#[cfg(target_os = "macos")]
+#[path = "stream_tty.rs"]
+mod tty_setup;
