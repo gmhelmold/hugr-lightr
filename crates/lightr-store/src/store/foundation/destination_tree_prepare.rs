@@ -144,10 +144,11 @@ impl PreparedDestinationTree<'_, '_> {
     }
 
     /// Explicitly remove operation-owned leaves then directories in reverse order.
-    pub fn rollback(mut self) -> Result<(), DestinationTreePrepareFailure> {
+    pub fn rollback(self) -> Result<(), DestinationTreePrepareFailure> {
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
-            let cleanup = self.inner.rollback();
+            let mut this = self;
+            let cleanup = this.inner.rollback();
             if cleanup.errors.is_empty() && cleanup.complete {
                 Ok(())
             } else {
