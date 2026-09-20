@@ -75,6 +75,42 @@ LISTING_CASES = [('listing-independent-offset', 'topology_listing_native.rs', 'l
 DEST_ANCHOR_CASES = [('anchor-no-adopt', 'destination_anchor_native.rs', 'if result != 0 {', 'if false && result != 0 {', 'store::foundation::destination_anchor::tests::anchor_never_adopts_a_name_that_appears_after_preflight', 'called `Option::unwrap()` on a `None` value'), ('anchor-final-binding', 'topology_native.rs', 'if binding_changed {', 'if false && binding_changed {', 'store::foundation::destination_anchor::tests::anchor_final_validation_rejects_replacement_and_preserves_decoy', 'called `Option::unwrap()` on a `None` value'), ('anchor-cleanup-identity', 'destination_anchor_native.rs', 'impl OwnedDirectory {\n    fn remove(self) -> io::Result<()> {\n        if identity(&self.parent, &self.name)? != self.identity {', 'impl OwnedDirectory {\n    fn remove(self) -> io::Result<()> {\n        if false && identity(&self.parent, &self.name)? != self.identity {', 'store::foundation::destination_anchor::tests::anchor_final_validation_rejects_replacement_and_preserves_decoy', 'assertion failed')]
 
 
+DEST_REPR_CASES = [
+    (
+        'dest-repr-no-adopt',
+        'destination_name_probe_native.rs',
+        'libc::O_RDWR | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC',
+        'libc::O_RDWR | libc::O_CREAT | libc::O_NOFOLLOW | libc::O_CLOEXEC',
+        'store::foundation::destination_name_probe::tests::races::destination_name_probe_never_adopts_foreign_name_after_empty_check',
+        'called `Result::unwrap_err()` on an `Ok` value',
+    ),
+    (
+        'dest-repr-cleanup-identity',
+        'destination_name_probe_native.rs',
+        'if identity(&self.parent, &self.name)? != self.identity {',
+        'if false && identity(&self.parent, &self.name)? != self.identity {',
+        'store::foundation::destination_name_probe::tests::races::destination_name_probe_replacement_is_preserved_and_reports_incomplete_cleanup',
+        'failure.primary.is_none()',
+    ),
+    (
+        'dest-repr-final-empty',
+        'destination_name_probe.rs',
+        '} else if let Err(error) =\n                topology::require_empty_handle(anchor.retained_handle(), wait)\n            {',
+        '} else if let Err(error) = Ok::<(), io::Error>(()) {',
+        'store::foundation::destination_name_probe::tests::races::destination_name_probe_final_empty_check_detects_foreign_root_entry',
+        'called `Result::unwrap_err()` on an `Ok` value',
+    ),
+    (
+        'dest-repr-final-binding',
+        'destination_name_probe.rs',
+        '} else if let Err(error) = anchor.revalidate(wait) {',
+        '} else if let Err(error) = Ok::<(), io::Error>(()) {',
+        'store::foundation::destination_name_probe::tests::races::destination_name_probe_final_binding_rejects_root_replacement',
+        'called `Result::unwrap_err()` on an `Ok` value',
+    ),
+]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, required=True)
@@ -121,6 +157,8 @@ def main():
     listing_expected = r"test result: ok\. 17 passed; 0 failed; 0 ignored;"
     anchor_suite = cargo + ["store::foundation::destination_anchor::tests::", "--", "--nocapture"]
     anchor_expected = r"test result: ok\. 11 passed; 0 failed; 0 ignored;"
+    repr_suite = cargo + ["store::foundation::destination_name_probe::tests::", "--", "--nocapture"]
+    repr_expected = r"test result: ok\. 14 passed; 0 failed; 0 ignored;"
     try:
         require(not git("status", "--porcelain", "--untracked-files=no"), "tracked source dirty")
         archive = subprocess.check_output(["git", "archive", "--format=zip", "HEAD"], cwd=ROOT)
@@ -149,7 +187,9 @@ def main():
             require(code == 0 and re.search(listing_expected, text), "listing pristine suite failed")
             code, text = run(root, anchor_suite, "anchor-pristine")
             require(code == 0 and re.search(anchor_expected, text), "anchor pristine suite failed")
-            for label, name, old, new, test, message in CASES + EMPTY_CASES + DESCENDANT_CASES + SCRATCH_CASES + LINK_CASES + LISTING_CASES + DEST_ANCHOR_CASES:
+            code, text = run(root, repr_suite, "repr-pristine")
+            require(code == 0 and re.search(repr_expected, text), "destination representation pristine suite failed")
+            for label, name, old, new, test, message in CASES + EMPTY_CASES + DESCENDANT_CASES + SCRATCH_CASES + LINK_CASES + LISTING_CASES + DEST_ANCHOR_CASES + DEST_REPR_CASES:
                 path = root / BASE / name
                 original = path.read_text()
                 require(original.count(old) == 1, "mutation seam mismatch: " + label)
@@ -183,6 +223,8 @@ def main():
             require(code == 0 and re.search(listing_expected, text), "listing restored suite failed")
             code, text = run(root, anchor_suite, "anchor-restored")
             require(code == 0 and re.search(anchor_expected, text), "anchor restored suite failed")
+            code, text = run(root, repr_suite, "repr-restored")
+            require(code == 0 and re.search(repr_expected, text), "destination representation restored suite failed")
         receipt["status"] = "TOPOLOGY_CONTROLS_PASSED"
     except Exception as error:
         receipt["status"] = "FAILED"

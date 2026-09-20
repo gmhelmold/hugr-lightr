@@ -369,6 +369,11 @@ mod topology_native;
 mod topology_empty;
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(super) fn require_empty_handle(directory: &File, wait: Wait<'_>) -> io::Result<()> {
+    topology_empty::require_empty(directory, wait)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[path = "topology_descendant.rs"]
 mod topology_descendant;
 

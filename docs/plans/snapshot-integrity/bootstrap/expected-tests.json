@@ -142,7 +142,21 @@
           "store::foundation::destination_anchor::tests::anchor_existing_replacement_after_empty_scan_is_rejected_without_cleanup",
           "store::foundation::destination_anchor::tests::anchor_rollback_preserves_unknown_output_and_reports_partial_state",
           "store::foundation::destination_anchor::tests::anchor_created_handle_is_close_on_exec_and_revalidates",
-          "store::foundation::destination_anchor::tests::anchor_revalidates_planned_protected_roots_before_mutation"
+          "store::foundation::destination_anchor::tests::anchor_revalidates_planned_protected_roots_before_mutation",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_empty_tree_is_noop",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_whole_tree_uses_actual_root_and_cleans",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_link_entries_are_name_markers_not_links",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_native_case_and_unicode_match_same_directory_oracle",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_budgets_precede_mutation",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_late_native_error_cleans_prior_names",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_created_handles_are_close_on_exec",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_created_anchor_root_can_rollback_after_success",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_never_adopts_foreign_name_after_empty_check",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_cancellation_cleans_created_names",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_replacement_is_preserved_and_reports_incomplete_cleanup",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_unknown_child_blocks_recursive_cleanup",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_empty_check_detects_foreign_root_entry",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_binding_rejects_root_replacement"
         ]
       }
     },
@@ -284,7 +298,21 @@
           "store::foundation::destination_anchor::tests::anchor_existing_replacement_after_empty_scan_is_rejected_without_cleanup",
           "store::foundation::destination_anchor::tests::anchor_rollback_preserves_unknown_output_and_reports_partial_state",
           "store::foundation::destination_anchor::tests::anchor_created_handle_is_close_on_exec_and_revalidates",
-          "store::foundation::destination_anchor::tests::anchor_revalidates_planned_protected_roots_before_mutation"
+          "store::foundation::destination_anchor::tests::anchor_revalidates_planned_protected_roots_before_mutation",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_empty_tree_is_noop",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_whole_tree_uses_actual_root_and_cleans",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_link_entries_are_name_markers_not_links",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_native_case_and_unicode_match_same_directory_oracle",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_budgets_precede_mutation",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_late_native_error_cleans_prior_names",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_created_handles_are_close_on_exec",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_created_anchor_root_can_rollback_after_success",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_never_adopts_foreign_name_after_empty_check",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_cancellation_cleans_created_names",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_replacement_is_preserved_and_reports_incomplete_cleanup",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_unknown_child_blocks_recursive_cleanup",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_empty_check_detects_foreign_root_entry",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_binding_rejects_root_replacement"
         ]
       }
     },
@@ -420,7 +448,21 @@
           "store::foundation::destination_anchor::tests::anchor_existing_replacement_after_empty_scan_is_rejected_without_cleanup",
           "store::foundation::destination_anchor::tests::anchor_rollback_preserves_unknown_output_and_reports_partial_state",
           "store::foundation::destination_anchor::tests::anchor_created_handle_is_close_on_exec_and_revalidates",
-          "store::foundation::destination_anchor::tests::anchor_revalidates_planned_protected_roots_before_mutation"
+          "store::foundation::destination_anchor::tests::anchor_revalidates_planned_protected_roots_before_mutation",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_empty_tree_is_noop",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_whole_tree_uses_actual_root_and_cleans",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_link_entries_are_name_markers_not_links",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_native_case_and_unicode_match_same_directory_oracle",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_budgets_precede_mutation",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_late_native_error_cleans_prior_names",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_created_handles_are_close_on_exec",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_created_anchor_root_can_rollback_after_success",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_never_adopts_foreign_name_after_empty_check",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_cancellation_cleans_created_names",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_replacement_is_preserved_and_reports_incomplete_cleanup",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_unknown_child_blocks_recursive_cleanup",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_empty_check_detects_foreign_root_entry",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_binding_rejects_root_replacement"
         ]
       }
     },
@@ -557,7 +599,21 @@
           "store::foundation::destination_anchor::tests::anchor_existing_replacement_after_empty_scan_is_rejected_without_cleanup",
           "store::foundation::destination_anchor::tests::anchor_rollback_preserves_unknown_output_and_reports_partial_state",
           "store::foundation::destination_anchor::tests::anchor_created_handle_is_close_on_exec_and_revalidates",
-          "store::foundation::destination_anchor::tests::anchor_revalidates_planned_protected_roots_before_mutation"
+          "store::foundation::destination_anchor::tests::anchor_revalidates_planned_protected_roots_before_mutation",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_empty_tree_is_noop",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_whole_tree_uses_actual_root_and_cleans",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_link_entries_are_name_markers_not_links",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_native_case_and_unicode_match_same_directory_oracle",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_budgets_precede_mutation",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_late_native_error_cleans_prior_names",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_created_handles_are_close_on_exec",
+          "store::foundation::destination_name_probe::tests::destination_name_probe_created_anchor_root_can_rollback_after_success",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_never_adopts_foreign_name_after_empty_check",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_cancellation_cleans_created_names",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_replacement_is_preserved_and_reports_incomplete_cleanup",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_unknown_child_blocks_recursive_cleanup",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_empty_check_detects_foreign_root_entry",
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_binding_rejects_root_replacement"
         ]
       }
     },

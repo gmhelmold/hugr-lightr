@@ -78,3 +78,6 @@ pub mod scratch_name_probe;
 
 /// Anchored existing-or-created destination root; no descendant writer yet.
 pub mod destination_anchor;
+
+/// Whole-tree name representability in the actual anchored destination.
+pub mod destination_name_probe;

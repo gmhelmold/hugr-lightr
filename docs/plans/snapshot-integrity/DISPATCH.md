@@ -38,13 +38,23 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Current increment — anchored actual-destination root
+## Current candidate — actual-destination name representability
 
-[Destination anchor](DESTINATION-ANCHOR.md) converts a validated empty destination
-observation into the exact existing-or-created root using retained native parents.
-Missing suffixes use create-only anchored directory operations; existing output is
-never operation-owned. Final handle binding and protected roots are revalidated.
-This is not descendant writing, actual-directory name certification or activation.
+[DESTINATION-REPRESENTATION.md](DESTINATION-REPRESENTATION.md) composes the
+integrated #181 anchor with TreePlan and creates only temporary directory/file
+name markers directly in the exact empty destination. Siblings coexist for native
+collision detection; every owned marker is identity-checked and removed before
+success. This is actual-destination NAME preflight, not payload/link writing,
+Windows topology, namespace exclusion or protocol activation. Its own exact-head
+native/causal/full Actions remain mandatory before reviewed integration.
+
+## Integrated anchored destination root #181
+
+#181 is integrated as `1d6b234ea86a876a40a6ac774b77e085f4373874`.
+Its fresh parent CI/PTY/companion and push bootstrap/companion all passed on
+attempt 1; the delivery branch was retired. The anchor closes the pathname-reopen
+gap for the destination root but does not itself qualify whole-tree names or create
+payload descendants. Earlier attached patches are historical, not work to reapply.
 
 ## Integrated native scratch-name probe #179
 

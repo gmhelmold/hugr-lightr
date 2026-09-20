@@ -154,9 +154,14 @@ impl DestinationAnchor<'_> {
         }
     }
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub(super) fn retained_handle(&self) -> &File {
+        self.inner.handle()
+    }
+
     #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
     fn anchored_handle(&self) -> &File {
-        self.inner.handle()
+        self.retained_handle()
     }
 }
 
