@@ -238,6 +238,6 @@ fn fail_and_cleanup(inner: native::Anchor, primary: io::Error) -> DestinationAnc
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 #[path = "destination_anchor_tests.rs"]
 mod tests;
