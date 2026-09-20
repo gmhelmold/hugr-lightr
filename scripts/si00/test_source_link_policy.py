@@ -62,7 +62,7 @@ class SourceLinkPolicyTests(unittest.TestCase):
                      and any(isinstance(v, ast.Name) and v.id == "label" for v in n.target.elts)]
             self.assertEqual(len(loops), 1)
             self.assertCountEqual([n.id for n in ast.walk(loops[0].iter) if isinstance(n, ast.Name)],
-                                  ["CASES", "EMPTY_CASES", "DESCENDANT_CASES", "SCRATCH_CASES", "LINK_CASES", "LISTING_CASES", "DEST_ANCHOR_CASES", "DEST_REPR_CASES"])
+                                  ["CASES", "EMPTY_CASES", "DESCENDANT_CASES", "SCRATCH_CASES", "LINK_CASES", "LISTING_CASES", "DEST_ANCHOR_CASES", "DEST_REPR_CASES", "DEST_PREPARE_CASES"])
             for stage in ("pristine", "restored"):
                 self.assertEqual(source.count(f'run(root, link_suite, "link-{stage}")'), 1)
         finally:

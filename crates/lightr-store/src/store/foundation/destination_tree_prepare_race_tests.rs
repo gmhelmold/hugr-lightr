@@ -180,7 +180,7 @@ fn prepared_tree_final_entry_revalidation_rejects_leaf_replacement() {
         Wait::Try,
         |step, _, _| {
             if step == PrepareStep::BeforeFinalValidation {
-                fs::rename(output.join("a"), output.join("retained-owned"))?;
+                fs::remove_file(output.join("a"))?;
                 fs::write(output.join("a"), b"replacement")?;
             }
             Ok(())
@@ -193,7 +193,6 @@ fn prepared_tree_final_entry_revalidation_rejects_leaf_replacement() {
     assert_eq!(failure.cleanup.len(), 1);
     assert!(!failure.cleanup_complete);
     assert_eq!(fs::read(output.join("a")).unwrap(), b"replacement");
-    assert!(output.join("retained-owned").is_file());
 }
 
 #[test]

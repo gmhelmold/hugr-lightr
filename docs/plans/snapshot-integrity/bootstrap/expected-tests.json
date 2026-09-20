@@ -156,7 +156,22 @@
           "store::foundation::destination_name_probe::tests::races::destination_name_probe_replacement_is_preserved_and_reports_incomplete_cleanup",
           "store::foundation::destination_name_probe::tests::races::destination_name_probe_unknown_child_blocks_recursive_cleanup",
           "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_empty_check_detects_foreign_root_entry",
-          "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_binding_rejects_root_replacement"
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_binding_rejects_root_replacement",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_empty_is_noop_and_rolls_back_cleanly",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_creates_exact_namespace_and_explicit_rollback_cleans_it",
+          "store::foundation::destination_tree_prepare::tests::prepared_file_handle_is_cloexec_and_ready_for_future_payload_writer",
+          "store::foundation::destination_tree_prepare::tests::prepared_entries_use_private_intermediate_modes",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_representation_probe_finishes_before_persistent_creation",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_late_native_failure_cleans_prior_entries",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_created_anchor_root_remains_for_anchor_rollback",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_never_adopts_foreign_file_after_representation",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_cancellation_after_first_entry_rolls_back_owned_names",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_replacement_is_preserved_and_cleanup_is_incomplete",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_unknown_child_prevents_recursive_directory_cleanup",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_binding_rejects_root_replacement",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_entry_revalidation_rejects_leaf_replacement",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_drop_best_effort_removes_uncommitted_entries",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_validation_rejects_unplanned_root_entry"
         ]
       }
     },
@@ -312,7 +327,22 @@
           "store::foundation::destination_name_probe::tests::races::destination_name_probe_replacement_is_preserved_and_reports_incomplete_cleanup",
           "store::foundation::destination_name_probe::tests::races::destination_name_probe_unknown_child_blocks_recursive_cleanup",
           "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_empty_check_detects_foreign_root_entry",
-          "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_binding_rejects_root_replacement"
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_binding_rejects_root_replacement",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_empty_is_noop_and_rolls_back_cleanly",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_creates_exact_namespace_and_explicit_rollback_cleans_it",
+          "store::foundation::destination_tree_prepare::tests::prepared_file_handle_is_cloexec_and_ready_for_future_payload_writer",
+          "store::foundation::destination_tree_prepare::tests::prepared_entries_use_private_intermediate_modes",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_representation_probe_finishes_before_persistent_creation",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_late_native_failure_cleans_prior_entries",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_created_anchor_root_remains_for_anchor_rollback",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_never_adopts_foreign_file_after_representation",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_cancellation_after_first_entry_rolls_back_owned_names",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_replacement_is_preserved_and_cleanup_is_incomplete",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_unknown_child_prevents_recursive_directory_cleanup",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_binding_rejects_root_replacement",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_entry_revalidation_rejects_leaf_replacement",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_drop_best_effort_removes_uncommitted_entries",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_validation_rejects_unplanned_root_entry"
         ]
       }
     },
@@ -462,7 +492,22 @@
           "store::foundation::destination_name_probe::tests::races::destination_name_probe_replacement_is_preserved_and_reports_incomplete_cleanup",
           "store::foundation::destination_name_probe::tests::races::destination_name_probe_unknown_child_blocks_recursive_cleanup",
           "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_empty_check_detects_foreign_root_entry",
-          "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_binding_rejects_root_replacement"
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_binding_rejects_root_replacement",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_empty_is_noop_and_rolls_back_cleanly",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_creates_exact_namespace_and_explicit_rollback_cleans_it",
+          "store::foundation::destination_tree_prepare::tests::prepared_file_handle_is_cloexec_and_ready_for_future_payload_writer",
+          "store::foundation::destination_tree_prepare::tests::prepared_entries_use_private_intermediate_modes",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_representation_probe_finishes_before_persistent_creation",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_late_native_failure_cleans_prior_entries",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_created_anchor_root_remains_for_anchor_rollback",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_never_adopts_foreign_file_after_representation",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_cancellation_after_first_entry_rolls_back_owned_names",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_replacement_is_preserved_and_cleanup_is_incomplete",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_unknown_child_prevents_recursive_directory_cleanup",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_binding_rejects_root_replacement",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_entry_revalidation_rejects_leaf_replacement",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_drop_best_effort_removes_uncommitted_entries",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_validation_rejects_unplanned_root_entry"
         ]
       }
     },
@@ -613,7 +658,22 @@
           "store::foundation::destination_name_probe::tests::races::destination_name_probe_replacement_is_preserved_and_reports_incomplete_cleanup",
           "store::foundation::destination_name_probe::tests::races::destination_name_probe_unknown_child_blocks_recursive_cleanup",
           "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_empty_check_detects_foreign_root_entry",
-          "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_binding_rejects_root_replacement"
+          "store::foundation::destination_name_probe::tests::races::destination_name_probe_final_binding_rejects_root_replacement",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_empty_is_noop_and_rolls_back_cleanly",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_creates_exact_namespace_and_explicit_rollback_cleans_it",
+          "store::foundation::destination_tree_prepare::tests::prepared_file_handle_is_cloexec_and_ready_for_future_payload_writer",
+          "store::foundation::destination_tree_prepare::tests::prepared_entries_use_private_intermediate_modes",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_representation_probe_finishes_before_persistent_creation",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_late_native_failure_cleans_prior_entries",
+          "store::foundation::destination_tree_prepare::tests::prepared_tree_created_anchor_root_remains_for_anchor_rollback",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_never_adopts_foreign_file_after_representation",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_cancellation_after_first_entry_rolls_back_owned_names",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_replacement_is_preserved_and_cleanup_is_incomplete",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_unknown_child_prevents_recursive_directory_cleanup",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_binding_rejects_root_replacement",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_entry_revalidation_rejects_leaf_replacement",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_drop_best_effort_removes_uncommitted_entries",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_validation_rejects_unplanned_root_entry"
         ]
       }
     },
