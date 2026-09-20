@@ -38,22 +38,30 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Current increment — native scratch-name probe
+## Current increment — anchored actual-destination root
 
-[Scratch-name probe](SCRATCH-NAME-PROBE.md) composes TreePlan and borrowed private
-scratch to exercise every directory/leaf name without public output writes. All
-siblings coexist for native collision detection. Leaf markers do not qualify
-link semantics or the actual destination directory's name policy. The new source
-requires its own full/native/causal Actions before reviewed integration.
+[Destination anchor](DESTINATION-ANCHOR.md) converts a validated empty destination
+observation into the exact existing-or-created root using retained native parents.
+Missing suffixes use create-only anchored directory operations; existing output is
+never operation-owned. Final handle binding and protected roots are revalidated.
+This is not descendant writing, actual-directory name certification or activation.
+
+## Integrated native scratch-name probe #179
+
+[Scratch-name probe](SCRATCH-NAME-PROBE.md) is integrated as
+`9bf1af67d0c6c4051a4bd7851138cd491688da0f`; its exact candidate and fresh parent
+gates passed and the delivery branch was retired. It composes TreePlan with private
+scratch only: leaf markers and native sibling coexistence do not certify the actual
+destination directory, link semantics or public output authority.
 
 ## Integrated source-directory listing #180
 
 [SOURCE-LISTING.md](SOURCE-LISTING.md) is integrated as
 `aac0e8174ca6a8076bb62cc61a0c67302af83f46`; candidate and fresh parent CI passed,
 and its delivery branch was retired. Its seventeen Linux/sixteen Unix listing
-methods and four causal controls remain intact in this composition with #179.
+methods and four causal controls remain intact after #179 composition.
 Listing observes names; it is not coherent capture or output-writing authority.
-The scratch-name probe requires NEW exact-composition Actions before integration.
+Neither accepted increment authorizes the later destination writer.
 
 ## Integrated partial-counter consistency #178
 

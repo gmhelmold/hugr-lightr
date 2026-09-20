@@ -34,7 +34,7 @@ COLLECTION_NAMES = [
 COMMON = [PREFIX + n for n in MAIN_NAMES[:-1]] + [PREFIX + 'collection::' + n for n in COLLECTION_NAMES]
 LINUX = [PREFIX + MAIN_NAMES[-1]]
 REQUIRED = COMMON + LINUX
-FAMILIES = ['CASES', 'EMPTY_CASES', 'DESCENDANT_CASES', 'SCRATCH_CASES', 'LINK_CASES', 'LISTING_CASES']
+FAMILIES = ['CASES', 'EMPTY_CASES', 'DESCENDANT_CASES', 'SCRATCH_CASES', 'LINK_CASES', 'LISTING_CASES', 'DEST_ANCHOR_CASES']
 
 
 class SourceListingPolicyTests(unittest.TestCase):
@@ -77,7 +77,7 @@ class SourceListingPolicyTests(unittest.TestCase):
         sys.path.insert(0, str(ROOT / 'scripts/si01'))
         try:
             import topology_controls as controls
-            for family, count in zip(FAMILIES, [10, 2, 3, 3, 4, 4]):
+            for family, count in zip(FAMILIES, [10, 2, 3, 3, 4, 4, 3]):
                 self.assertEqual(len(getattr(controls, family)), count, family)
             for label, filename, old, _new, test, _message in controls.LISTING_CASES:
                 self.assertEqual((ROOT / controls.BASE / filename).read_text().count(old), 1, label)

@@ -75,3 +75,6 @@ pub mod anchored_scratch;
 
 /// Whole logical-name probing in private scratch, not actual-destination approval.
 pub mod scratch_name_probe;
+
+/// Anchored existing-or-created destination root; no descendant writer yet.
+pub mod destination_anchor;

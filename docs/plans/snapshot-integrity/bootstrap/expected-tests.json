@@ -131,7 +131,18 @@
           "store::foundation::scratch_name_probe::tests::unix::name_probe_terminal_cancellation_after_cleanup_is_not_success",
           "store::foundation::scratch_name_probe::tests::unix::name_probe_primary_and_cleanup_failures_are_both_preserved",
           "store::foundation::scratch_name_probe::tests::unix::name_probe_cleanup_failure_alone_prevents_an_observation",
-          "store::foundation::scratch_name_probe::tests::unix::name_probe_replaced_marker_and_unknown_bytes_are_not_deleted"
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_replaced_marker_and_unknown_bytes_are_not_deleted",
+          "store::foundation::destination_anchor::tests::anchor_existing_empty_uses_exact_directory_and_rollback_never_removes_it",
+          "store::foundation::destination_anchor::tests::anchor_existing_nonempty_is_rejected_without_touching_user_data",
+          "store::foundation::destination_anchor::tests::anchor_missing_nested_destination_creates_exact_owned_suffix_and_rolls_back",
+          "store::foundation::destination_anchor::tests::anchor_missing_alias_parent_uses_native_resolution_not_lexical_parent",
+          "store::foundation::destination_anchor::tests::anchor_never_adopts_a_name_that_appears_after_preflight",
+          "store::foundation::destination_anchor::tests::anchor_cancellation_after_first_creation_rolls_back_owned_prefix",
+          "store::foundation::destination_anchor::tests::anchor_final_validation_rejects_replacement_and_preserves_decoy",
+          "store::foundation::destination_anchor::tests::anchor_existing_replacement_after_empty_scan_is_rejected_without_cleanup",
+          "store::foundation::destination_anchor::tests::anchor_rollback_preserves_unknown_output_and_reports_partial_state",
+          "store::foundation::destination_anchor::tests::anchor_created_handle_is_close_on_exec_and_revalidates",
+          "store::foundation::destination_anchor::tests::anchor_revalidates_planned_protected_roots_before_mutation"
         ]
       }
     },
@@ -262,7 +273,18 @@
           "store::foundation::scratch_name_probe::tests::unix::name_probe_terminal_cancellation_after_cleanup_is_not_success",
           "store::foundation::scratch_name_probe::tests::unix::name_probe_primary_and_cleanup_failures_are_both_preserved",
           "store::foundation::scratch_name_probe::tests::unix::name_probe_cleanup_failure_alone_prevents_an_observation",
-          "store::foundation::scratch_name_probe::tests::unix::name_probe_replaced_marker_and_unknown_bytes_are_not_deleted"
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_replaced_marker_and_unknown_bytes_are_not_deleted",
+          "store::foundation::destination_anchor::tests::anchor_existing_empty_uses_exact_directory_and_rollback_never_removes_it",
+          "store::foundation::destination_anchor::tests::anchor_existing_nonempty_is_rejected_without_touching_user_data",
+          "store::foundation::destination_anchor::tests::anchor_missing_nested_destination_creates_exact_owned_suffix_and_rolls_back",
+          "store::foundation::destination_anchor::tests::anchor_missing_alias_parent_uses_native_resolution_not_lexical_parent",
+          "store::foundation::destination_anchor::tests::anchor_never_adopts_a_name_that_appears_after_preflight",
+          "store::foundation::destination_anchor::tests::anchor_cancellation_after_first_creation_rolls_back_owned_prefix",
+          "store::foundation::destination_anchor::tests::anchor_final_validation_rejects_replacement_and_preserves_decoy",
+          "store::foundation::destination_anchor::tests::anchor_existing_replacement_after_empty_scan_is_rejected_without_cleanup",
+          "store::foundation::destination_anchor::tests::anchor_rollback_preserves_unknown_output_and_reports_partial_state",
+          "store::foundation::destination_anchor::tests::anchor_created_handle_is_close_on_exec_and_revalidates",
+          "store::foundation::destination_anchor::tests::anchor_revalidates_planned_protected_roots_before_mutation"
         ]
       }
     },
@@ -387,7 +409,18 @@
           "store::foundation::scratch_name_probe::tests::unix::name_probe_terminal_cancellation_after_cleanup_is_not_success",
           "store::foundation::scratch_name_probe::tests::unix::name_probe_primary_and_cleanup_failures_are_both_preserved",
           "store::foundation::scratch_name_probe::tests::unix::name_probe_cleanup_failure_alone_prevents_an_observation",
-          "store::foundation::scratch_name_probe::tests::unix::name_probe_replaced_marker_and_unknown_bytes_are_not_deleted"
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_replaced_marker_and_unknown_bytes_are_not_deleted",
+          "store::foundation::destination_anchor::tests::anchor_existing_empty_uses_exact_directory_and_rollback_never_removes_it",
+          "store::foundation::destination_anchor::tests::anchor_existing_nonempty_is_rejected_without_touching_user_data",
+          "store::foundation::destination_anchor::tests::anchor_missing_nested_destination_creates_exact_owned_suffix_and_rolls_back",
+          "store::foundation::destination_anchor::tests::anchor_missing_alias_parent_uses_native_resolution_not_lexical_parent",
+          "store::foundation::destination_anchor::tests::anchor_never_adopts_a_name_that_appears_after_preflight",
+          "store::foundation::destination_anchor::tests::anchor_cancellation_after_first_creation_rolls_back_owned_prefix",
+          "store::foundation::destination_anchor::tests::anchor_final_validation_rejects_replacement_and_preserves_decoy",
+          "store::foundation::destination_anchor::tests::anchor_existing_replacement_after_empty_scan_is_rejected_without_cleanup",
+          "store::foundation::destination_anchor::tests::anchor_rollback_preserves_unknown_output_and_reports_partial_state",
+          "store::foundation::destination_anchor::tests::anchor_created_handle_is_close_on_exec_and_revalidates",
+          "store::foundation::destination_anchor::tests::anchor_revalidates_planned_protected_roots_before_mutation"
         ]
       }
     },
@@ -513,7 +546,18 @@
           "store::foundation::scratch_name_probe::tests::unix::name_probe_terminal_cancellation_after_cleanup_is_not_success",
           "store::foundation::scratch_name_probe::tests::unix::name_probe_primary_and_cleanup_failures_are_both_preserved",
           "store::foundation::scratch_name_probe::tests::unix::name_probe_cleanup_failure_alone_prevents_an_observation",
-          "store::foundation::scratch_name_probe::tests::unix::name_probe_replaced_marker_and_unknown_bytes_are_not_deleted"
+          "store::foundation::scratch_name_probe::tests::unix::name_probe_replaced_marker_and_unknown_bytes_are_not_deleted",
+          "store::foundation::destination_anchor::tests::anchor_existing_empty_uses_exact_directory_and_rollback_never_removes_it",
+          "store::foundation::destination_anchor::tests::anchor_existing_nonempty_is_rejected_without_touching_user_data",
+          "store::foundation::destination_anchor::tests::anchor_missing_nested_destination_creates_exact_owned_suffix_and_rolls_back",
+          "store::foundation::destination_anchor::tests::anchor_missing_alias_parent_uses_native_resolution_not_lexical_parent",
+          "store::foundation::destination_anchor::tests::anchor_never_adopts_a_name_that_appears_after_preflight",
+          "store::foundation::destination_anchor::tests::anchor_cancellation_after_first_creation_rolls_back_owned_prefix",
+          "store::foundation::destination_anchor::tests::anchor_final_validation_rejects_replacement_and_preserves_decoy",
+          "store::foundation::destination_anchor::tests::anchor_existing_replacement_after_empty_scan_is_rejected_without_cleanup",
+          "store::foundation::destination_anchor::tests::anchor_rollback_preserves_unknown_output_and_reports_partial_state",
+          "store::foundation::destination_anchor::tests::anchor_created_handle_is_close_on_exec_and_revalidates",
+          "store::foundation::destination_anchor::tests::anchor_revalidates_planned_protected_roots_before_mutation"
         ]
       }
     },
