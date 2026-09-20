@@ -330,6 +330,20 @@ impl DestinationInspection {
     pub fn is_missing(&self) -> bool {
         self.existing_directory().is_none()
     }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub(super) fn anchor_parts(&self) -> io::Result<(&File, &[Vec<u8>])> {
+        self.inner.destination_anchor_parts()
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub(super) fn validate_anchored_directory(
+        &self,
+        directory: &File,
+        wait: Wait<'_>,
+    ) -> io::Result<()> {
+        self.inner.validate_destination_handle(directory, wait)
+    }
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]

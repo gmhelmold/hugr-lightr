@@ -197,6 +197,46 @@ impl Inspection {
             target.missing.is_empty().then_some(&target.object)
         })
     }
+
+    pub(super) fn destination_anchor_parts(&self) -> io::Result<(&File, &[Vec<u8>])> {
+        let index = self.destination.ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "inspection has no destination")
+        })?;
+        let target = &self.observed[index];
+        Ok((&target.object, &target.missing))
+    }
+
+    pub(super) fn validate_destination_handle(
+        &self,
+        directory: &File,
+        wait: Wait<'_>,
+    ) -> io::Result<()> {
+        wait.check()?;
+        let current = snapshot(&self.cwd, &self.requests, self.roots, wait)?;
+        if !self.observed[..self.roots]
+            .iter()
+            .zip(&current[..self.roots])
+            .all(|(before, after)| before.unchanged(after))
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "protected topology changed while acquiring destination",
+            ));
+        }
+        let index = self.destination.ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "inspection has no destination")
+        })?;
+        let target = &current[index];
+        let binding_changed =
+            !target.missing.is_empty() || !target.directory || target.object_key != key(directory)?;
+        if binding_changed {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "anchored destination no longer matches the requested path",
+            ));
+        }
+        wait.check()
+    }
 }
 
 fn snapshot(
