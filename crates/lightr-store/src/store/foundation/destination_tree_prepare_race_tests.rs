@@ -16,15 +16,19 @@ fn prepared_tree_never_adopts_foreign_file_after_representation() {
         limits(),
         Wait::Try,
         |step, _, _| {
-            if step == PrepareStep::AfterRepresentation {
+            if step == PrepareStep::BeforeCreate {
                 fs::write(output.join("foreign"), b"keep")?;
             }
             Ok(())
         },
     )
-    .unwrap_err();
+    .err()
+    .unwrap();
 
-    assert_eq!(failure.primary.unwrap().kind(), io::ErrorKind::AlreadyExists);
+    assert_eq!(
+        failure.primary.unwrap().kind(),
+        io::ErrorKind::AlreadyExists
+    );
     assert!(failure.cleanup.is_empty());
     assert!(failure.cleanup_complete);
     assert_eq!(fs::read(output.join("foreign")).unwrap(), b"keep");
@@ -52,7 +56,8 @@ fn prepared_tree_cancellation_after_first_entry_rolls_back_owned_names() {
         }
         Ok(())
     })
-    .unwrap_err();
+    .err()
+    .unwrap();
 
     assert_eq!(seen, 1);
     assert_eq!(failure.primary.unwrap().kind(), io::ErrorKind::Interrupted);
@@ -84,7 +89,8 @@ fn prepared_tree_replacement_is_preserved_and_cleanup_is_incomplete() {
             Ok(())
         },
     )
-    .unwrap_err();
+    .err()
+    .unwrap();
 
     assert_eq!(failure.primary.unwrap().raw_os_error(), Some(libc::EIO));
     assert_eq!(failure.cleanup.len(), 1);
@@ -115,7 +121,8 @@ fn prepared_tree_unknown_child_prevents_recursive_directory_cleanup() {
             Ok(())
         },
     )
-    .unwrap_err();
+    .err()
+    .unwrap();
 
     assert_eq!(failure.primary.unwrap().raw_os_error(), Some(libc::EIO));
     assert_eq!(failure.cleanup.len(), 1);
@@ -147,7 +154,8 @@ fn prepared_tree_final_binding_rejects_root_replacement() {
             Ok(())
         },
     )
-    .unwrap_err();
+    .err()
+    .unwrap();
 
     assert_eq!(failure.primary.unwrap().kind(), io::ErrorKind::InvalidData);
     assert!(failure.cleanup.is_empty());
@@ -178,7 +186,8 @@ fn prepared_tree_final_entry_revalidation_rejects_leaf_replacement() {
             Ok(())
         },
     )
-    .unwrap_err();
+    .err()
+    .unwrap();
 
     assert_eq!(failure.primary.unwrap().kind(), io::ErrorKind::InvalidData);
     assert_eq!(failure.cleanup.len(), 1);
@@ -204,4 +213,35 @@ fn prepared_tree_drop_best_effort_removes_uncommitted_entries() {
     }
 
     assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
+}
+
+#[test]
+fn prepared_tree_final_validation_rejects_unplanned_root_entry() {
+    let f = Fixture::new();
+    let output = f.parent.join("output");
+    fs::create_dir(&output).unwrap();
+    let observed = f.inspect(&output);
+    let anchor = observed.anchor_empty(Wait::Try).unwrap();
+    let manifest = manifest(vec![file("a", 0)]);
+
+    let failure = prepare_checked(
+        &anchor,
+        &plan(&manifest),
+        limits(),
+        Wait::Try,
+        |step, _, _| {
+            if step == PrepareStep::BeforeFinalValidation {
+                fs::write(output.join("foreign"), b"preserve")?;
+            }
+            Ok(())
+        },
+    )
+    .err()
+    .unwrap();
+
+    assert_eq!(failure.primary.unwrap().kind(), io::ErrorKind::InvalidData);
+    assert!(failure.cleanup.is_empty());
+    assert!(failure.cleanup_complete);
+    assert_eq!(fs::read(output.join("foreign")).unwrap(), b"preserve");
+    assert!(!output.join("a").exists());
 }

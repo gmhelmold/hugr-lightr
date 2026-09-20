@@ -176,6 +176,8 @@ impl PreparedDestinationTree<'_, '_> {
 enum PrepareStep {
     AfterRepresentation,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
+    BeforeCreate,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     Created,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     BeforeFinalValidation,
@@ -188,13 +190,15 @@ fn prepare_checked<'anchor, 'inspection>(
     wait: Wait<'_>,
     mut observe: impl FnMut(PrepareStep, &str, Option<&std::fs::File>) -> io::Result<()>,
 ) -> Result<PreparedDestinationTree<'anchor, 'inspection>, DestinationTreePrepareFailure> {
-    wait.check().map_err(DestinationTreePrepareFailure::primary)?;
+    wait.check()
+        .map_err(DestinationTreePrepareFailure::primary)?;
     anchor
         .probe_tree_names(plan, limits, wait)
         .map_err(DestinationTreePrepareFailure::from_probe)?;
     observe(PrepareStep::AfterRepresentation, "", None)
         .map_err(DestinationTreePrepareFailure::primary)?;
-    wait.check().map_err(DestinationTreePrepareFailure::primary)?;
+    wait.check()
+        .map_err(DestinationTreePrepareFailure::primary)?;
     anchor
         .revalidate(wait)
         .map_err(DestinationTreePrepareFailure::primary)?;
@@ -202,6 +206,14 @@ fn prepare_checked<'anchor, 'inspection>(
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
         topology::require_empty_handle(anchor.retained_handle(), wait)
+            .map_err(DestinationTreePrepareFailure::primary)?;
+        observe(
+            PrepareStep::BeforeCreate,
+            "",
+            Some(anchor.retained_handle()),
+        )
+        .map_err(DestinationTreePrepareFailure::primary)?;
+        wait.check()
             .map_err(DestinationTreePrepareFailure::primary)?;
         let inner = match native::PreparedTree::create(
             anchor.retained_handle(),

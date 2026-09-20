@@ -185,11 +185,19 @@ fn prepared_entries_use_private_intermediate_modes() {
         .unwrap();
 
     assert_eq!(
-        fs::metadata(output.join("dir")).unwrap().permissions().mode() & 0o077,
+        fs::metadata(output.join("dir"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o077,
         0
     );
     assert_eq!(
-        fs::metadata(output.join("file")).unwrap().permissions().mode() & 0o077,
+        fs::metadata(output.join("file"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o077,
         0
     );
     prepared.rollback().unwrap();
@@ -234,7 +242,8 @@ fn prepared_tree_late_native_failure_cleans_prior_entries() {
 
     let failure = anchor
         .prepare_tree(&plan(&manifest), limits(), Wait::Try)
-        .unwrap_err();
+        .err()
+        .unwrap();
 
     assert_eq!(
         failure.primary.unwrap().raw_os_error(),
