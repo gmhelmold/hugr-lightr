@@ -7,7 +7,8 @@
 use super::destination_anchor::DestinationAnchor;
 use super::destination_name_probe::DestinationNameProbeFailure;
 use super::scratch_name_probe::NameProbeLimits;
-#[cfg(any(target_os = "linux", target_os = "macos"))]\nuse super::topology;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use super::topology;
 use super::tree_plan::TreePlan;
 use super::Wait;
 use std::{fmt, io};
