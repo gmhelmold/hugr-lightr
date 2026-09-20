@@ -67,7 +67,7 @@ impl std::error::Error for DestinationAnchorFailure {
 pub struct DestinationAnchor<'a> {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     inner: native::Anchor,
-    inspection: &'a DestinationInspection,
+    _inspection: &'a DestinationInspection,
 }
 
 impl DestinationInspection {
@@ -93,7 +93,7 @@ impl DestinationAnchor<'_> {
     pub fn revalidate(&self, wait: Wait<'_>) -> io::Result<()> {
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
-            self.inspection
+            self._inspection
                 .validate_anchored_directory(self.inner.handle(), wait)
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -163,7 +163,9 @@ impl DestinationAnchor<'_> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AnchorStep {
     AfterPreflight,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     AfterCreate(usize),
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     BeforeFinalValidation,
 }
 
@@ -211,7 +213,10 @@ fn anchor_checked<'a>(
         if let Err(error) = inspection.validate_anchored_directory(inner.handle(), wait) {
             return Err(fail_and_cleanup(inner, error));
         }
-        Ok(DestinationAnchor { inner, inspection })
+        Ok(DestinationAnchor {
+            inner,
+            _inspection: inspection,
+        })
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
