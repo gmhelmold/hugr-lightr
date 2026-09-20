@@ -159,7 +159,7 @@ fn prepared_file_handle_is_cloexec_and_ready_for_future_payload_writer() {
         .prepare_tree(&plan(&manifest), limits(), Wait::Try)
         .unwrap();
 
-    let file = prepared.file_mut(0).unwrap();
+    let file = prepared.test_first_file_mut().unwrap();
     let flags = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFD) };
     assert!(flags >= 0);
     assert_ne!(flags & libc::FD_CLOEXEC, 0);

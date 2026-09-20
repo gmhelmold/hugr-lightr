@@ -223,17 +223,12 @@ unsafe fn errno_address() -> *mut libc::c_int {
 }
 
 pub(super) struct OwnedFile {
-    pub(super) entry_index: usize,
     pub(super) file: File,
     pub(super) name: OwnedName,
 }
 
 impl OwnedFile {
-    pub(super) fn create(
-        parent: &File,
-        raw: &str,
-        entry_index: usize,
-    ) -> Result<Self, CreateFailure> {
+    pub(super) fn create(parent: &File, raw: &str) -> Result<Self, CreateFailure> {
         let name = component(raw).map_err(CreateFailure::before)?;
         let parent = parent.try_clone().map_err(CreateFailure::before)?;
         let flags =
@@ -254,7 +249,6 @@ impl OwnedFile {
         }
         let id = (metadata.dev(), metadata.ino(), metadata.mode() & 0o170000);
         Ok(Self {
-            entry_index,
             file,
             name: OwnedName {
                 parent,

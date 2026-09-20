@@ -38,15 +38,23 @@ The six native child links and seven dependencies were created/read back in
 #151 by #150. Closing #153 does not close #147 or release #148's full integration.
 No relation was removed by this maintenance update.
 
-## Current candidate — actual-destination name representability
+## Current candidate — prepared anchored destination tree
 
-[DESTINATION-REPRESENTATION.md](DESTINATION-REPRESENTATION.md) composes the
-integrated #181 anchor with TreePlan and creates only temporary directory/file
-name markers directly in the exact empty destination. Siblings coexist for native
-collision detection; every owned marker is identity-checked and removed before
-success. This is actual-destination NAME preflight, not payload/link writing,
-Windows topology, namespace exclusion or protocol activation. Its own exact-head
-native/causal/full Actions remain mandatory before reviewed integration.
+[DESTINATION-TREE-PREPARE.md](DESTINATION-TREE-PREPARE.md) composes the accepted
+#182 actual-destination name probe with #181's retained root. It prepares
+directories, empty regular files and exact POSIX links only through retained
+handles; files stay open for a later payload phase. Cleanup is identity-checked
+and final validation rejects extra foreign names. No public hydrate route, CAS
+payload write, final mode publication or Windows native support is activated.
+This source requires its own exact-head native/causal/full qualification.
+
+## Integrated actual-destination name representation #182
+
+#182 is integrated as `390a4c6dd0806fa0f8df6d0801059c8efa89ff00`.
+Its exact candidate and fresh parent workflows passed; Linux/Intel execute all
+fourteen representation methods and the five-profile native matrix is green.
+The delivery branch is retired. This proves NAME coexistence in the retained
+destination only; it is not a persistent writer or payload/link publication gate.
 
 ## Integrated anchored destination root #181
 

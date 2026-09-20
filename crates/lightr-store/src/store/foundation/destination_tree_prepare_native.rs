@@ -108,7 +108,7 @@ impl PreparedTree {
             }
         }
 
-        for (entry_index, entry) in plan.entries().iter().enumerate() {
+        for entry in plan.entries() {
             if matches!(entry, Entry::Dir { .. }) {
                 continue;
             }
@@ -122,7 +122,7 @@ impl PreparedTree {
             };
             match entry {
                 Entry::File { .. } => {
-                    let file = match OwnedFile::create(parent, name, entry_index) {
+                    let file = match OwnedFile::create(parent, name) {
                         Ok(file) => file,
                         Err(error) => return Err(tree.fail_create(error)),
                     };
@@ -198,11 +198,9 @@ impl PreparedTree {
         self.links.len()
     }
 
-    pub(super) fn file_mut(&mut self, entry_index: usize) -> Option<&mut File> {
-        self.files
-            .iter_mut()
-            .find(|file| file.entry_index == entry_index)
-            .map(|file| &mut file.file)
+    #[cfg(test)]
+    pub(super) fn test_first_file_mut(&mut self) -> Option<&mut File> {
+        self.files.first_mut().map(|file| &mut file.file)
     }
 
     pub(super) fn rollback(&mut self) -> Cleanup {

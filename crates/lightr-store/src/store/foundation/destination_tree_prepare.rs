@@ -166,9 +166,9 @@ impl PreparedDestinationTree<'_, '_> {
         }
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    pub(super) fn file_mut(&mut self, entry_index: usize) -> Option<&mut std::fs::File> {
-        self.inner.file_mut(entry_index)
+    #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+    fn test_first_file_mut(&mut self) -> Option<&mut std::fs::File> {
+        self.inner.test_first_file_mut()
     }
 }
 
