@@ -126,7 +126,7 @@ DEST_PREPARE_CASES = [
         'if identity(&self.parent, &self.name)? != self.identity {',
         'if false && identity(&self.parent, &self.name)? != self.identity {',
         'store::foundation::destination_tree_prepare::tests::races::prepared_tree_replacement_is_preserved_and_cleanup_is_incomplete',
-        'assertion failed',
+        'assertion `left == right` failed',
     ),
     (
         'dest-prepare-exact-namespace',
