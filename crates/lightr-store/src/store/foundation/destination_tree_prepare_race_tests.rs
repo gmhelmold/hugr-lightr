@@ -132,6 +132,46 @@ fn prepared_tree_unknown_child_prevents_recursive_directory_cleanup() {
 }
 
 #[test]
+fn prepared_tree_directory_symlink_swap_before_open_is_refused() {
+    let f = Fixture::new();
+    let output = f.parent.join("output");
+    let target = f.parent.join("target");
+    let retained = f.parent.join("retained-directory");
+    fs::create_dir(&output).unwrap();
+    fs::create_dir(&target).unwrap();
+    let observed = f.inspect(&output);
+    let anchor = observed.anchor_empty(Wait::Try).unwrap();
+    let manifest = manifest(vec![directory("dir")]);
+
+    let failure = prepare_checked(
+        &anchor,
+        &plan(&manifest),
+        limits(),
+        Wait::Try,
+        |step, path, _| {
+            if step == PrepareStep::BeforeDirectoryOpen && path == "dir" {
+                fs::rename(output.join("dir"), &retained)?;
+                std::os::unix::fs::symlink(&target, output.join("dir"))?;
+            }
+            Ok(())
+        },
+    )
+    .err()
+    .unwrap();
+
+    #[cfg(target_os = "linux")]
+    assert_eq!(failure.primary.unwrap().raw_os_error(), Some(libc::ELOOP));
+    #[cfg(target_os = "macos")]
+    assert_eq!(failure.primary.unwrap().raw_os_error(), Some(libc::ENOTDIR));
+    assert_eq!(failure.cleanup.len(), 1);
+    assert!(!failure.cleanup_complete);
+    assert!(retained.is_dir());
+    assert_eq!(fs::read_dir(&retained).unwrap().count(), 0);
+    assert_eq!(fs::read_link(output.join("dir")).unwrap(), target);
+    assert_eq!(fs::read_dir(&target).unwrap().count(), 0);
+}
+
+#[test]
 fn prepared_tree_final_binding_rejects_root_replacement() {
     let f = Fixture::new();
     let output = f.parent.join("output");

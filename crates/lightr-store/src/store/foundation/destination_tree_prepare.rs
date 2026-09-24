@@ -175,10 +175,12 @@ impl PreparedDestinationTree<'_, '_> {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum PrepareStep {
+pub(super) enum PrepareStep {
     AfterRepresentation,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     BeforeCreate,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    BeforeDirectoryOpen,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     Created,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -221,7 +223,7 @@ fn prepare_checked<'anchor, 'inspection>(
             anchor.retained_handle(),
             plan,
             wait,
-            |path, handle| observe(PrepareStep::Created, path, handle),
+            &mut observe,
         ) {
             Ok(tree) => tree,
             Err(error) => {

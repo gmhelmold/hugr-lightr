@@ -94,6 +94,7 @@ impl OwnedDirectory {
         parent: &File,
         raw: &str,
         expected_children: usize,
+        mut after_mkdir_before_open: impl FnMut() -> io::Result<()>,
     ) -> Result<Self, CreateFailure> {
         let name = component(raw).map_err(CreateFailure::before)?;
         let parent = parent.try_clone().map_err(CreateFailure::before)?;
@@ -117,6 +118,9 @@ impl OwnedDirectory {
             | libc::O_NOFOLLOW
             | libc::O_CLOEXEC
             | libc::O_NONBLOCK;
+        if let Err(error) = after_mkdir_before_open() {
+            return Err(CreateFailure::with_binding(error, binding));
+        }
         // SAFETY: exact freshly-created directory; O_NOFOLLOW forbids adoption.
         let fd = unsafe { libc::openat(binding.parent.as_raw_fd(), binding.name.as_ptr(), flags) };
         if fd < 0 {
