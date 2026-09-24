@@ -179,6 +179,39 @@ fn open_exec_tty_uses_pty_master_no_stderr() {
     assert_eq!(code, 0);
 }
 
+#[test]
+fn open_exec_tty_keeps_output_until_first_master_read() {
+    let b = LightrBackend::new(temp_home());
+    let id = running_container(&b, vec![]);
+    let marker = temp_home().join("child-closed-stdio");
+    let marker_c = {
+        use std::os::unix::ffi::OsStrExt;
+        std::ffi::CString::new(marker.as_os_str().as_bytes()).unwrap()
+    };
+    assert_eq!(unsafe { libc::mkfifo(marker_c.as_ptr(), 0o600) }, 0);
+    let command = format!(
+        "printf 'fast-tty-output\\n'; exec 0>&- 1>&- 2>&-; printf x > '{}'",
+        marker.display()
+    );
+
+    let mut s = b
+        .open_exec(&id, &["sh".into(), "-c".into(), command], true, false)
+        .unwrap();
+
+    // FIFO write runs only after direct child's slave descriptors close. Do not
+    // read master before it arrives: this is final-slave-close lifetime edge.
+    let mut signal = std::fs::File::open(&marker).unwrap();
+    let mut ready = Vec::new();
+    signal.read_to_end(&mut ready).unwrap();
+    assert_eq!(ready, b"x");
+    let out = read_pty_line(s.stdout.take().unwrap()).expect("queued tty output");
+    assert!(
+        String::from_utf8_lossy(&out).contains("fast-tty-output"),
+        "pty output: {out:?}"
+    );
+    assert_eq!(s.waiter.wait().unwrap(), 0);
+}
+
 // ── open_exec: precondition / not-found ──────────────────────────────────────
 
 #[test]

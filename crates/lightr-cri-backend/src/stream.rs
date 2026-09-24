@@ -186,6 +186,7 @@ fn open_exec_tty(mut command: std::process::Command) -> Result<StreamSession> {
     let (master_file, slave_file) = open_pty().map_err(BackendError::Io)?;
     let slave_stdin = dup_file(&slave_file).map_err(BackendError::Io)?;
     let slave_stdout = dup_file(&slave_file).map_err(BackendError::Io)?;
+    let retained_slave = dup_file(&slave_file).map_err(BackendError::Io)?;
     let slave_stderr = slave_file; // last use — move it
 
     use std::os::unix::process::CommandExt;
@@ -216,7 +217,13 @@ fn open_exec_tty(mut command: std::process::Command) -> Result<StreamSession> {
         stdout: Some(stdout_fd),
         stderr: None,
         pty_master: Some(master_file),
-        waiter: Box::new(ChildWaiter { child }),
+        // Keep one slave open until waiter consumption. A fast child can exit
+        // before caller reads master; Darwin otherwise flushes queued output on
+        // final slave close.
+        waiter: Box::new(ChildWaiter {
+            child,
+            pty_slave: Some(retained_slave),
+        }),
     })
 }
 
@@ -258,7 +265,10 @@ fn open_exec_pipe(mut command: std::process::Command, stdin: bool) -> Result<Str
         stdout,
         stderr,
         pty_master: None,
-        waiter: Box::new(ChildWaiter { child }),
+        waiter: Box::new(ChildWaiter {
+            child,
+            pty_slave: None,
+        }),
     })
 }
 

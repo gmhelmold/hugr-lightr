@@ -183,6 +183,9 @@ fn spawn_tee_fanout(
 /// `self`). Transcribed from the fake's `ChildWaiter`.
 pub(crate) struct ChildWaiter {
     pub child: std::process::Child,
+    /// Keeps one slave descriptor open while caller drains a fast tty child.
+    /// Darwin flushes pending master output when its final slave closes.
+    pub pty_slave: Option<std::fs::File>,
 }
 
 impl ExitWaiter for ChildWaiter {
@@ -191,6 +194,7 @@ impl ExitWaiter for ChildWaiter {
             .child
             .wait()
             .map_err(|e| BackendError::Internal(format!("wait: {e}")))?;
+        drop(self.pty_slave.take());
         Ok(crate::util::exit_code_from_status(&status))
     }
 }
