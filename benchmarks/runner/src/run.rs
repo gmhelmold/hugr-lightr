@@ -1,11 +1,10 @@
+use crate::evidence::{AssertionRecord, RawRecord};
+use crate::spec::{Availability, Scenario, Spec};
 use clap::Args;
-use crate::spec::{Spec, Scenario, Availability};
-use crate::evidence::{RawRecord, AssertionRecord};
+use sha2::{Digest, Sha256};
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::time::{SystemTime, UNIX_EPOCH};
-use sha2::{Digest, Sha256};
 
 #[derive(Args, Debug)]
 pub struct RunArgs {
@@ -56,10 +55,15 @@ pub fn execute(args: RunArgs) -> anyhow::Result<()> {
     let lightr_digest = binary_digest(&args.lightr)?;
 
     let mut any_supported_failed = false;
+    let root = args
+        .spec
+        .parent()
+        .and_then(|path| path.parent())
+        .ok_or_else(|| anyhow::anyhow!("spec must live under benchmarks/"))?;
 
     for scenario in scenarios {
         if matches!(scenario.availability, Availability::Supported) {
-            run_scenario(
+            any_supported_failed |= run_scenario(
                 &mut writer,
                 scenario,
                 args.rounds,
@@ -74,6 +78,8 @@ pub fn execute(args: RunArgs) -> anyhow::Result<()> {
                 &docker_api,
                 &lightr_version,
                 &lightr_digest,
+                root,
+                &args.out,
             )?;
         } else {
             // Record typed skip for non-supported
@@ -115,7 +121,9 @@ fn run_scenario(
     docker_api: &str,
     lightr_version: &str,
     lightr_digest: &str,
-) -> anyhow::Result<()> {
+    root: &std::path::Path,
+    out_dir: &std::path::Path,
+) -> anyhow::Result<bool> {
     let availability = match scenario.availability {
         Availability::Supported => "supported",
         Availability::Unsupported => "unsupported",
@@ -123,8 +131,24 @@ fn run_scenario(
         Availability::OutOfScope => "out_of_scope",
     };
     // Use 0-indexed rounds to match validation expectations (0..rounds-1)
+    let mut failed = false;
     for round in 0..rounds {
-        // Docker command
+        let fixture_dir = root.join(&scenario.fixture.path);
+        if !fixture_dir.is_dir() {
+            anyhow::bail!("supported fixture is absent: {}", fixture_dir.display());
+        }
+        let output_dir = out_dir
+            .join("outputs")
+            .join(&scenario.id)
+            .join(round.to_string());
+        std::fs::create_dir_all(&output_dir)?;
+        let context = CommandContext {
+            docker: docker_bin,
+            lightr: lightr_bin,
+            fixture_dir: &fixture_dir,
+            output_dir: &output_dir,
+        };
+
         let mut record = RawRecord::new(
             scenario.id.clone(),
             availability.to_string(),
@@ -139,20 +163,11 @@ fn run_scenario(
             lightr_version.to_string(),
             lightr_digest.to_string(),
         );
+        record.timeout_secs = timeout;
         record.start_timed();
-        run_command(&mut record, &scenario.docker.command, docker_bin, timeout)?;
-        record.finish(record.exit_code, &[], &[], record.exit_code != Some(0), &scenario.docker.command);
-        // Add assertion record for supported scenario
-        if record.outcome == "passed" {
-            record.assertions.push(AssertionRecord {
-                kind: "exit_code".to_string(),
-                passed: true,
-            });
-        }
-        writeln!(writer, "{}", record.to_jsonl())?;
+        run_command(&mut record, &scenario.docker.command, &context, timeout)?;
 
-        // Lightr command
-        let mut record = RawRecord::new(
+        let mut lightr_record = RawRecord::new(
             scenario.id.clone(),
             availability.to_string(),
             "lightr".to_string(),
@@ -166,16 +181,79 @@ fn run_scenario(
             lightr_version.to_string(),
             lightr_digest.to_string(),
         );
-        record.start_timed();
-        run_command(&mut record, &scenario.lightr.command, lightr_bin, timeout)?;
-        record.finish(record.exit_code, &[], &[], record.exit_code != Some(0), &scenario.lightr.command);
-        if record.outcome == "passed" {
-            record.assertions.push(AssertionRecord {
-                kind: "exit_code".to_string(),
-                passed: true,
-            });
-        }
+        lightr_record.timeout_secs = timeout;
+        lightr_record.start_timed();
+        run_command(
+            &mut lightr_record,
+            &scenario.lightr.command,
+            &context,
+            timeout,
+        )?;
+
+        apply_assertions(
+            &mut record,
+            &scenario.assertions,
+            "docker",
+            &context,
+            timeout,
+        )?;
+        apply_assertions(
+            &mut lightr_record,
+            &scenario.assertions,
+            "lightr",
+            &context,
+            timeout,
+        )?;
+
+        failed |= record.outcome != "passed" || lightr_record.outcome != "passed";
         writeln!(writer, "{}", record.to_jsonl())?;
+        writeln!(writer, "{}", lightr_record.to_jsonl())?;
+    }
+    Ok(failed)
+}
+
+struct CommandContext<'a> {
+    docker: &'a std::path::Path,
+    lightr: &'a std::path::Path,
+    fixture_dir: &'a std::path::Path,
+    output_dir: &'a std::path::Path,
+}
+
+fn apply_assertions(
+    record: &mut RawRecord,
+    assertions: &[crate::spec::Assertion],
+    tool: &str,
+    context: &CommandContext<'_>,
+    timeout: u64,
+) -> anyhow::Result<()> {
+    for assertion in assertions {
+        let (kind, passed) = match assertion {
+            crate::spec::Assertion::ExitCode { expected } => {
+                ("exit_code".to_string(), record.exit_code == Some(*expected))
+            }
+            crate::spec::Assertion::Command {
+                command,
+                expected,
+                scope,
+            } => {
+                if scope
+                    .as_deref()
+                    .is_some_and(|value| value != tool && value != "docker_and_lightr")
+                {
+                    continue;
+                }
+                let result = execute_command(command, context, timeout)?;
+                (
+                    "command".to_string(),
+                    !result.timed_out && result.exit_code == Some(*expected),
+                )
+            }
+            _ => continue,
+        };
+        record.assertions.push(AssertionRecord { kind, passed });
+        if !passed && record.outcome == "passed" {
+            record.outcome = "failed".to_string();
+        }
     }
     Ok(())
 }
@@ -227,32 +305,57 @@ fn record_skip(
 fn run_command(
     record: &mut RawRecord,
     cmd: &str,
-    _bin: &std::path::Path,
+    context: &CommandContext<'_>,
     timeout_secs: u64,
 ) -> anyhow::Result<()> {
+    let result = execute_command(cmd, context, timeout_secs)?;
+    record.finish(
+        result.exit_code,
+        &result.stdout,
+        &result.stderr,
+        result.timed_out,
+        &result.command,
+    );
+    Ok(())
+}
+
+struct CommandResult {
+    command: String,
+    exit_code: Option<i32>,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    timed_out: bool,
+}
+
+fn execute_command(
+    cmd: &str,
+    context: &CommandContext<'_>,
+    timeout_secs: u64,
+) -> anyhow::Result<CommandResult> {
     use std::io::Read;
+
+    let command = expand_command(cmd, context)?;
 
     let mut child = Command::new("sh")
         .arg("-c")
-        .arg(cmd)
+        .arg(&command)
+        .env("LIGHTR_HOME", context.output_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
 
-    let timed_out = match wait_timeout(&mut child, std::time::Duration::from_secs(timeout_secs)) {
-        Ok(Some(exit)) => {
-            record.exit_code = Some(exit.code().unwrap_or(-1));
-            false
-        }
-        Ok(None) => {
-            let _ = child.kill();
-            true
-        }
-        Err(e) => {
-            let _ = child.kill();
-            return Err(e.into());
-        }
-    };
+    let (exit_code, timed_out) =
+        match wait_timeout(&mut child, std::time::Duration::from_secs(timeout_secs)) {
+            Ok(Some(exit)) => (Some(exit.code().unwrap_or(-1)), false),
+            Ok(None) => {
+                let _ = child.kill();
+                (None, true)
+            }
+            Err(e) => {
+                let _ = child.kill();
+                return Err(e.into());
+            }
+        };
 
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
@@ -263,8 +366,34 @@ fn run_command(
         err.read_to_end(&mut stderr)?;
     }
 
-    record.finish(record.exit_code, &stdout, &stderr, timed_out, cmd);
-    Ok(())
+    Ok(CommandResult {
+        command,
+        exit_code,
+        stdout,
+        stderr,
+        timed_out,
+    })
+}
+
+fn expand_command(command: &str, context: &CommandContext<'_>) -> anyhow::Result<String> {
+    let values = [
+        ("$DOCKER", context.docker),
+        ("$LIGHTR", context.lightr),
+        ("$FIXTURE_DIR", context.fixture_dir),
+        ("$OUTPUT_DIR", context.output_dir),
+    ];
+    let mut expanded = command.to_string();
+    for (token, path) in values {
+        expanded = expanded.replace(token, &shell_quote(&path.display().to_string()));
+    }
+    if regex::Regex::new(r"\$[A-Za-z_][A-Za-z0-9_]*")?.is_match(&expanded) {
+        anyhow::bail!("declared command contains unknown variable: {command}");
+    }
+    Ok(expanded)
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 fn wait_timeout(
@@ -303,9 +432,7 @@ fn fixture_tree_digest(scenarios: &[&Scenario]) -> anyhow::Result<String> {
 }
 
 fn git_commit() -> anyhow::Result<String> {
-    let output = Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .output()?;
+    let output = Command::new("git").args(["rev-parse", "HEAD"]).output()?;
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     } else {
@@ -316,7 +443,10 @@ fn git_commit() -> anyhow::Result<String> {
 fn docker_versions(docker_bin: &std::path::Path) -> anyhow::Result<(String, String, String)> {
     let client = get_version(docker_bin, &["version", "--format", "{{.Client.Version}}"])?;
     let server = get_version(docker_bin, &["version", "--format", "{{.Server.Version}}"])?;
-    let api = get_version(docker_bin, &["version", "--format", "{{.Server.APIVersion}}"])?;
+    let api = get_version(
+        docker_bin,
+        &["version", "--format", "{{.Server.APIVersion}}"],
+    )?;
     Ok((client, server, api))
 }
 
