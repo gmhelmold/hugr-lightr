@@ -115,8 +115,8 @@ DEST_PREPARE_CASES = [
     (
         'dest-prepare-directory-no-follow',
         'destination_tree_prepare_native_entry.rs',
-        '| libc::O_DIRECTORY\n            | libc::O_NOFOLLOW\n            | libc::O_CLOEXEC',
-        '| libc::O_DIRECTORY\n            | libc::O_CLOEXEC',
+        '| libc::O_DIRECTORY\\n            | libc::O_NOFOLLOW\\n            | libc::O_CLOEXEC',
+        '| libc::O_DIRECTORY\\n            | libc::O_CLOEXEC',
         'store::foundation::destination_tree_prepare::tests::races::prepared_tree_directory_symlink_swap_before_open_is_refused',
         'assertion `left == right` failed',
     ),
@@ -165,10 +165,7 @@ DEST_PREPARE_CASES = [
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--case")
-    args = parser.parse_args()
-    out = args.out.resolve()
-    selected_case = args.case
+    out = parser.parse_args().out.resolve()
     out.mkdir(parents=True, exist_ok=False)
     git = lambda *args: subprocess.check_output(["git", *args], cwd=ROOT, text=True).strip()
     receipt = dict(schema=1, checkout=git("rev-parse", "HEAD"), tree=git("rev-parse", "HEAD^{tree}"),
@@ -200,21 +197,21 @@ def main():
     planned_suite = cargo + ["store::foundation::planned_roots_tests::", "--", "--nocapture"]
     planned_expected = r"test result: ok\. 17 passed; 0 failed; 0 ignored;"
     empty_suite = cargo + [PREFIX + "topology_empty::tests::", "--", "--nocapture"]
-    empty_expected = r"test result: ok\. 11 passed; 0 failed; 0 ignored;"
+    empty_expected = r"test result: ok\. 12 passed; 0 failed; 0 ignored;"
     descendant_suite = cargo + [PREFIX + "topology_descendant::tests::", "--", "--nocapture"]
-    descendant_expected = r"test result: ok\. 12 passed; 0 failed; 0 ignored;"
+    descendant_expected = r"test result: ok\. 13 passed; 0 failed; 0 ignored;"
     scratch_suite = cargo + ["store::foundation::anchored_scratch::", "--", "--nocapture"]
     scratch_expected = r"test result: ok\. 15 passed; 0 failed; 0 ignored;"
     link_suite = cargo + [PREFIX + "topology_link::tests::", "--", "--nocapture"]
-    link_expected = r"test result: ok\. 14 passed; 0 failed; 0 ignored;"
+    link_expected = r"test result: ok\. 16 passed; 0 failed; 0 ignored;"
     listing_suite = cargo + [PREFIX + "topology_listing::native::tests::", "--", "--nocapture"]
-    listing_expected = r"test result: ok\. 16 passed; 0 failed; 0 ignored;"
+    listing_expected = r"test result: ok\. 17 passed; 0 failed; 0 ignored;"
     anchor_suite = cargo + ["store::foundation::destination_anchor::tests::", "--", "--nocapture"]
     anchor_expected = r"test result: ok\. 11 passed; 0 failed; 0 ignored;"
     repr_suite = cargo + ["store::foundation::destination_name_probe::tests::", "--", "--nocapture"]
     repr_expected = r"test result: ok\. 14 passed; 0 failed; 0 ignored;"
     prepare_suite = cargo + ["store::foundation::destination_tree_prepare::tests::", "--", "--nocapture"]
-    prepare_expected = r"test result: ok\. 16 passed; 0 failed; 0 ignored;"
+    prepare_expected = r"test result: ok\. 15 passed; 0 failed; 0 ignored;"
     try:
         require(not git("status", "--porcelain", "--untracked-files=no"), "tracked source dirty")
         archive = subprocess.check_output(["git", "archive", "--format=zip", "HEAD"], cwd=ROOT)
@@ -247,11 +244,7 @@ def main():
             require(code == 0 and re.search(repr_expected, text), "destination representation pristine suite failed")
             code, text = run(root, prepare_suite, "prepare-pristine")
             require(code == 0 and re.search(prepare_expected, text), "destination prepare pristine suite failed")
-            cases = CASES + EMPTY_CASES + DESCENDANT_CASES + SCRATCH_CASES + LINK_CASES + LISTING_CASES + DEST_ANCHOR_CASES + DEST_REPR_CASES + DEST_PREPARE_CASES
-            if selected_case is not None:
-                cases = [case for case in cases if case[0] == selected_case]
-                require(cases, "unknown control: " + selected_case)
-            for label, name, old, new, test, message in cases:
+            for label, name, old, new, test, message in CASES + EMPTY_CASES + DESCENDANT_CASES + SCRATCH_CASES + LINK_CASES + LISTING_CASES + DEST_ANCHOR_CASES + DEST_REPR_CASES + DEST_PREPARE_CASES:
                 path = root / BASE / name
                 original = path.read_text()
                 require(original.count(old) == 1, "mutation seam mismatch: " + label)
