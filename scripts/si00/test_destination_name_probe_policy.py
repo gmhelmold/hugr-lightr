@@ -99,7 +99,7 @@ class DestinationNameProbePolicyTests(unittest.TestCase):
         try:
             import topology_controls as controls
             self.assertEqual(len(controls.DEST_REPR_CASES), 4)
-            for family, count in zip(FAMILIES, [10, 2, 3, 3, 4, 4, 3, 4, 5]):
+            for family, count in zip(FAMILIES, [10, 2, 3, 3, 4, 4, 3, 4, 6]):
                 self.assertEqual(len(getattr(controls, family)), count, family)
             text = (ROOT / "scripts/si01/topology_controls.py").read_text()
             loops = [
