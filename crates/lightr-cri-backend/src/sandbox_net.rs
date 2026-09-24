@@ -356,6 +356,7 @@ fn exec_plugin(
     use std::io::Write;
     use std::process::{Command, Stdio};
     let binary = bin_dir.join(plugin_type);
+    let _spawn_guard = crate::stream_io::spawn_lock();
     let mut child = Command::new(&binary)
         .env("CNI_COMMAND", command)
         .env("CNI_CONTAINERID", container_id)

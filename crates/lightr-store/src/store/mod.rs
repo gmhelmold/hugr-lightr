@@ -11,3 +11,6 @@ pub mod lock;
 pub mod refs;
 pub mod usage;
 pub mod volume;
+
+/// Additive SI-01 wire/error primitives; existing Store routing is unchanged.
+pub mod foundation;

@@ -76,6 +76,8 @@ impl LightrBackend {
             command.process_group(0);
         }
 
+        #[cfg(unix)]
+        let _spawn_guard = crate::stream_io::spawn_lock();
         let mut child = command
             .spawn()
             .map_err(|e| BackendError::Internal(format!("exec_sync spawn: {e}")))?;

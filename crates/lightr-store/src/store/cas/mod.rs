@@ -13,7 +13,10 @@ use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+pub(crate) mod owned_temp;
+/// Additive private-file preparation; no existing Store route is changed.
+pub mod preparation;
+use owned_temp::OwnedTemp;
 
 // ── path helpers ──────────────────────────────────────────────────────────────
 
@@ -27,16 +30,6 @@ pub(crate) fn object_path(root: &Path, d: &Digest) -> PathBuf {
     let hex = d.to_hex();
     let (pre, rest) = shard_parts(&hex);
     root.join("objects").join(pre).join(rest)
-}
-
-/// A cheap nonce for temp file names: PID + digest-hex-prefix + nanos.
-pub(super) fn temp_suffix(hint: &str) -> String {
-    let pid = std::process::id();
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.subsec_nanos())
-        .unwrap_or(0);
-    format!("{pid}-{hint}-{nanos}")
 }
 
 /// fsync the parent directory so the rename (directory entry change) is
@@ -67,7 +60,8 @@ pub(super) fn fsync_dir(dir: &Path) -> std::io::Result<()> {
 /// crash-durable.
 pub(super) fn atomic_write(parent: &Path, dest: &Path, data: &[u8]) -> Result<()> {
     fs::create_dir_all(parent)?;
-    let tmp = parent.join(format!(".tmp-{}", temp_suffix("w")));
+    let staging = OwnedTemp::new(parent, "w")?;
+    let tmp = staging.payload();
     {
         let mut f = File::create(&tmp)?;
         f.write_all(data)?;
@@ -121,8 +115,8 @@ pub fn put_bytes(root: &Path, bytes: &[u8]) -> Result<Digest> {
     let shard = root.join("objects").join(pre);
     fs::create_dir_all(&shard)?;
 
-    let tmp_name = format!(".tmp-{}", temp_suffix(&hex[..8]));
-    let tmp = shard.join(tmp_name);
+    let staging = OwnedTemp::new(&shard, &hex[..8])?;
+    let tmp = staging.payload();
     {
         let mut f = File::create(&tmp)?;
         f.write_all(bytes)?;
@@ -160,8 +154,8 @@ pub fn ingest_file(root: &Path, path: &Path, rung: CowRung) -> Result<Digest> {
     let shard = root.join("objects").join(pre);
     fs::create_dir_all(&shard)?;
 
-    let tmp_name = format!(".tmp-{}", temp_suffix(&hex[..8]));
-    let tmp = shard.join(tmp_name);
+    let staging = OwnedTemp::new(&shard, &hex[..8])?;
+    let tmp = staging.payload();
 
     // Try CoW into a temp, then rename+chmod.
     // On failure fall through to fs::copy.
@@ -175,25 +169,43 @@ pub fn ingest_file(root: &Path, path: &Path, rung: CowRung) -> Result<Digest> {
     };
     let _ = used_cow; // counted but not surfaced in API
 
-    // fsync the temp file before rename so the data is crash-durable.
-    {
-        let f = File::open(&tmp)?;
+    finish_ingest(&tmp, &dest, &shard, d)
+}
+
+/// Validate the copied bytes, not just the earlier observation of the source.
+/// Kept separate so tests can deterministically model a source mutation between
+/// hashing and copying, without races or hooks in the public API.
+fn finish_ingest(tmp: &Path, dest: &Path, shard: &Path, expected: Digest) -> Result<Digest> {
+    let result = (|| {
+        let actual = Digest::of_file(tmp)?;
+        if actual != expected {
+            return Err(LightrError::Integrity { expected, actual });
+        }
+
+        // The staged file is private to this ingestion. Verify it before making
+        // it visible under a content-addressed name, then preserve durability.
+        let f = File::open(tmp)?;
         #[cfg(unix)]
         f.sync_all()?;
         #[cfg(windows)]
         {
-            // WIN-PATH: FlushFileBuffers on the temp file before rename.
             use std::os::windows::io::AsRawHandle;
             use windows_sys::Win32::Storage::FileSystem::FlushFileBuffers;
             let handle = f.as_raw_handle();
             unsafe { FlushFileBuffers(handle as _) };
         }
+        drop(f);
+        fs::rename(tmp, dest)?;
+        fsync_dir(shard)?;
+        set_mode(dest, 0o444)?;
+        Ok(expected)
+    })();
+    if result.is_err() {
+        // Only remove our unpublished staging file, never a CAS object. If a
+        // later durability step failed after rename, the valid object remains.
+        let _ = fs::remove_file(tmp);
     }
-    fs::rename(&tmp, &dest)?;
-    fsync_dir(&shard)?; // fsync parent dir after rename
-    set_mode(&dest, 0o444)?;
-
-    Ok(d)
+    result
 }
 
 /// Read and verify `d`.  Missing → NotFound.  Hash mismatch → Integrity
@@ -279,3 +291,6 @@ pub fn remove_object(root: &Path, d: &Digest) -> Result<()> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod ingest_tests;

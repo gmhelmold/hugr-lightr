@@ -205,6 +205,8 @@ impl LightrBackend {
             self.persist(&snap)?;
         }
 
+        #[cfg(unix)]
+        let _spawn_guard = crate::stream_io::spawn_lock();
         let mut child = match cmd.spawn() {
             Ok(c) => c,
             Err(e) => {

@@ -210,9 +210,11 @@ pub fn signal_run(home: &Path, id: &str, signal: i32) -> Result<()> {
 /// `stop` read. If the run is ALREADY exited, returns immediately. A run whose
 /// supervisor vanished without writing a final status (no live endpoint, no
 /// `exited` line) is detected and surfaced as an honest error rather than
-/// blocking forever.
+/// blocking forever. An absent terminal status is allowed up to two seconds
+/// to settle after liveness disappears; only a recorded code is success.
 pub fn wait_run(home: &Path, id: &str) -> Result<i32> {
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
+    let mut settling = wait_status::ExitWait::default();
 
     let dir = run_dir(home, id);
     if !dir.exists() {
@@ -228,19 +230,24 @@ pub fn wait_run(home: &Path, id: &str) -> Result<i32> {
             return Ok(code);
         }
 
-        if !is_running(&dir) {
-            // Not running and no parseable exit code: re-check the status once
-            // (a race between the supervisor's final write and the endpoint
-            // teardown), then fail closed rather than spin forever.
-            if let Some(code) = read_status_file(&dir)
+        let running = is_running(&dir);
+        let terminal = if running {
+            None
+        } else {
+            // Re-read after the liveness check; the supervisor publishes status
+            // after removing its endpoint. Missing is transitional, not success.
+            read_status_file(&dir)
                 .as_deref()
                 .and_then(parse_exit_code_from_status)
-            {
-                return Ok(code);
+        };
+        match settling.observe(terminal, running, Instant::now()) {
+            wait_status::Decision::Exited(code) => return Ok(code),
+            wait_status::Decision::Vanished => {
+                return Err(LightrError::InvalidRef(format!(
+                    "run {id} is not running and has no recorded exit code"
+                )));
             }
-            return Err(LightrError::InvalidRef(format!(
-                "run {id} is not running and has no recorded exit code"
-            )));
+            wait_status::Decision::Pending => {}
         }
 
         std::thread::sleep(Duration::from_millis(100));
@@ -294,3 +301,6 @@ pub fn list_stopped_runs(home: &Path) -> Result<Vec<String>> {
 #[cfg(test)]
 #[path = "lifecycle_tests.rs"]
 mod tests;
+
+#[path = "lifecycle_wait.rs"]
+mod wait_status;

@@ -94,20 +94,26 @@ fn attach_forward_dhcp_dns_then_refcount_self_stop() {
     // Start the switch host on a thread (NOT a re-exec): the production body.
     let host_home = home.clone();
     let host_id = id.clone();
-    let host = std::thread::spawn(move || run_switch_host(&host_home, &host_id));
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+    let host = std::thread::spawn(move || {
+        run_switch_host_observed(&host_home, &host_id, || {
+            ready_tx
+                .send(())
+                .expect("fixture waits for listener readiness");
+        })
+    });
 
-    // Wait for the host to bind ctl.sock, then attach both members (CONNECT path).
+    // The callback follows successful bind/listen and accept-thread creation.
     let ctl = ctl_sock_path(&home, &id);
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
-    while !ctl.exists() && std::time::Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(10));
-    }
+    ready_rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("test host must be listening before production attach");
     let ga = attach(&home, &id, &a).expect("attach a");
     let gb = attach(&home, &id, &b).expect("attach b");
     let ga = UnixDatagram::from(ga);
     let gb = UnixDatagram::from(gb);
-    // Darwin can return EINVAL from a timed AF_UNIX datagram socket on send.
-    // Nonblocking reads preserve same deadline without mutating socket timeout.
+    // Receive with an explicit bounded deadline; do not change send timeouts.
+    // Sender endpoint lifetime during attach is covered by the ACK regression.
     ga.set_nonblocking(true).unwrap();
     gb.set_nonblocking(true).unwrap();
     // Give the accept loop a beat to add both members.
@@ -116,7 +122,12 @@ fn attach_forward_dhcp_dns_then_refcount_self_stop() {
     // PROOF 1: A→B Ethernet frame forwarding. Flood first so the switch learns A.
     let payload = b"C9-FRAME-AB";
     let frame = build_eth(b.mac.0, a.mac.0, 0x88b5, payload);
-    ga.send(&frame).unwrap();
+    ga.send(&frame).unwrap_or_else(|error| {
+        use std::os::fd::AsRawFd;
+        panic!("frame send failed: {error:?}; fd={}; local={:?}; peer={:?}; read_timeout={:?}; write_timeout={:?}; socket_error={:?}; host_finished={}; registry={:?}",
+            ga.as_raw_fd(), ga.local_addr(), ga.peer_addr(), ga.read_timeout(),
+            ga.write_timeout(), ga.take_error(), host.is_finished(), reg.members());
+    });
     let mut buf = vec![0u8; 64 * 1024];
     let n = recv_with_deadline(&gb, &mut buf).expect("B receives A's frame");
     assert_eq!(&buf[..n], &frame[..], "B got a different frame than A sent");
@@ -376,3 +387,12 @@ fn decode_dns_first_a(frame: &[u8]) -> Option<Ipv4Addr> {
     let rd = dns.get(pos..pos + 4)?;
     Some(Ipv4Addr::new(rd[0], rd[1], rd[2], rd[3]))
 }
+
+#[path = "switch_host_parallel_tests.rs"]
+mod parallel_lifecycle;
+
+#[path = "switch_host_ack_tests.rs"]
+mod ack_order;
+
+#[path = "switch_host_ready_signal_tests.rs"]
+mod ready_signal;
