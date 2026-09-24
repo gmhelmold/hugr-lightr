@@ -183,7 +183,9 @@ impl LightrBackend {
 #[cfg(unix)]
 fn open_exec_tty(mut command: std::process::Command) -> Result<StreamSession> {
     #[cfg(target_os = "macos")]
-    use crate::stream_io::make_pipe;
+    use crate::stream_io::make_pipe_unlocked;
+    #[cfg(unix)]
+    let _spawn_guard = crate::stream_io::spawn_lock();
     use crate::stream_io::{dup_file, open_pty, ChildWaiter};
     let (master_file, slave_file) = open_pty().map_err(BackendError::Io)?;
     let slave_stdin = dup_file(&slave_file).map_err(BackendError::Io)?;
@@ -212,7 +214,7 @@ fn open_exec_tty(mut command: std::process::Command) -> Result<StreamSession> {
     }
 
     #[cfg(target_os = "macos")]
-    let (exit_read, exit_write) = make_pipe().map_err(BackendError::Io)?;
+    let (exit_read, exit_write) = make_pipe_unlocked().map_err(BackendError::Io)?;
 
     #[cfg(target_os = "macos")]
     let (stdout_fd, relay) = spawn_pty_relay(&master_file, exit_read)?;
@@ -271,12 +273,12 @@ fn spawn_pty_relay(
     master: &std::fs::File,
     exit_read: std::fs::File,
 ) -> Result<(std::fs::File, std::thread::JoinHandle<()>)> {
-    use crate::stream_io::{dup_file, make_socketpair};
+    use crate::stream_io::{dup_file, make_socketpair_unlocked};
     use std::io::{Read, Write};
     use std::os::fd::AsRawFd;
 
     let reader = dup_file(master).map_err(BackendError::Io)?;
-    let (client_read, mut client_write) = make_socketpair().map_err(BackendError::Io)?;
+    let (client_read, mut client_write) = make_socketpair_unlocked().map_err(BackendError::Io)?;
     let relay = std::thread::Builder::new()
         .name("lightr-pty-relay".into())
         .spawn(move || {
@@ -362,6 +364,7 @@ fn open_exec_pipe(mut command: std::process::Command, stdin: bool) -> Result<Str
         command.stdin(Stdio::null());
     }
 
+    let _spawn_guard = crate::stream_io::spawn_lock();
     let mut child = command
         .spawn()
         .map_err(|e| BackendError::Internal(format!("open_exec spawn: {e}")))?;

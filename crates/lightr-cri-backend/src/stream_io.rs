@@ -12,10 +12,16 @@
 //! pty, OS pipes and signals are unix concepts, and the streaming plane fails
 //! closed on non-unix from `stream.rs`. So nothing here needs per-item cfg.
 
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 
 use crate::vocab::{BackendError, ContainerId, ContainerState, ExitWaiter, Result};
 use crate::LightrBackend;
+
+static SPAWN_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+pub(crate) fn spawn_lock() -> MutexGuard<'static, ()> {
+    SPAWN_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+}
 
 // ── io-table: live stdio held by start_container, keyed by container id ───────
 //
@@ -86,6 +92,11 @@ impl FanOut {
 
 /// Create an internal OS pipe with neither endpoint inherited across exec.
 pub(crate) fn make_pipe() -> std::io::Result<(std::fs::File, std::fs::File)> {
+    let _spawn_guard = spawn_lock();
+    make_pipe_unlocked()
+}
+
+pub(crate) fn make_pipe_unlocked() -> std::io::Result<(std::fs::File, std::fs::File)> {
     use std::os::unix::io::{AsRawFd, FromRawFd};
     let mut fds = [0i32; 2];
     let rc = unsafe { libc::pipe(fds.as_mut_ptr()) };
@@ -106,7 +117,7 @@ pub(crate) fn make_pipe() -> std::io::Result<(std::fs::File, std::fs::File)> {
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn make_socketpair() -> std::io::Result<(std::fs::File, std::fs::File)> {
+pub(crate) fn make_socketpair_unlocked() -> std::io::Result<(std::fs::File, std::fs::File)> {
     use std::os::unix::io::{AsRawFd, FromRawFd};
     let mut fds = [-1i32; 2];
     if unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr()) } != 0 {
