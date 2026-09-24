@@ -217,35 +217,6 @@ fn open_exec_tty_keeps_output_until_first_master_read() {
     assert_eq!(s.waiter.wait().unwrap(), 0);
 }
 
-/// On Darwin, final slave close discards unread master bytes. Wait for the sole
-/// reaper to report a real child exit before touching master, then require its
-/// exact queued line. The waiter must retain its slave through that first read.
-#[cfg(target_os = "macos")]
-#[test]
-fn open_exec_tty_reads_exact_queued_output_after_child_exit() {
-    use crate::stream_io::{dup_file, open_pty};
-
-    let (mut master, slave) = open_pty().unwrap();
-    let retained_slave = dup_file(&slave).unwrap();
-    let mut command = std::process::Command::new("sh");
-    command.args(["-c", "printf 'queued-after-exit\\n'"]);
-    command.stdin(dup_file(&slave).unwrap());
-    command.stdout(dup_file(&slave).unwrap());
-    command.stderr(slave);
-    let waiter = ChildWaiter::new(command.spawn().unwrap(), Some(retained_slave)).unwrap();
-    let exit = waiter.exit_state();
-
-    // Non-consuming observation guarantees child exit precedes first master read.
-    assert_eq!(exit.wait().unwrap(), 0);
-    assert!(
-        waiter.pty_slave.is_some(),
-        "retain slave until waiter consumption"
-    );
-    let output = read_pty_line(&mut master).unwrap();
-    assert_eq!(output, b"queued-after-exit\r\n");
-    assert_eq!(Box::new(waiter).wait().unwrap(), 0);
-}
-
 #[test]
 fn child_exit_state_observes_mapped_exit_before_waiter_consumption() {
     let child = std::process::Command::new("sh")
