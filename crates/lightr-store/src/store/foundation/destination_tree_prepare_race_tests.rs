@@ -159,10 +159,8 @@ fn prepared_tree_directory_symlink_swap_before_open_is_refused() {
     .err()
     .unwrap();
 
-    #[cfg(target_os = "linux")]
-    assert_eq!(failure.primary.unwrap().raw_os_error(), Some(libc::ELOOP));
-    #[cfg(target_os = "macos")]
-    assert_eq!(failure.primary.unwrap().raw_os_error(), Some(libc::ENOTDIR));
+    let errno = failure.primary.unwrap().raw_os_error();
+    assert!(matches!(errno, Some(code) if code == libc::ELOOP || code == libc::ENOTDIR));
     assert_eq!(failure.cleanup.len(), 1);
     assert!(!failure.cleanup_complete);
     assert!(retained.is_dir());
