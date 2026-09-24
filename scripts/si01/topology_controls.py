@@ -118,7 +118,7 @@ DEST_PREPARE_CASES = [
         '| libc::O_DIRECTORY\\n            | libc::O_NOFOLLOW\\n            | libc::O_CLOEXEC',
         '| libc::O_DIRECTORY\\n            | libc::O_CLOEXEC',
         'store::foundation::destination_tree_prepare::tests::races::prepared_tree_directory_symlink_swap_before_open_is_refused',
-        'assertion `left == right` failed',
+        'directory symlink replacement was not refused by no-follow open',
     ),
     (
         'dest-prepare-no-adopt-file',
