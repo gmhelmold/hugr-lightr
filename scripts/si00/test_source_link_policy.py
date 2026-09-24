@@ -10,7 +10,7 @@ import test_evidence as fixtures
 
 ROOT = Path(__file__).resolve().parents[2]
 PREFIX = 'store::foundation::topology::topology_link::tests::'
-UNIX = ['source_link_preserves_dangling_and_exact_target_text', 'source_link_reads_file_directory_and_protected_target_without_following', 'source_link_rejects_intermediate_aliases_and_cycles', 'source_link_rejects_non_normal_paths_and_work_budgets', 'source_link_exact_byte_budget_never_accepts_truncation', 'source_link_preserves_missing_and_wrong_type_errors', 'source_link_detects_replacement_after_read', 'source_link_detects_replaced_parent_without_retargeting', 'source_link_detects_original_source_replacement', 'source_link_returned_text_does_not_depend_on_later_target_existence', 'source_link_cancellation_and_deadline_precede_access', 'source_link_cancellation_after_completed_validation_is_not_success', 'source_link_scoped_errors_preserve_original_cause', 'source_link_pinned_handle_is_symlink_and_close_on_exec']
+UNIX = ['source_link_preserves_dangling_and_exact_target_text', 'source_link_reads_file_directory_and_protected_target_without_following', 'source_link_rejects_intermediate_aliases_and_cycles', 'source_link_rejects_non_normal_paths_and_work_budgets', 'source_link_exact_byte_budget_never_accepts_truncation', 'source_link_preserves_missing_and_wrong_type_errors', 'source_link_detects_replacement_after_read', 'source_link_detects_replaced_parent_without_retargeting', 'source_link_detects_original_source_replacement', 'source_link_returned_text_does_not_depend_on_later_target_existence', 'source_link_cancellation_and_deadline_precede_access', 'source_link_cancellation_after_completed_validation_is_not_success', 'source_link_scoped_errors_preserve_original_cause', 'source_link_pinned_handle_is_symlink_and_close_on_exec', 'source_link_pin_preserves_hostile_replacement_as_link']
 LINUX = ['source_link_linux_raw_name_is_not_lossily_rewritten', 'source_link_linux_non_utf8_target_is_rejected_not_recoded']
 REQUIRED = [PREFIX + n for n in UNIX] + [PREFIX + "linux::" + n for n in LINUX]
 
@@ -61,8 +61,17 @@ class SourceLinkPolicyTests(unittest.TestCase):
                      and isinstance(n.target, ast.Tuple)
                      and any(isinstance(v, ast.Name) and v.id == "label" for v in n.target.elts)]
             self.assertEqual(len(loops), 1)
-            self.assertCountEqual([n.id for n in ast.walk(loops[0].iter) if isinstance(n, ast.Name)],
-                                  ["CASES", "EMPTY_CASES", "DESCENDANT_CASES", "SCRATCH_CASES", "LINK_CASES", "LISTING_CASES", "DEST_ANCHOR_CASES", "DEST_REPR_CASES", "DEST_PREPARE_CASES"])
+            self.assertEqual(
+                [n.id for n in ast.walk(loops[0].iter) if isinstance(n, ast.Name)], ["cases"]
+            )
+            assignments = [n for n in ast.walk(ast.parse(source)) if isinstance(n, ast.Assign)]
+            joined = next(n.value for n in assignments if any(
+                isinstance(target, ast.Name) and target.id == "cases" for target in n.targets
+            ) and isinstance(n.value, ast.BinOp))
+            self.assertCountEqual(
+                [n.id for n in ast.walk(joined) if isinstance(n, ast.Name)],
+                ["CASES", "EMPTY_CASES", "DESCENDANT_CASES", "SCRATCH_CASES", "LINK_CASES", "LISTING_CASES", "DEST_ANCHOR_CASES", "DEST_REPR_CASES", "DEST_PREPARE_CASES"],
+            )
             for stage in ("pristine", "restored"):
                 self.assertEqual(source.count(f'run(root, link_suite, "link-{stage}")'), 1)
         finally:

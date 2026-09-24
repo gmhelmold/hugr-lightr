@@ -371,12 +371,39 @@ fn source_link_pinned_handle_is_symlink_and_close_on_exec() {
     let f = Fixture::new();
     f.link("leaf", "absent");
     let inspection = f.inspect();
-    let pinned = pin(inspection.source_handle(), c"leaf").unwrap();
+    let pinned = pin(inspection.source_handle(), c"leaf", || Ok(())).unwrap();
     assert!(pinned.metadata().unwrap().file_type().is_symlink());
     // SAFETY: queries only the locally owned live descriptor.
     let flags = unsafe { libc::fcntl(pinned.as_raw_fd(), libc::F_GETFD) };
     assert!(flags >= 0);
     assert_ne!(flags & libc::FD_CLOEXEC, 0);
+}
+
+#[test]
+fn source_link_pin_preserves_hostile_replacement_as_link() {
+    let f = Fixture::new();
+    f.link("leaf", "original-target");
+    let hostile_target = f.store.join("sentinel");
+    let inspection = f.inspect();
+    let mut replaced = false;
+    let result = read_checked(&inspection, Path::new("leaf"), 4096, Wait::Try, |stage| {
+        if stage == Stage::Checked && !replaced {
+            replaced = true;
+            fs::rename(f.source.join("leaf"), f.source.join("retained"))?;
+            symlink(&hostile_target, f.source.join("leaf"))?;
+        }
+        Ok(())
+    });
+    assert!(replaced, "pin/open replacement checkpoint was not reached");
+    assert_eq!(result.unwrap(), hostile_target.to_str().unwrap());
+    assert_eq!(
+        fs::read_link(f.source.join("retained")).unwrap(),
+        Path::new("original-target")
+    );
+    assert_eq!(fs::read(&hostile_target).unwrap(), b"protected");
+    fs::remove_file(f.source.join("leaf")).unwrap();
+    assert!(!f.source.join("leaf").exists());
+    assert_eq!(fs::read(&hostile_target).unwrap(), b"protected");
 }
 
 #[cfg(target_os = "linux")]

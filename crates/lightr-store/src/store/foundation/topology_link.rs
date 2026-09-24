@@ -11,6 +11,7 @@ use std::path::Path;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Stage {
+    Checked,
     Pinned,
     Read,
     Validated,
@@ -62,18 +63,18 @@ fn read_checked(
     let parent = open_parent(inspection, prefix, wait)?;
     let parent_key = key(&parent)?;
     let name = CString::new(leaf)?;
-    let pinned = pin(&parent, &name)?;
+    let pinned = pin(&parent, &name, || checkpoint(Stage::Checked))?;
     let expected = key(&pinned)?;
     if !expected.same_volume(parent_key) {
         return Err(unsupported("source link crosses a native mount boundary"));
     }
     checkpoint(Stage::Pinned)?;
     wait.check()?;
-    check_binding(&parent, &name, expected)?;
+    check_binding(&parent, &name, expected, || checkpoint(Stage::Checked))?;
     let target = read_target(&parent, &name, &pinned, limit)?;
     checkpoint(Stage::Read)?;
     wait.check()?;
-    check_binding(&parent, &name, expected)?;
+    check_binding(&parent, &name, expected, || checkpoint(Stage::Checked))?;
     let current_parent = open_parent(inspection, prefix, wait)?;
     if key(&current_parent)? != parent_key {
         return Err(changed());
@@ -109,15 +110,24 @@ fn open_parent(inspection: &TopologyInspection, prefix: &[u8], wait: Wait<'_>) -
     }
 }
 
-fn check_binding(parent: &File, name: &CStr, expected: Key) -> io::Result<()> {
-    let current = pin(parent, name)?;
+fn check_binding(
+    parent: &File,
+    name: &CStr,
+    expected: Key,
+    before_open: impl FnMut() -> io::Result<()>,
+) -> io::Result<()> {
+    let current = pin(parent, name, before_open)?;
     if key(&current)? != expected {
         return Err(changed());
     }
     Ok(())
 }
 
-fn pin(parent: &File, name: &CStr) -> io::Result<File> {
+fn pin(
+    parent: &File,
+    name: &CStr,
+    mut before_open: impl FnMut() -> io::Result<()>,
+) -> io::Result<File> {
     let mut info = std::mem::MaybeUninit::<libc::stat>::uninit();
     // SAFETY: live parent, exact single NUL-terminated component, sized output.
     // Refuse known nonlinks before opening; this is not hostile path confinement.
@@ -136,6 +146,7 @@ fn pin(parent: &File, name: &CStr) -> io::Result<File> {
     if info.st_mode & libc::S_IFMT != libc::S_IFLNK {
         return Err(io::Error::from_raw_os_error(libc::EINVAL));
     }
+    before_open()?;
     #[cfg(target_os = "linux")]
     let flags = libc::O_PATH | libc::O_NOFOLLOW | libc::O_CLOEXEC;
     // O_SYMLINK selects the link itself. Combining it with O_NOFOLLOW on Darwin
