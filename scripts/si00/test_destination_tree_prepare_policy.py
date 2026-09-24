@@ -25,6 +25,7 @@ RACES = [
     "prepared_tree_cancellation_after_first_entry_rolls_back_owned_names",
     "prepared_tree_replacement_is_preserved_and_cleanup_is_incomplete",
     "prepared_tree_unknown_child_prevents_recursive_directory_cleanup",
+    "prepared_tree_directory_symlink_swap_before_open_is_refused",
     "prepared_tree_final_binding_rejects_root_replacement",
     "prepared_tree_final_entry_revalidation_rejects_leaf_replacement",
     "prepared_tree_drop_best_effort_removes_uncommitted_entries",
@@ -85,7 +86,7 @@ class DestinationTreePreparePolicyTests(unittest.TestCase):
                 )
             )
         self.assertEqual(declared, CORE + RACES)
-        self.assertEqual(len(REQUIRED), 15)
+        self.assertEqual(len(REQUIRED), 16)
         self.assertFalse(
             any(name.startswith(PREFIX) for name in expected["required_tests"]["lightr_store"])
         )
@@ -103,7 +104,7 @@ class DestinationTreePreparePolicyTests(unittest.TestCase):
         try:
             import topology_controls as controls
             self.assertEqual(len(controls.DEST_PREPARE_CASES), 5)
-            for family, count in zip(FAMILIES, [10, 2, 3, 3, 4, 4, 3, 4, 5]):
+            for family, count in zip(FAMILIES, [10, 2, 3, 3, 4, 4, 3, 4, 6]):
                 self.assertEqual(len(getattr(controls, family)), count, family)
             text = (ROOT / "scripts/si01/topology_controls.py").read_text()
             loops = [
@@ -128,7 +129,7 @@ class DestinationTreePreparePolicyTests(unittest.TestCase):
                 )
                 self.assertIn(test, REQUIRED)
             self.assertIn(
-                'prepare_expected = r"test result: ok\\. 15 passed; 0 failed; 0 ignored;"',
+                'prepare_expected = r"test result: ok\\. 16 passed; 0 failed; 0 ignored;"',
                 text,
             )
             for stage in ("pristine", "restored"):
