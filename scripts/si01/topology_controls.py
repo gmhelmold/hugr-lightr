@@ -165,7 +165,10 @@ DEST_PREPARE_CASES = [
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, required=True)
-    out = parser.parse_args().out.resolve()
+    parser.add_argument("--case")
+    args = parser.parse_args()
+    out = args.out.resolve()
+    selected_case = args.case
     out.mkdir(parents=True, exist_ok=False)
     git = lambda *args: subprocess.check_output(["git", *args], cwd=ROOT, text=True).strip()
     receipt = dict(schema=1, checkout=git("rev-parse", "HEAD"), tree=git("rev-parse", "HEAD^{tree}"),
@@ -244,7 +247,11 @@ def main():
             require(code == 0 and re.search(repr_expected, text), "destination representation pristine suite failed")
             code, text = run(root, prepare_suite, "prepare-pristine")
             require(code == 0 and re.search(prepare_expected, text), "destination prepare pristine suite failed")
-            for label, name, old, new, test, message in CASES + EMPTY_CASES + DESCENDANT_CASES + SCRATCH_CASES + LINK_CASES + LISTING_CASES + DEST_ANCHOR_CASES + DEST_REPR_CASES + DEST_PREPARE_CASES:
+            cases = CASES + EMPTY_CASES + DESCENDANT_CASES + SCRATCH_CASES + LINK_CASES + LISTING_CASES + DEST_ANCHOR_CASES + DEST_REPR_CASES + DEST_PREPARE_CASES
+            if selected_case is not None:
+                cases = [case for case in cases if case[0] == selected_case]
+                require(cases, "unknown control: " + selected_case)
+            for label, name, old, new, test, message in cases:
                 path = root / BASE / name
                 original = path.read_text()
                 require(original.count(old) == 1, "mutation seam mismatch: " + label)
