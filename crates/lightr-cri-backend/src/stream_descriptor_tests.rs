@@ -1,5 +1,5 @@
 //! Native descriptor ownership regressions, using only this test's PTYs.
-use super::{dup_file, open_pty};
+use super::{dup_file, make_pipe, open_pty};
 use std::fs::File;
 use std::os::fd::AsRawFd;
 use std::os::unix::fs::MetadataExt;
@@ -61,6 +61,14 @@ fn pty_descriptor_duplicates_are_close_on_exec() {
         );
         check_exec(&[&duplicate]);
     }
+}
+
+#[test]
+fn internal_pipe_endpoints_are_close_on_exec() {
+    let (read, write) = make_pipe().unwrap();
+    assert_cloexec(&read);
+    assert_cloexec(&write);
+    check_exec(&[&read, &write]);
 }
 
 #[test]

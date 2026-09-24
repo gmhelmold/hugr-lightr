@@ -177,16 +177,19 @@ impl LightrBackend {
     }
 }
 
-/// tty=true: child stdio = pty slave; stdout = pty master clone, pty_master =
-/// master, stderr None. setsid in pre_exec so the child owns the pty as its
-/// controlling terminal. Transcribed from the fake.
+/// tty=true: child stdio = pty slave; stderr None. setsid in pre_exec so the
+/// child owns the pty as its controlling terminal. Darwin relays the sole PTY
+/// reader into a bounded pipe; `pty_master` remains resize-only.
 #[cfg(unix)]
 fn open_exec_tty(mut command: std::process::Command) -> Result<StreamSession> {
+    #[cfg(target_os = "macos")]
+    use crate::stream_io::make_pipe_unlocked;
+    #[cfg(unix)]
+    let _spawn_guard = crate::stream_io::spawn_lock();
     use crate::stream_io::{dup_file, open_pty, ChildWaiter};
     let (master_file, slave_file) = open_pty().map_err(BackendError::Io)?;
     let slave_stdin = dup_file(&slave_file).map_err(BackendError::Io)?;
     let slave_stdout = dup_file(&slave_file).map_err(BackendError::Io)?;
-    let retained_slave = dup_file(&slave_file).map_err(BackendError::Io)?;
     let slave_stderr = slave_file; // last use — move it
 
     use std::os::unix::process::CommandExt;
@@ -201,27 +204,148 @@ fn open_exec_tty(mut command: std::process::Command) -> Result<StreamSession> {
             }
             #[cfg(not(target_os = "macos"))]
             {
-                libc::setsid();
-                Ok(())
+                if libc::setsid() < 0 {
+                    Err(std::io::Error::last_os_error())
+                } else {
+                    Ok(())
+                }
             }
         });
     }
 
-    let child = command
-        .spawn()
-        .map_err(|e| BackendError::Internal(format!("open_exec spawn: {e}")))?;
+    #[cfg(target_os = "macos")]
+    let (exit_read, exit_write) = make_pipe_unlocked().map_err(BackendError::Io)?;
 
-    let stdout_fd = dup_file(&master_file).map_err(BackendError::Io)?;
+    #[cfg(target_os = "macos")]
+    let (stdout_fd, relay) = spawn_pty_relay(&master_file, exit_read)?;
+
+    let child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            #[cfg(target_os = "macos")]
+            {
+                drop(command);
+                drop(exit_write);
+                drop(master_file);
+                let _ = relay.join();
+            }
+            return Err(BackendError::Internal(format!("open_exec spawn: {error}")));
+        }
+    };
+
+    #[cfg(not(target_os = "macos"))]
+    let stdout_fd = match dup_file(&master_file) {
+        Ok(stdout) => stdout,
+        Err(error) => {
+            let mut child = child;
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(BackendError::Io(error));
+        }
+    };
+
+    #[cfg(target_os = "macos")]
+    let waiter = match ChildWaiter::new_with_exit_notify(child, None, exit_write) {
+        Ok(waiter) => waiter,
+        Err(error) => {
+            drop(master_file);
+            let _ = relay.join();
+            return Err(error);
+        }
+    };
+    #[cfg(not(target_os = "macos"))]
+    let waiter = ChildWaiter::new(child, None)?;
+
     Ok(StreamSession {
         stdin: None, // tty: write to the master, no separate stdin pipe
         stdout: Some(stdout_fd),
         stderr: None,
         pty_master: Some(master_file),
-        // Keep one slave open until waiter consumption. A fast child can exit
-        // before caller reads master; Darwin otherwise flushes queued output on
-        // final slave close.
-        waiter: Box::new(ChildWaiter::new(child, Some(retained_slave))?),
+        waiter: Box::new(waiter),
     })
+}
+
+/// Darwin flushes unread PTY-master data when final slave closes. Start this
+/// sole reader before spawning so a fast child cannot beat it; pipe backpressure
+/// bounds relay memory and preserves FIFO for the client.
+#[cfg(target_os = "macos")]
+fn spawn_pty_relay(
+    master: &std::fs::File,
+    exit_read: std::fs::File,
+) -> Result<(std::fs::File, std::thread::JoinHandle<()>)> {
+    use crate::stream_io::{dup_file, make_socketpair_unlocked};
+    use std::io::{Read, Write};
+    use std::os::fd::AsRawFd;
+
+    let reader = dup_file(master).map_err(BackendError::Io)?;
+    let (client_read, mut client_write) = make_socketpair_unlocked().map_err(BackendError::Io)?;
+    let relay = std::thread::Builder::new()
+        .name("lightr-pty-relay".into())
+        .spawn(move || {
+            let mut reader = reader;
+            let mut buf = [0u8; 8192];
+            let exit_read = exit_read;
+            let mut exit_seen = false;
+            let mut master_closed = false;
+            loop {
+                let mut poll_fds = [
+                    libc::pollfd {
+                        fd: reader.as_raw_fd(),
+                        events: if master_closed { 0 } else { libc::POLLIN },
+                        revents: 0,
+                    },
+                    libc::pollfd {
+                        fd: client_write.as_raw_fd(),
+                        events: libc::POLLHUP | libc::POLLERR | libc::POLLNVAL,
+                        revents: 0,
+                    },
+                    libc::pollfd {
+                        fd: exit_read.as_raw_fd(),
+                        events: if exit_seen { 0 } else { libc::POLLIN },
+                        revents: 0,
+                    },
+                ];
+                if unsafe { libc::poll(poll_fds.as_mut_ptr(), 3, -1) } < 0 {
+                    if std::io::Error::last_os_error().kind() == std::io::ErrorKind::Interrupted {
+                        continue;
+                    }
+                    break;
+                }
+                if poll_fds[1].revents & (libc::POLLHUP | libc::POLLERR | libc::POLLNVAL) != 0 {
+                    break;
+                }
+                if !exit_seen
+                    && poll_fds[2].revents
+                        & (libc::POLLIN | libc::POLLHUP | libc::POLLERR | libc::POLLNVAL)
+                        != 0
+                {
+                    let mut byte = [0u8; 1];
+                    let count =
+                        unsafe { libc::read(exit_read.as_raw_fd(), byte.as_mut_ptr().cast(), 1) };
+                    if count == 0 {
+                        break;
+                    }
+                    exit_seen = true;
+                }
+                if poll_fds[0].revents & (libc::POLLIN | libc::POLLHUP | libc::POLLERR) != 0 {
+                    match reader.read(&mut buf) {
+                        Ok(0) => break,
+                        Ok(n) if client_write.write_all(&buf[..n]).is_ok() => (),
+                        Ok(_) => break,
+                        Err(error) if error.raw_os_error() == Some(libc::EIO) => {
+                            master_closed = true;
+                            if exit_seen {
+                                break;
+                            }
+                        }
+                        Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                        Err(_) => break,
+                    }
+                }
+            }
+        })
+        .map_err(BackendError::Io)?;
+    Ok((client_read, relay))
 }
 
 /// pipe-mode exec: piped stdout/stderr (and stdin when requested); the
@@ -240,6 +364,7 @@ fn open_exec_pipe(mut command: std::process::Command, stdin: bool) -> Result<Str
         command.stdin(Stdio::null());
     }
 
+    let _spawn_guard = crate::stream_io::spawn_lock();
     let mut child = command
         .spawn()
         .map_err(|e| BackendError::Internal(format!("open_exec spawn: {e}")))?;
