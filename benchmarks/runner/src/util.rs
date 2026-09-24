@@ -1,6 +1,5 @@
-use crate::spec::{Spec, Scenario, Availability, Assertion, Fixture, ToolCommand};
-use crate::evidence::{RawRecord, AssertionRecord};
-use tempfile::TempDir;
+use crate::evidence::{AssertionRecord, RawRecord};
+use crate::spec::{Assertion, Availability, Fixture, Scenario, Spec, ToolCommand};
 use std::fs::File;
 use std::io::Write;
 
@@ -23,7 +22,12 @@ pub fn make_test_spec() -> Spec {
                 lightr: ToolCommand {
                     command: "echo hello".to_string(),
                 },
-                metrics: vec!["latency".to_string(), "throughput".to_string(), "cpu".to_string(), "mem".to_string()],
+                metrics: vec![
+                    "latency".to_string(),
+                    "throughput".to_string(),
+                    "cpu".to_string(),
+                    "mem".to_string(),
+                ],
                 tags: vec!["linux".to_string(), "container".to_string()],
                 assertions: vec![Assertion::ExitCode { expected: 0 }],
                 lightr_evidence: None,
@@ -44,7 +48,12 @@ pub fn make_test_spec() -> Spec {
                 lightr: ToolCommand {
                     command: "echo hello".to_string(),
                 },
-                metrics: vec!["latency".to_string(), "throughput".to_string(), "cpu".to_string(), "mem".to_string()],
+                metrics: vec![
+                    "latency".to_string(),
+                    "throughput".to_string(),
+                    "cpu".to_string(),
+                    "mem".to_string(),
+                ],
                 tags: vec!["linux".to_string(), "container".to_string()],
                 assertions: vec![Assertion::ExitCode { expected: 0 }],
                 lightr_evidence: None,
@@ -87,7 +96,10 @@ pub fn make_test_records() -> Vec<RawRecord> {
             host_os: "linux".to_string(),
             host_arch: "x86_64".to_string(),
             host_kernel: "6.8.0".to_string(),
-            assertions: vec![AssertionRecord { kind: "exit_code".to_string(), passed: true }],
+            assertions: vec![AssertionRecord {
+                kind: "exit_code".to_string(),
+                passed: true,
+            }],
         },
         RawRecord {
             schema_version: 1,
@@ -115,7 +127,10 @@ pub fn make_test_records() -> Vec<RawRecord> {
             host_os: "linux".to_string(),
             host_arch: "x86_64".to_string(),
             host_kernel: "6.8.0".to_string(),
-            assertions: vec![AssertionRecord { kind: "exit_code".to_string(), passed: true }],
+            assertions: vec![AssertionRecord {
+                kind: "exit_code".to_string(),
+                passed: true,
+            }],
         },
     ]
 }
