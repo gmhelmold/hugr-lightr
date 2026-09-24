@@ -115,8 +115,8 @@ DEST_PREPARE_CASES = [
     (
         'dest-prepare-directory-no-follow',
         'destination_tree_prepare_native_entry.rs',
-        '| libc::O_DIRECTORY\\n            | libc::O_NOFOLLOW\\n            | libc::O_CLOEXEC',
-        '| libc::O_DIRECTORY\\n            | libc::O_CLOEXEC',
+        '| libc::O_DIRECTORY\n            | libc::O_NOFOLLOW\n            | libc::O_CLOEXEC',
+        '| libc::O_DIRECTORY\n            | libc::O_CLOEXEC',
         'store::foundation::destination_tree_prepare::tests::races::prepared_tree_directory_symlink_swap_before_open_is_refused',
         'directory symlink replacement was not refused by no-follow open',
     ),
