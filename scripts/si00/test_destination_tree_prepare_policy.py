@@ -103,7 +103,7 @@ class DestinationTreePreparePolicyTests(unittest.TestCase):
         sys.path.insert(0, str(ROOT / "scripts/si01"))
         try:
             import topology_controls as controls
-            self.assertEqual(len(controls.DEST_PREPARE_CASES), 5)
+            self.assertEqual(len(controls.DEST_PREPARE_CASES), 6)
             for family, count in zip(FAMILIES, [10, 2, 3, 3, 4, 4, 3, 4, 6]):
                 self.assertEqual(len(getattr(controls, family)), count, family)
             text = (ROOT / "scripts/si01/topology_controls.py").read_text()
