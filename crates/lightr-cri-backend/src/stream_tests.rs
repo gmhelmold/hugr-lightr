@@ -217,6 +217,41 @@ fn open_exec_tty_keeps_output_until_first_master_read() {
     assert_eq!(s.waiter.wait().unwrap(), 0);
 }
 
+/// Darwin relay is already draining PTY when fast child exits. Child is waitable
+/// before client consumes stdout; relay then yields exact bytes and EOF.
+#[cfg(target_os = "macos")]
+#[test]
+fn open_exec_tty_fast_exit_is_waitable_before_client_read_and_preserves_bytes() {
+    let b = LightrBackend::new(temp_home());
+    let id = running_container(&b, vec![]);
+    let mut session = b
+        .open_exec(
+            &id,
+            &["sh".into(), "-c".into(), "printf 'relay-bytes\\n'".into()],
+            true,
+            false,
+        )
+        .unwrap();
+
+    assert_eq!(session.waiter.wait().unwrap(), 0);
+    assert!(session.pty_master.is_some(), "master retained for winsize");
+
+    let stdout = session.stdout.take().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        let mut stdout = stdout;
+        let mut output = Vec::new();
+        tx.send(stdout.read_to_end(&mut output).map(|_| output))
+            .unwrap();
+    });
+    let output = rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .expect("relay did not close client stdout")
+        .expect("relay stdout read failed");
+    reader.join().unwrap();
+    assert_eq!(output, b"relay-bytes\r\n");
+}
+
 /// On Darwin, final slave close discards unread master bytes. Wait for the sole
 /// reaper to report a real child exit before touching master, then require its
 /// exact queued line. The waiter must retain its slave through that first read.

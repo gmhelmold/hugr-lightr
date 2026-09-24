@@ -84,9 +84,9 @@ impl FanOut {
 
 // ── unix primitives (no `nix`): pipe, dup, openpty ───────────────────────────
 
-/// Create an OS pipe, returning (read_end, write_end) as `std::fs::File`.
-fn make_pipe() -> std::io::Result<(std::fs::File, std::fs::File)> {
-    use std::os::unix::io::FromRawFd;
+/// Create an internal OS pipe with neither endpoint inherited across exec.
+pub(crate) fn make_pipe() -> std::io::Result<(std::fs::File, std::fs::File)> {
+    use std::os::unix::io::{AsRawFd, FromRawFd};
     let mut fds = [0i32; 2];
     let rc = unsafe { libc::pipe(fds.as_mut_ptr()) };
     if rc != 0 {
@@ -94,7 +94,35 @@ fn make_pipe() -> std::io::Result<(std::fs::File, std::fs::File)> {
     }
     let r = unsafe { std::fs::File::from_raw_fd(fds[0]) };
     let w = unsafe { std::fs::File::from_raw_fd(fds[1]) };
+    for file in [&r, &w] {
+        let flags = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFD) };
+        if flags < 0
+            || unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETFD, flags | libc::FD_CLOEXEC) } < 0
+        {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
     Ok((r, w))
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn make_socketpair() -> std::io::Result<(std::fs::File, std::fs::File)> {
+    use std::os::unix::io::{AsRawFd, FromRawFd};
+    let mut fds = [-1i32; 2];
+    if unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr()) } != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    let left = unsafe { std::fs::File::from_raw_fd(fds[0]) };
+    let right = unsafe { std::fs::File::from_raw_fd(fds[1]) };
+    for file in [&left, &right] {
+        let flags = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFD) };
+        if flags < 0
+            || unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETFD, flags | libc::FD_CLOEXEC) } < 0
+        {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
+    Ok((left, right))
 }
 
 /// Duplicate a file descriptor into a fresh owned `File` (transcribed from the
@@ -109,7 +137,7 @@ pub(crate) fn dup_file(f: &std::fs::File) -> std::io::Result<std::fs::File> {
 /// `libc::openpty` (avoids a `nix` dependency; present on macOS + Linux).
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn open_pty() -> std::io::Result<(std::fs::File, std::fs::File)> {
-    use std::os::unix::io::FromRawFd;
+    use std::os::unix::io::{AsRawFd, FromRawFd};
     let mut master: libc::c_int = -1;
     let mut slave: libc::c_int = -1;
     let rc = unsafe {
@@ -126,6 +154,14 @@ pub(crate) fn open_pty() -> std::io::Result<(std::fs::File, std::fs::File)> {
     }
     let master_file = unsafe { std::fs::File::from_raw_fd(master) };
     let slave_file = unsafe { std::fs::File::from_raw_fd(slave) };
+    for file in [&master_file, &slave_file] {
+        let flags = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFD) };
+        if flags < 0
+            || unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETFD, flags | libc::FD_CLOEXEC) } < 0
+        {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
     Ok((master_file, slave_file))
 }
 
@@ -218,7 +254,7 @@ impl ChildWaiter {
         child: std::process::Child,
         pty_slave: Option<std::fs::File>,
     ) -> Result<Self> {
-        Self::start(child, pty_slave, std::thread::Builder::new())
+        Self::start(child, pty_slave, std::thread::Builder::new(), None)
     }
 
     #[cfg(test)]
@@ -233,6 +269,7 @@ impl ChildWaiter {
         mut child: std::process::Child,
         error: impl std::fmt::Display,
     ) -> Result<Self> {
+        let _ = child.kill();
         let _ = child.wait();
         Err(BackendError::Internal(format!(
             "child exit watcher setup: {error}"
@@ -243,6 +280,7 @@ impl ChildWaiter {
         child: std::process::Child,
         pty_slave: Option<std::fs::File>,
         builder: std::thread::Builder,
+        exit_notify: Option<std::fs::File>,
     ) -> Result<Self> {
         let state = Arc::new((Mutex::new(None), Condvar::new()));
         let exit = ChildExit {
@@ -261,6 +299,10 @@ impl ChildWaiter {
             let (result_slot, ready) = &*state;
             *result_slot.lock().unwrap() = Some(result);
             ready.notify_all();
+            if let Some(mut notify) = exit_notify {
+                use std::io::Write;
+                let _ = notify.write_all(&[1]);
+            }
         });
         let reaper = match reaper {
             Ok(reaper) => reaper,
@@ -279,6 +321,20 @@ impl ChildWaiter {
     #[cfg(test)]
     pub(crate) fn exit_state(&self) -> ChildExit {
         self.exit.clone()
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) fn new_with_exit_notify(
+        child: std::process::Child,
+        pty_slave: Option<std::fs::File>,
+        exit_notify: std::fs::File,
+    ) -> Result<Self> {
+        Self::start(
+            child,
+            pty_slave,
+            std::thread::Builder::new(),
+            Some(exit_notify),
+        )
     }
 }
 
