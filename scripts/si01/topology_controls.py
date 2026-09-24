@@ -211,7 +211,7 @@ def main():
     repr_suite = cargo + ["store::foundation::destination_name_probe::tests::", "--", "--nocapture"]
     repr_expected = r"test result: ok\. 14 passed; 0 failed; 0 ignored;"
     prepare_suite = cargo + ["store::foundation::destination_tree_prepare::tests::", "--", "--nocapture"]
-    prepare_expected = r"test result: ok\. 15 passed; 0 failed; 0 ignored;"
+    prepare_expected = r"test result: ok\. 16 passed; 0 failed; 0 ignored;"
     try:
         require(not git("status", "--porcelain", "--untracked-files=no"), "tracked source dirty")
         archive = subprocess.check_output(["git", "archive", "--format=zip", "HEAD"], cwd=ROOT)
