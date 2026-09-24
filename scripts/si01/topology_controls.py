@@ -111,6 +111,57 @@ DEST_REPR_CASES = [
 ]
 
 
+DEST_PREPARE_CASES = [
+    (
+        'dest-prepare-directory-no-follow',
+        'destination_tree_prepare_native_entry.rs',
+        '| libc::O_DIRECTORY\n            | libc::O_NOFOLLOW\n            | libc::O_CLOEXEC',
+        '| libc::O_DIRECTORY\n            | libc::O_CLOEXEC',
+        'store::foundation::destination_tree_prepare::tests::races::prepared_tree_directory_symlink_swap_before_open_is_refused',
+        'directory symlink replacement was not refused by no-follow open',
+    ),
+    (
+        'dest-prepare-no-adopt-file',
+        'destination_tree_prepare_native_entry.rs',
+        'libc::O_RDWR | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC;',
+        'libc::O_RDWR | libc::O_CREAT | libc::O_NOFOLLOW | libc::O_CLOEXEC;',
+        'store::foundation::destination_tree_prepare::tests::races::prepared_tree_never_adopts_foreign_file_after_representation',
+        'called `Option::unwrap()` on a `None` value',
+    ),
+    (
+        'dest-prepare-cleanup-identity',
+        'destination_tree_prepare_native_entry.rs',
+        'if identity(&self.parent, &self.name)? != self.identity {',
+        'if false && identity(&self.parent, &self.name)? != self.identity {',
+        'store::foundation::destination_tree_prepare::tests::races::prepared_tree_replacement_is_preserved_and_cleanup_is_incomplete',
+        'assertion `left == right` failed',
+    ),
+    (
+        'dest-prepare-exact-namespace',
+        'destination_tree_prepare_native.rs',
+        'require_child_count(&self.root, self.root_expected_children)?;',
+        'let _ = self.root_expected_children;',
+        'store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_validation_rejects_unplanned_root_entry',
+        'called `Option::unwrap()` on a `None` value',
+    ),
+    (
+        'dest-prepare-leaf-binding',
+        'destination_tree_prepare_native.rs',
+        '            file.revalidate()?;',
+        '            let _ = file;',
+        'store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_entry_revalidation_rejects_leaf_replacement',
+        'called `Option::unwrap()` on a `None` value',
+    ),
+    (
+        'dest-prepare-root-binding',
+        'destination_tree_prepare.rs',
+        '        if let Err(error) = anchor.revalidate(wait) {',
+        '        if let Err(error) = Ok::<(), io::Error>(()) {',
+        'store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_binding_rejects_root_replacement',
+        'called `Option::unwrap()` on a `None` value',
+    ),
+]
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, required=True)
@@ -159,6 +210,8 @@ def main():
     anchor_expected = r"test result: ok\. 11 passed; 0 failed; 0 ignored;"
     repr_suite = cargo + ["store::foundation::destination_name_probe::tests::", "--", "--nocapture"]
     repr_expected = r"test result: ok\. 14 passed; 0 failed; 0 ignored;"
+    prepare_suite = cargo + ["store::foundation::destination_tree_prepare::tests::", "--", "--nocapture"]
+    prepare_expected = r"test result: ok\. 16 passed; 0 failed; 0 ignored;"
     try:
         require(not git("status", "--porcelain", "--untracked-files=no"), "tracked source dirty")
         archive = subprocess.check_output(["git", "archive", "--format=zip", "HEAD"], cwd=ROOT)
@@ -189,7 +242,9 @@ def main():
             require(code == 0 and re.search(anchor_expected, text), "anchor pristine suite failed")
             code, text = run(root, repr_suite, "repr-pristine")
             require(code == 0 and re.search(repr_expected, text), "destination representation pristine suite failed")
-            for label, name, old, new, test, message in CASES + EMPTY_CASES + DESCENDANT_CASES + SCRATCH_CASES + LINK_CASES + LISTING_CASES + DEST_ANCHOR_CASES + DEST_REPR_CASES:
+            code, text = run(root, prepare_suite, "prepare-pristine")
+            require(code == 0 and re.search(prepare_expected, text), "destination prepare pristine suite failed")
+            for label, name, old, new, test, message in CASES + EMPTY_CASES + DESCENDANT_CASES + SCRATCH_CASES + LINK_CASES + LISTING_CASES + DEST_ANCHOR_CASES + DEST_REPR_CASES + DEST_PREPARE_CASES:
                 path = root / BASE / name
                 original = path.read_text()
                 require(original.count(old) == 1, "mutation seam mismatch: " + label)
@@ -225,6 +280,8 @@ def main():
             require(code == 0 and re.search(anchor_expected, text), "anchor restored suite failed")
             code, text = run(root, repr_suite, "repr-restored")
             require(code == 0 and re.search(repr_expected, text), "destination representation restored suite failed")
+            code, text = run(root, prepare_suite, "prepare-restored")
+            require(code == 0 and re.search(prepare_expected, text), "destination prepare restored suite failed")
         receipt["status"] = "TOPOLOGY_CONTROLS_PASSED"
     except Exception as error:
         receipt["status"] = "FAILED"

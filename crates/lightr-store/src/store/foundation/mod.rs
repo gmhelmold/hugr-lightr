@@ -81,3 +81,6 @@ pub mod destination_anchor;
 
 /// Whole-tree name representability in the actual anchored destination.
 pub mod destination_name_probe;
+
+/// Prepared anchored output namespace; payload publication remains inactive.
+pub mod destination_tree_prepare;
