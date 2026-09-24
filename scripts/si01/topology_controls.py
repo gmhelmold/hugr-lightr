@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import signal
 import subprocess
+import sys
 import tempfile
 import zipfile
 
@@ -68,7 +69,7 @@ DESCENDANT_CASES = [('descendant-no-follow', 'topology_descendant.rs', '| libc::
 
 SCRATCH_CASES = [('scratch-exclusive-file', 'anchored_scratch_native.rs', 'flags | libc::O_EXCL', 'flags', 'store::foundation::anchored_scratch::tests::unix::scratch_existing_names_are_never_adopted_or_truncated', 'existing file was adopted'), ('scratch-cleanup-identity', 'anchored_scratch_native.rs', 'if identity(&self.parent, &self.name)? != self.identity {', 'if false && identity(&self.parent, &self.name)? != self.identity {', 'store::foundation::anchored_scratch::tests::unix::scratch_cleanup_preserves_replacement_entries', 'replacement was removed'), ('scratch-collision-budget', 'anchored_scratch_native.rs', 'for _ in 0..32 {', 'for _ in 0..33 {', 'store::foundation::anchored_scratch::native::tests::scratch_atomic_reservation_has_a_finite_collision_budget', 'assertion `left == right` failed')]
 
-LINK_CASES = [('link-leaf-identity', 'topology_link.rs', 'if key(&current)? != expected {', 'if false && key(&current)? != expected {', 'store::foundation::topology::topology_link::tests::source_link_detects_replacement_after_read', 'replaced source link accepted'), ('link-byte-bound', 'topology_link.rs', 'if used > limit {', 'if false && used > limit {', 'store::foundation::topology::topology_link::tests::source_link_exact_byte_budget_never_accepts_truncation', 'called `Result::unwrap_err()` on an `Ok` value'), ('link-final-cancellation', 'topology_link.rs', 'wait.check()?; // Source-link final checkpoint, including completed reads.', '// Deliberately omitted terminal checkpoint for causal control.', 'store::foundation::topology::topology_link::tests::source_link_cancellation_after_completed_validation_is_not_success', 'completed cancelled link read accepted'), ('link-pin-no-follow', 'topology_link.rs', 'libc::O_PATH | libc::O_NOFOLLOW | libc::O_CLOEXEC', 'libc::O_PATH | libc::O_CLOEXEC', 'store::foundation::topology::topology_link::tests::source_link_preserves_dangling_and_exact_target_text', 'dangling link text not preserved')]
+LINK_CASES = [('link-leaf-identity', 'topology_link.rs', 'if key(&current)? != expected {', 'if false && key(&current)? != expected {', 'store::foundation::topology::topology_link::tests::source_link_detects_replacement_after_read', 'replaced source link accepted'), ('link-byte-bound', 'topology_link.rs', 'if used > limit {', 'if false && used > limit {', 'store::foundation::topology::topology_link::tests::source_link_exact_byte_budget_never_accepts_truncation', 'called `Result::unwrap_err()` on an `Ok` value'), ('link-final-cancellation', 'topology_link.rs', 'wait.check()?; // Source-link final checkpoint, including completed reads.', '// Deliberately omitted terminal checkpoint for causal control.', 'store::foundation::topology::topology_link::tests::source_link_cancellation_after_completed_validation_is_not_success', 'completed cancelled link read accepted'), ('link-pin-no-follow', 'topology_link.rs', 'libc::O_PATH | libc::O_NOFOLLOW | libc::O_CLOEXEC', 'libc::O_PATH | libc::O_CLOEXEC', 'store::foundation::topology::topology_link::tests::linux::source_link_linux_pin_preserves_hostile_replacement_as_link', 'called `Result::unwrap()` on an `Err` value')]
 
 LISTING_CASES = [('listing-independent-offset', 'topology_listing_native.rs', 'let scan = open_at(&directory, b".", true)?;', 'let _ = open_at; let scan = directory.try_clone()?;', 'store::foundation::topology::topology_listing::native::tests::listing_ignores_an_offset_previously_advanced_on_the_held_source', 'assertion `left == right` failed'), ('listing-strict-utf8', 'topology_listing_native.rs', 'let name =\n            std::str::from_utf8(name).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;', 'let lossy = String::from_utf8_lossy(name); let name = lossy.as_ref();', 'store::foundation::topology::topology_listing::native::tests::listing_non_utf8_native_name_is_an_error_not_an_omission', 'called `Result::unwrap_err()` on an `Ok` value'), ('listing-eof-cancellation', 'topology_listing_native.rs', 'wait.check()?; // EOF does not erase a cancellation/deadline.\n        let Some(name) = entry else { break };', 'let Some(name) = entry else { return Ok(names) };\n        wait.check()?;', 'store::foundation::topology::topology_listing::native::tests::collection::listing_cancellation_after_eof_rejects_the_result', 'called `Result::unwrap_err()` on an `Ok` value'), ('listing-nested-binding', 'topology_listing_native.rs', 'if key(&current)? != identity {', 'if false && key(&current)? != identity {', 'store::foundation::topology::topology_listing::native::tests::listing_revalidates_nested_binding_after_native_enumeration', 'called `Result::unwrap_err()` on an `Ok` value')]
 
@@ -200,15 +201,15 @@ def main():
     planned_suite = cargo + ["store::foundation::planned_roots_tests::", "--", "--nocapture"]
     planned_expected = r"test result: ok\. 17 passed; 0 failed; 0 ignored;"
     empty_suite = cargo + [PREFIX + "topology_empty::tests::", "--", "--nocapture"]
-    empty_expected = r"test result: ok\. 11 passed; 0 failed; 0 ignored;"
+    empty_expected = r"test result: ok\. 12 passed; 0 failed; 0 ignored;"
     descendant_suite = cargo + [PREFIX + "topology_descendant::tests::", "--", "--nocapture"]
-    descendant_expected = r"test result: ok\. 12 passed; 0 failed; 0 ignored;"
+    descendant_expected = r"test result: ok\. 13 passed; 0 failed; 0 ignored;"
     scratch_suite = cargo + ["store::foundation::anchored_scratch::", "--", "--nocapture"]
     scratch_expected = r"test result: ok\. 15 passed; 0 failed; 0 ignored;"
     link_suite = cargo + [PREFIX + "topology_link::tests::", "--", "--nocapture"]
-    link_expected = r"test result: ok\. 14 passed; 0 failed; 0 ignored;"
+    link_expected = r"test result: ok\. 17 passed; 0 failed; 0 ignored;"
     listing_suite = cargo + [PREFIX + "topology_listing::native::tests::", "--", "--nocapture"]
-    listing_expected = r"test result: ok\. 16 passed; 0 failed; 0 ignored;"
+    listing_expected = r"test result: ok\. 17 passed; 0 failed; 0 ignored;"
     anchor_suite = cargo + ["store::foundation::destination_anchor::tests::", "--", "--nocapture"]
     anchor_expected = r"test result: ok\. 11 passed; 0 failed; 0 ignored;"
     repr_suite = cargo + ["store::foundation::destination_name_probe::tests::", "--", "--nocapture"]
@@ -216,6 +217,7 @@ def main():
     prepare_suite = cargo + ["store::foundation::destination_tree_prepare::tests::", "--", "--nocapture"]
     prepare_expected = r"test result: ok\. 16 passed; 0 failed; 0 ignored;"
     try:
+        require(sys.platform == "linux", "topology controls require Linux")
         require(not git("status", "--porcelain", "--untracked-files=no"), "tracked source dirty")
         archive = subprocess.check_output(["git", "archive", "--format=zip", "HEAD"], cwd=ROOT)
         (out / "source.zip").write_bytes(archive)
