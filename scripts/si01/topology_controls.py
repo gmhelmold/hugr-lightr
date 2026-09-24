@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import signal
 import subprocess
+import sys
 import tempfile
 import zipfile
 
@@ -216,6 +217,7 @@ def main():
     prepare_suite = cargo + ["store::foundation::destination_tree_prepare::tests::", "--", "--nocapture"]
     prepare_expected = r"test result: ok\. 16 passed; 0 failed; 0 ignored;"
     try:
+        require(sys.platform == "linux", "topology controls require Linux")
         require(not git("status", "--porcelain", "--untracked-files=no"), "tracked source dirty")
         archive = subprocess.check_output(["git", "archive", "--format=zip", "HEAD"], cwd=ROOT)
         (out / "source.zip").write_bytes(archive)
