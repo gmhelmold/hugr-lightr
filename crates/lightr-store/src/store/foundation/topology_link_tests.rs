@@ -371,7 +371,7 @@ fn source_link_pinned_handle_is_symlink_and_close_on_exec() {
     let f = Fixture::new();
     f.link("leaf", "absent");
     let inspection = f.inspect();
-    let pinned = pin(inspection.source_handle(), c"leaf", || Ok(())).unwrap();
+    let pinned = pin(inspection.source_handle(), c"leaf").unwrap();
     assert!(pinned.metadata().unwrap().file_type().is_symlink());
     // SAFETY: queries only the locally owned live descriptor.
     let flags = unsafe { libc::fcntl(pinned.as_raw_fd(), libc::F_GETFD) };
