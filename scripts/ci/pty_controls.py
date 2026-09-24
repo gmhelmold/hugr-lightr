@@ -66,7 +66,7 @@ def main():
                 "original unmodified echo witness failed: " + label)
 
         code, text = run(root, cargo + ["stream_io::descriptor_tests::", "--", "--test-threads=4"], label + "-descriptors")
-        require(code == 0 and re.search(r"test result: ok\. 4 passed; 0 failed; 0 ignored;", text),
+        require(code == 0 and re.search(r"test result: ok\. 5 passed; 0 failed; 0 ignored;", text),
                 "descriptor suite failed or missing: " + label)
 
     try:

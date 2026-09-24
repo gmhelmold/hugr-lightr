@@ -7,8 +7,13 @@
 use std::io::Read;
 use std::path::PathBuf;
 
-use crate::vocab::{BackendError, ContainerConfig, ContainerId, ContainerState, ContainerStatus};
+use crate::vocab::{
+    BackendError, ContainerConfig, ContainerId, ContainerState, ContainerStatus, ExitWaiter,
+};
 use crate::{CriBackend, LightrBackend};
+
+#[cfg(unix)]
+use crate::stream_io::ChildWaiter;
 
 fn temp_home() -> PathBuf {
     static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -177,6 +182,136 @@ fn open_exec_tty_uses_pty_master_no_stderr() {
 
     let code = s.waiter.wait().unwrap();
     assert_eq!(code, 0);
+}
+
+#[test]
+fn open_exec_tty_keeps_output_until_first_master_read() {
+    let b = LightrBackend::new(temp_home());
+    let id = running_container(&b, vec![]);
+    let marker = temp_home().join("child-closed-stdio");
+    let marker_c = {
+        use std::os::unix::ffi::OsStrExt;
+        std::ffi::CString::new(marker.as_os_str().as_bytes()).unwrap()
+    };
+    assert_eq!(unsafe { libc::mkfifo(marker_c.as_ptr(), 0o600) }, 0);
+    let command = format!(
+        "printf 'fast-tty-output\\n'; exec 0>&- 1>&- 2>&-; printf x > '{}'",
+        marker.display()
+    );
+
+    let mut s = b
+        .open_exec(&id, &["sh".into(), "-c".into(), command], true, false)
+        .unwrap();
+
+    // FIFO write runs only after direct child's slave descriptors close. Do not
+    // read master before it arrives: this is final-slave-close lifetime edge.
+    let mut signal = std::fs::File::open(&marker).unwrap();
+    let mut ready = Vec::new();
+    signal.read_to_end(&mut ready).unwrap();
+    assert_eq!(ready, b"x");
+    let out = read_pty_line(s.stdout.take().unwrap()).expect("queued tty output");
+    assert!(
+        String::from_utf8_lossy(&out).contains("fast-tty-output"),
+        "pty output: {out:?}"
+    );
+    assert_eq!(s.waiter.wait().unwrap(), 0);
+}
+
+/// Darwin relay is already draining PTY when fast child exits. Child is waitable
+/// before client consumes stdout; relay then yields exact bytes and EOF.
+#[cfg(target_os = "macos")]
+#[test]
+fn open_exec_tty_fast_exit_is_waitable_before_client_read_and_preserves_bytes() {
+    let b = LightrBackend::new(temp_home());
+    let id = running_container(&b, vec![]);
+    let mut session = b
+        .open_exec(
+            &id,
+            &["sh".into(), "-c".into(), "printf 'relay-bytes\\n'".into()],
+            true,
+            false,
+        )
+        .unwrap();
+
+    assert_eq!(session.waiter.wait().unwrap(), 0);
+    assert!(session.pty_master.is_some(), "master retained for winsize");
+
+    let stdout = session.stdout.take().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        let mut stdout = stdout;
+        let mut output = Vec::new();
+        tx.send(stdout.read_to_end(&mut output).map(|_| output))
+            .unwrap();
+    });
+    let output = rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .expect("relay did not close client stdout")
+        .expect("relay stdout read failed");
+    reader.join().unwrap();
+    assert_eq!(output, b"relay-bytes\r\n");
+}
+
+/// On Darwin, final slave close discards unread master bytes. Wait for the sole
+/// reaper to report a real child exit before touching master, then require its
+/// exact queued line. The waiter must retain its slave through that first read.
+#[cfg(target_os = "macos")]
+#[test]
+fn open_exec_tty_reads_exact_queued_output_after_child_exit() {
+    use crate::stream_io::{dup_file, open_pty};
+
+    let (mut master, slave) = open_pty().unwrap();
+    let retained_slave = dup_file(&slave).unwrap();
+    let mut command = std::process::Command::new("sh");
+    command.args(["-c", "printf 'queued-after-exit\\n'"]);
+    command.stdin(dup_file(&slave).unwrap());
+    command.stdout(dup_file(&slave).unwrap());
+    command.stderr(slave);
+    let waiter = ChildWaiter::new(command.spawn().unwrap(), Some(retained_slave)).unwrap();
+    let exit = waiter.exit_state();
+
+    // Non-consuming observation guarantees child exit precedes first master read.
+    assert_eq!(exit.wait().unwrap(), 0);
+    assert!(
+        waiter.pty_slave.is_some(),
+        "retain slave until waiter consumption"
+    );
+    let output = read_pty_line(&mut master).unwrap();
+    assert_eq!(output, b"queued-after-exit\r\n");
+    assert_eq!(Box::new(waiter).wait().unwrap(), 0);
+}
+
+#[test]
+fn child_exit_state_observes_mapped_exit_before_waiter_consumption() {
+    let child = std::process::Command::new("sh")
+        .args(["-c", "exit 7"])
+        .spawn()
+        .unwrap();
+    let waiter = ChildWaiter::new(child, Some(std::fs::File::open("/dev/null").unwrap())).unwrap();
+    let exit = waiter.exit_state();
+
+    // This observes sole reaper's saved status; it neither consumes waiter nor
+    // releases retained slave before caller explicitly consumes waiter.
+    assert_eq!(exit.wait().unwrap(), 7);
+    assert!(waiter.pty_slave.is_some());
+    assert_eq!(Box::new(waiter).wait().unwrap(), 7);
+}
+
+#[test]
+fn child_waiter_setup_failure_reaps_child_without_orphan_thread() {
+    let child = std::process::Command::new("true").spawn().unwrap();
+    let pid = child.id() as libc::pid_t;
+    let result = ChildWaiter::new_with_setup_failure(child, None);
+    let error = match result {
+        Ok(_) => panic!("injected setup failure must reject watcher setup"),
+        Err(error) => error,
+    };
+    assert!(matches!(error, BackendError::Internal(message) if message.contains("watcher setup")));
+    assert_eq!(unsafe { libc::kill(pid, 0) }, -1);
+    assert_eq!(
+        std::io::Error::last_os_error().raw_os_error(),
+        Some(libc::ESRCH)
+    );
 }
 
 // ── open_exec: precondition / not-found ──────────────────────────────────────
