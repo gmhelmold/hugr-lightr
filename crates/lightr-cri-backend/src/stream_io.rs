@@ -12,7 +12,7 @@
 //! pty, OS pipes and signals are unix concepts, and the streaming plane fails
 //! closed on non-unix from `stream.rs`. So nothing here needs per-item cfg.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 
 use crate::vocab::{BackendError, ContainerId, ContainerState, ExitWaiter, Result};
 use crate::LightrBackend;
@@ -178,24 +178,118 @@ fn spawn_tee_fanout(
 
 // ── ExitWaiters ──────────────────────────────────────────────────────────────
 
-/// Waiter for an exec child: reaps the child once and maps its status to
-/// 128+sig (signal kill) or the exit code. Consumed once (the trait moves
-/// `self`). Transcribed from the fake's `ChildWaiter`.
+/// Non-consuming observation of a direct child exit. The sole child reaper
+/// publishes this state before `ExitWaiter::wait` consumes its owner.
+type ChildExitResult = std::result::Result<i32, String>;
+type ChildExitState = (Mutex<Option<ChildExitResult>>, Condvar);
+
+#[derive(Clone)]
+pub(crate) struct ChildExit {
+    state: Arc<ChildExitState>,
+}
+
+impl ChildExit {
+    pub(crate) fn wait(&self) -> Result<i32> {
+        let (result, ready) = &*self.state;
+        let mut result = result.lock().unwrap();
+        while result.is_none() {
+            result = ready.wait(result).unwrap();
+        }
+        match result.as_ref().unwrap() {
+            Ok(code) => Ok(*code),
+            Err(error) => Err(BackendError::Internal(error.clone())),
+        }
+    }
+}
+
+/// Waiter for an exec child: its owned thread reaps once and maps status to
+/// 128+sig (signal kill) or exit code. `wait` joins that thread, then drops any
+/// retained PTY slave. Transcribed from fake's `ChildWaiter`.
 pub(crate) struct ChildWaiter {
-    pub child: std::process::Child,
+    exit: ChildExit,
+    reaper: std::thread::JoinHandle<()>,
     /// Keeps one slave descriptor open while caller drains a fast tty child.
     /// Darwin flushes pending master output when its final slave closes.
     pub pty_slave: Option<std::fs::File>,
 }
 
+impl ChildWaiter {
+    pub(crate) fn new(
+        child: std::process::Child,
+        pty_slave: Option<std::fs::File>,
+    ) -> Result<Self> {
+        Self::start(child, pty_slave, std::thread::Builder::new())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_with_setup_failure(
+        child: std::process::Child,
+        _pty_slave: Option<std::fs::File>,
+    ) -> Result<Self> {
+        Self::reap_after_setup_failure(child, "injected setup failure")
+    }
+
+    fn reap_after_setup_failure(
+        mut child: std::process::Child,
+        error: impl std::fmt::Display,
+    ) -> Result<Self> {
+        let _ = child.wait();
+        Err(BackendError::Internal(format!(
+            "child exit watcher setup: {error}"
+        )))
+    }
+
+    fn start(
+        child: std::process::Child,
+        pty_slave: Option<std::fs::File>,
+        builder: std::thread::Builder,
+    ) -> Result<Self> {
+        let state = Arc::new((Mutex::new(None), Condvar::new()));
+        let exit = ChildExit {
+            state: Arc::clone(&state),
+        };
+        // Keep child recoverable if OS rejects thread setup; failure reaps it
+        // synchronously rather than orphaning a zombie.
+        let child = Arc::new(Mutex::new(Some(child)));
+        let reaper_child = Arc::clone(&child);
+        let reaper = builder.spawn(move || {
+            let mut child = reaper_child.lock().unwrap().take().unwrap();
+            let result = child
+                .wait()
+                .map(|status| crate::util::exit_code_from_status(&status))
+                .map_err(|error| format!("wait: {error}"));
+            let (result_slot, ready) = &*state;
+            *result_slot.lock().unwrap() = Some(result);
+            ready.notify_all();
+        });
+        let reaper = match reaper {
+            Ok(reaper) => reaper,
+            Err(error) => {
+                let child = child.lock().unwrap().take().unwrap();
+                return Self::reap_after_setup_failure(child, error);
+            }
+        };
+        Ok(Self {
+            exit,
+            reaper,
+            pty_slave,
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn exit_state(&self) -> ChildExit {
+        self.exit.clone()
+    }
+}
+
 impl ExitWaiter for ChildWaiter {
     fn wait(mut self: Box<Self>) -> Result<i32> {
-        let status = self
-            .child
-            .wait()
-            .map_err(|e| BackendError::Internal(format!("wait: {e}")))?;
+        let code = self.exit.wait()?;
+        self.reaper
+            .join()
+            .map_err(|_| BackendError::Internal("child exit watcher panicked".into()))?;
         drop(self.pty_slave.take());
-        Ok(crate::util::exit_code_from_status(&status))
+        Ok(code)
     }
 }
 

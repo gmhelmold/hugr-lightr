@@ -220,10 +220,7 @@ fn open_exec_tty(mut command: std::process::Command) -> Result<StreamSession> {
         // Keep one slave open until waiter consumption. A fast child can exit
         // before caller reads master; Darwin otherwise flushes queued output on
         // final slave close.
-        waiter: Box::new(ChildWaiter {
-            child,
-            pty_slave: Some(retained_slave),
-        }),
+        waiter: Box::new(ChildWaiter::new(child, Some(retained_slave))?),
     })
 }
 
@@ -265,10 +262,7 @@ fn open_exec_pipe(mut command: std::process::Command, stdin: bool) -> Result<Str
         stdout,
         stderr,
         pty_master: None,
-        waiter: Box::new(ChildWaiter {
-            child,
-            pty_slave: None,
-        }),
+        waiter: Box::new(ChildWaiter::new(child, None)?),
     })
 }
 

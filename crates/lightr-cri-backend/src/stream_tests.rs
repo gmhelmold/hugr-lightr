@@ -7,8 +7,13 @@
 use std::io::Read;
 use std::path::PathBuf;
 
-use crate::vocab::{BackendError, ContainerConfig, ContainerId, ContainerState, ContainerStatus};
+use crate::vocab::{
+    BackendError, ContainerConfig, ContainerId, ContainerState, ContainerStatus, ExitWaiter,
+};
 use crate::{CriBackend, LightrBackend};
+
+#[cfg(unix)]
+use crate::stream_io::ChildWaiter;
 
 fn temp_home() -> PathBuf {
     static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -210,6 +215,39 @@ fn open_exec_tty_keeps_output_until_first_master_read() {
         "pty output: {out:?}"
     );
     assert_eq!(s.waiter.wait().unwrap(), 0);
+}
+
+#[test]
+fn child_exit_state_observes_mapped_exit_before_waiter_consumption() {
+    let child = std::process::Command::new("sh")
+        .args(["-c", "exit 7"])
+        .spawn()
+        .unwrap();
+    let waiter = ChildWaiter::new(child, Some(std::fs::File::open("/dev/null").unwrap())).unwrap();
+    let exit = waiter.exit_state();
+
+    // This observes sole reaper's saved status; it neither consumes waiter nor
+    // releases retained slave before caller explicitly consumes waiter.
+    assert_eq!(exit.wait().unwrap(), 7);
+    assert!(waiter.pty_slave.is_some());
+    assert_eq!(Box::new(waiter).wait().unwrap(), 7);
+}
+
+#[test]
+fn child_waiter_setup_failure_reaps_child_without_orphan_thread() {
+    let child = std::process::Command::new("true").spawn().unwrap();
+    let pid = child.id() as libc::pid_t;
+    let result = ChildWaiter::new_with_setup_failure(child, None);
+    let error = match result {
+        Ok(_) => panic!("injected setup failure must reject watcher setup"),
+        Err(error) => error,
+    };
+    assert!(matches!(error, BackendError::Internal(message) if message.contains("watcher setup")));
+    assert_eq!(unsafe { libc::kill(pid, 0) }, -1);
+    assert_eq!(
+        std::io::Error::last_os_error().raw_os_error(),
+        Some(libc::ESRCH)
+    );
 }
 
 // ── open_exec: precondition / not-found ──────────────────────────────────────
