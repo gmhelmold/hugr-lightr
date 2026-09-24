@@ -1,5 +1,5 @@
 //! Native prepared-tree orchestration under one retained destination root.
-use super::{TreePlan, Wait};
+use super::{PrepareStep, TreePlan, Wait};
 use entry::{require_child_count, OwnedDirectory, OwnedFile, OwnedLink, OwnedName};
 use lightr_core::Entry;
 use std::fs::File;
@@ -62,7 +62,7 @@ impl PreparedTree {
         root: &File,
         plan: &TreePlan<'_>,
         wait: Wait<'_>,
-        mut observe: impl FnMut(&str, Option<&File>) -> io::Result<()>,
+        observe: &mut impl FnMut(PrepareStep, &str, Option<&File>) -> io::Result<()>,
     ) -> Result<Self, CreateFailure> {
         let mut tree = Self {
             root: root.try_clone().map_err(CreateFailure::before)?,
@@ -97,13 +97,17 @@ impl PreparedTree {
                 Err(error) => return Err(tree.fail(error)),
             };
             let directory =
-                match OwnedDirectory::create(parent, name, expected_children(plan, path)) {
+                match OwnedDirectory::create(parent, name, expected_children(plan, path), || {
+                    observe(PrepareStep::BeforeDirectoryOpen, path, None)
+                }) {
                     Ok(directory) => directory,
                     Err(error) => return Err(tree.fail_create(error)),
                 };
             tree.directories.push(directory);
             let handle = &tree.directories.last().expect("just pushed directory").file;
-            if let Err(error) = observe(path, Some(handle)).and_then(|()| wait.check()) {
+            if let Err(error) =
+                observe(PrepareStep::Created, path, Some(handle)).and_then(|()| wait.check())
+            {
                 return Err(tree.fail(error));
             }
         }
@@ -128,8 +132,8 @@ impl PreparedTree {
                     };
                     tree.files.push(file);
                     let handle = &tree.files.last().expect("just pushed file").file;
-                    if let Err(error) =
-                        observe(entry.path(), Some(handle)).and_then(|()| wait.check())
+                    if let Err(error) = observe(PrepareStep::Created, entry.path(), Some(handle))
+                        .and_then(|()| wait.check())
                     {
                         return Err(tree.fail(error));
                     }
@@ -140,7 +144,9 @@ impl PreparedTree {
                         Err(error) => return Err(tree.fail_create(error)),
                     };
                     tree.links.push(link);
-                    if let Err(error) = observe(entry.path(), None).and_then(|()| wait.check()) {
+                    if let Err(error) = observe(PrepareStep::Created, entry.path(), None)
+                        .and_then(|()| wait.check())
+                    {
                         return Err(tree.fail(error));
                     }
                 }

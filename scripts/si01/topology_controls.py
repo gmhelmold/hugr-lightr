@@ -113,6 +113,14 @@ DEST_REPR_CASES = [
 
 DEST_PREPARE_CASES = [
     (
+        'dest-prepare-directory-no-follow',
+        'destination_tree_prepare_native_entry.rs',
+        '| libc::O_DIRECTORY\n            | libc::O_NOFOLLOW\n            | libc::O_CLOEXEC',
+        '| libc::O_DIRECTORY\n            | libc::O_CLOEXEC',
+        'store::foundation::destination_tree_prepare::tests::races::prepared_tree_directory_symlink_swap_before_open_is_refused',
+        'assertion `left == right` failed',
+    ),
+    (
         'dest-prepare-no-adopt-file',
         'destination_tree_prepare_native_entry.rs',
         'libc::O_RDWR | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC;',
@@ -203,7 +211,7 @@ def main():
     repr_suite = cargo + ["store::foundation::destination_name_probe::tests::", "--", "--nocapture"]
     repr_expected = r"test result: ok\. 14 passed; 0 failed; 0 ignored;"
     prepare_suite = cargo + ["store::foundation::destination_tree_prepare::tests::", "--", "--nocapture"]
-    prepare_expected = r"test result: ok\. 15 passed; 0 failed; 0 ignored;"
+    prepare_expected = r"test result: ok\. 16 passed; 0 failed; 0 ignored;"
     try:
         require(not git("status", "--porcelain", "--untracked-files=no"), "tracked source dirty")
         archive = subprocess.check_output(["git", "archive", "--format=zip", "HEAD"], cwd=ROOT)
