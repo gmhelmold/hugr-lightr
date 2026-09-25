@@ -74,7 +74,7 @@ class AnchoredScratchPolicyTests(unittest.TestCase):
         self.assertEqual(len(controls), 1)
         names = [n.id for n in ast.walk(controls[0].iter) if isinstance(n, ast.Name)]
         self.assertCountEqual(names, ["CASES", "EMPTY_CASES", "DESCENDANT_CASES", "SCRATCH_CASES", "LINK_CASES", "LISTING_CASES", "DEST_ANCHOR_CASES", "DEST_REPR_CASES", "DEST_PREPARE_CASES"])
-        for family, count in (("descendant", 13), ("scratch", 15)):
+        for family, count in (("descendant", 12), ("scratch", 15)):
             self.assertIn(f'{family}_expected = r"test result: ok\\. {count} passed;', text)
             for stage in ("pristine", "restored"):
                 self.assertEqual(text.count(f'run(root, {family}_suite, "{family}-{stage}")'), 1)

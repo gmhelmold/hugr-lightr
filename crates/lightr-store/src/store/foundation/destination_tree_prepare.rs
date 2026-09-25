@@ -195,6 +195,9 @@ impl PreparedDestinationTree<'_, '_> {
                     if let Err(error) = this.anchor.revalidate(wait) {
                         return Err(fail_and_cleanup(this.inner, error));
                     }
+                    if let Err(error) = wait.check() {
+                        return Err(fail_and_cleanup(this.inner, error));
+                    }
                     this.inner.disarm();
                     Ok(())
                 }
