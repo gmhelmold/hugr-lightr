@@ -1,6 +1,7 @@
 //! lightr-index submodule tree.
 //! Public items are re-exported from crate root (lib.rs).
 
+mod capture;
 pub(crate) mod codec;
 pub(crate) mod gc;
 pub(crate) mod hydrate;
