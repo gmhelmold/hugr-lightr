@@ -46,7 +46,6 @@ fn identity(parent: &File, name: &CString) -> io::Result<Identity> {
     let (device, mode) = (info.st_dev as u64, u32::from(info.st_mode));
     Ok((device, info.st_ino, mode & 0o170000))
 }
-
 fn changed() -> io::Error {
     io::Error::new(
         io::ErrorKind::InvalidData,
@@ -63,7 +62,6 @@ pub(super) struct OwnedName {
     identity: Identity,
     directory: bool,
 }
-
 impl OwnedName {
     pub(super) fn revalidate(&self) -> io::Result<()> {
         if identity(&self.parent, &self.name)? != self.identity {
@@ -87,7 +85,6 @@ impl OwnedName {
         Ok(())
     }
 }
-
 pub(super) struct OwnedDirectory {
     pub(super) file: File,
     pub(super) name: OwnedName,
@@ -229,6 +226,7 @@ unsafe fn errno_address() -> *mut libc::c_int {
 unsafe fn errno_address() -> *mut libc::c_int {
     unsafe { libc::__error() }
 }
+#[allow(dead_code)]
 pub(super) struct OwnedFile {
     pub(super) file: File,
     pub(super) name: OwnedName,
@@ -238,6 +236,7 @@ pub(super) struct OwnedFile {
     mode: u32,
     written: bool,
 }
+#[allow(dead_code)]
 impl OwnedFile {
     pub(super) fn create(
         parent: &File,
@@ -281,19 +280,21 @@ impl OwnedFile {
             written: false,
         })
     }
-
     pub(super) fn path(&self) -> &str {
         &self.path
     }
-
     pub(super) fn digest(&self) -> Digest {
         self.digest
     }
-
     pub(super) fn is_written(&self) -> bool {
         self.written
     }
-
+    pub(super) fn revalidate_final_mode(&self) -> io::Result<()> {
+        self.revalidate()?;
+        (self.file.metadata()?.mode() & 0o7777 == self.mode)
+            .then_some(())
+            .ok_or_else(|| invalid_payload("prepared file mode changed before completion"))
+    }
     pub(super) fn write_payload(
         &mut self,
         source: &mut impl Read,
@@ -360,7 +361,6 @@ impl OwnedFile {
         self.written = true;
         Ok(())
     }
-
     pub(super) fn revalidate(&self) -> io::Result<()> {
         self.name.revalidate()?;
         let metadata = self.file.metadata()?;

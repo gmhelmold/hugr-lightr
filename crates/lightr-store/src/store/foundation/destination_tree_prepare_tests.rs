@@ -487,6 +487,76 @@ fn complete_rejects_unwritten_file_and_rolls_back_tree() {
     assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
 }
 
+#[test]
+fn complete_rejects_final_mode_change_and_rolls_back_tree() {
+    let f = Fixture::new();
+    let output = f.parent.join("output");
+    fs::create_dir(&output).unwrap();
+    let manifest = Manifest {
+        version: 1,
+        total_size: 0,
+        entries: vec![Entry::File {
+            path: "data".into(),
+            mode: 0o640,
+            size: 0,
+            digest: Digest::of_bytes(&[]),
+        }],
+    };
+    let observed = f.inspect(&output);
+    let anchor = observed.anchor_empty(Wait::Try).unwrap();
+    let mut prepared = anchor
+        .prepare_tree(&plan(&manifest), limits(), Wait::Try)
+        .unwrap();
+    let mut source = Cursor::new(&[] as &[u8]);
+    prepared
+        .write_file_payload("data", &mut source, Wait::Try)
+        .unwrap();
+    fs::set_permissions(output.join("data"), fs::Permissions::from_mode(0o600)).unwrap();
+
+    let failure = prepared.complete(Wait::Try).unwrap_err();
+    assert_eq!(failure.primary.unwrap().kind(), io::ErrorKind::InvalidData);
+    assert!(failure.cleanup.is_empty());
+    assert!(failure.cleanup_complete);
+    assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
+}
+
+#[test]
+fn cas_coordinator_rejects_object_symlink_without_touching_target() {
+    let f = Fixture::new();
+    let output = f.parent.join("output");
+    let external = f.parent.join("external");
+    fs::create_dir(&output).unwrap();
+    fs::write(&external, b"external").unwrap();
+    let store = Store::open(&f.store).unwrap();
+    let digest = store.put_bytes(b"payload").unwrap();
+    let object = crate::store::cas::object_path(&f.store, &digest);
+    let retained = object.with_extension("retained");
+    fs::rename(&object, &retained).unwrap();
+    std::os::unix::fs::symlink(&external, &object).unwrap();
+    let manifest = Manifest {
+        version: 1,
+        total_size: 7,
+        entries: vec![Entry::File {
+            path: "data".into(),
+            mode: 0o640,
+            size: 7,
+            digest,
+        }],
+    };
+    let observed = f.inspect(&output);
+    let anchor = observed.anchor_empty(Wait::Try).unwrap();
+    let mut prepared = anchor
+        .prepare_tree(&plan(&manifest), limits(), Wait::Try)
+        .unwrap();
+
+    let failure = prepared
+        .write_all_payloads_from_store(&store, Wait::Try)
+        .unwrap_err();
+    assert!(failure.primary.is_some());
+    assert_eq!(fs::read(&external).unwrap(), b"external");
+    assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
+}
+
 fn mode(path: &Path) -> u32 {
     fs::metadata(path).unwrap().permissions().mode() & 0o7777
 }

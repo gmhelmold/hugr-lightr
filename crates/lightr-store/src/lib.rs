@@ -98,6 +98,7 @@ impl Store {
         store::cas::get_bytes(&self.root, d)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn open_verified_payload(
         &self,
         d: &Digest,

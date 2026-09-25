@@ -8,8 +8,10 @@ use super::lock::write_guard;
 use lightr_core::{Digest, LightrError, Result};
 #[cfg(unix)]
 use std::fs::Permissions;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Seek, SeekFrom, Write};
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -227,13 +229,14 @@ pub fn get_bytes(root: &Path, d: &Digest) -> Result<Vec<u8>> {
 }
 
 /// Open and verify one immutable CAS object without buffering its bytes.
+#[allow(dead_code)]
 pub(crate) fn open_verified(
     root: &Path,
     d: &Digest,
     mut checkpoint: impl FnMut() -> std::io::Result<()>,
 ) -> Result<File> {
     let path = object_path(root, d);
-    let mut file = match File::open(&path) {
+    let mut file = match open_object_file(&path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Err(lightr_core::LightrError::NotFound(*d));
@@ -248,6 +251,24 @@ pub(crate) fn open_verified(
         });
     }
     file.seek(SeekFrom::Start(0))?;
+    Ok(file)
+}
+
+#[allow(dead_code)]
+fn open_object_file(path: &Path) -> std::io::Result<File> {
+    #[cfg(unix)]
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)?;
+    #[cfg(not(unix))]
+    let file = OpenOptions::new().read(true).open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "CAS object is not a regular file",
+        ));
+    }
     Ok(file)
 }
 

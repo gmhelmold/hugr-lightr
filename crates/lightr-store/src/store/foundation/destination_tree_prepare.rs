@@ -130,7 +130,8 @@ impl PreparedDestinationTree<'_, '_> {
 
     /// Stream and verify one manifest file into its retained destination handle.
     /// Final mode is applied only after exact size and digest verification.
-    pub fn write_file_payload(
+    #[allow(dead_code)]
+    pub(crate) fn write_file_payload(
         &mut self,
         path: &str,
         source: &mut impl std::io::Read,
@@ -153,7 +154,8 @@ impl PreparedDestinationTree<'_, '_> {
 
     /// Fill every prepared regular file from verified CAS objects.
     /// Any failure rolls back all operation-owned output entries.
-    pub fn write_all_payloads_from_store(
+    #[allow(dead_code)]
+    pub(crate) fn write_all_payloads_from_store(
         &mut self,
         store: &Store,
         wait: Wait<'_>,
@@ -180,7 +182,8 @@ impl PreparedDestinationTree<'_, '_> {
 
     /// Complete a fully materialized tree without publishing a ref or snapshot.
     /// An incomplete or invalid tree is rolled back instead.
-    pub fn complete(self, wait: Wait<'_>) -> Result<(), DestinationTreePrepareFailure> {
+    #[allow(dead_code)]
+    pub(crate) fn complete(self, wait: Wait<'_>) -> Result<(), DestinationTreePrepareFailure> {
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
             let mut this = self;
@@ -244,6 +247,7 @@ impl PreparedDestinationTree<'_, '_> {
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[allow(dead_code)]
     fn fail_payload(&mut self, primary: io::Error) -> DestinationTreePrepareFailure {
         let cleanup = self.inner.rollback();
         DestinationTreePrepareFailure {
@@ -254,6 +258,7 @@ impl PreparedDestinationTree<'_, '_> {
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[allow(dead_code)]
     fn fail_payload(&mut self, primary: io::Error) -> DestinationTreePrepareFailure {
         let _ = self;
         DestinationTreePrepareFailure::primary(primary)

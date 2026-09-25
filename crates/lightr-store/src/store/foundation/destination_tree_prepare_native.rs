@@ -206,6 +206,7 @@ impl PreparedTree {
         self.files.len()
     }
 
+    #[allow(dead_code)]
     pub(super) fn write_payload(
         &mut self,
         path: &str,
@@ -222,6 +223,7 @@ impl PreparedTree {
         file.write_payload(source, wait)
     }
 
+    #[allow(dead_code)]
     pub(super) fn write_all_payloads_from_store(
         &mut self,
         store: &Store,
@@ -238,6 +240,7 @@ impl PreparedTree {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub(super) fn complete(&mut self, wait: Wait<'_>) -> io::Result<()> {
         wait.check()?;
         self.revalidate(wait)?;
@@ -248,6 +251,7 @@ impl PreparedTree {
                     "prepared tree contains an unwritten file",
                 ));
             }
+            file.revalidate_final_mode()?;
             wait.check()?;
         }
         self.armed = false;

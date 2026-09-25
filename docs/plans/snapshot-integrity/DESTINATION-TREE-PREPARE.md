@@ -12,8 +12,9 @@ the accepted actual-destination NAME probe, which must clean the root completely
 Only then does it prepare the real namespace through the retained destination
 handle. Explicit/implied directories use descriptor-relative create-only
 `mkdirat`; regular files use `openat(O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC)` and
-remain held internally by the prepared object. `PreparedDestinationTree::write_file_payload`
-streams one caller-supplied payload through its retained handle, checks exact size
+remain held internally by the prepared object. Crate-internal
+`PreparedDestinationTree::write_file_payload` streams one caller-supplied payload
+through its retained handle, checks exact size
 and digest, then applies the manifest mode and syncs. POSIX links use `symlinkat`
 with the exact stored UTF-8 target text. No descendant pathname is reopened globally.
 
