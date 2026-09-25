@@ -18,7 +18,9 @@
 //! container" is structurally enforced (a 2nd `--network` is last-wins at the
 //! clap layer, exactly like docker).
 
-use lightr_run::{parse_v, MountKind, VolumeBind};
+use lightr_run::{parse_v, MountKind, NamedVolumeBind, VolumeBind};
+
+use crate::cli::cmd::RunArgs;
 
 /// The WP-RUNFLAGS run flags as RAW clap values, bundled to keep `run()`'s arity
 /// flat. RUNTIME-ONLY — none of these enters the memo key.
@@ -38,12 +40,30 @@ pub struct RawRunFlags {
     pub dns: Vec<String>,
 }
 
+impl From<&RunArgs> for RawRunFlags {
+    fn from(args: &RunArgs) -> Self {
+        Self {
+            volume: args.volume.clone(),
+            tmpfs: args.tmpfs.clone(),
+            ulimit: args.ulimit.clone(),
+            name: args.name.clone(),
+            rm: args.rm,
+            entrypoint: args.entrypoint.clone(),
+            network: args.network.clone(),
+            network_alias: args.network_alias.clone(),
+            add_host: args.add_host.clone(),
+            dns: args.dns.clone(),
+        }
+    }
+}
+
 /// The resolved WP-RUNFLAGS config the handler lowers into `RunSpec`. `-v` parsed
 /// to host binds, `--entrypoint` split to argv tokens; `--name`/`--rm`/`--tmpfs`
 /// pass through. RUNTIME-ONLY.
 #[derive(Clone, Debug, Default)]
 pub struct RunFlags {
     pub volumes: Vec<VolumeBind>,
+    pub named_volumes: Vec<NamedVolumeBind>,
     pub tmpfs: Vec<String>,
     /// `--ulimit` raw strings, carried through (parsed in the handler via
     /// `parse_ulimits`, mirroring `tmpfs`).
@@ -95,6 +115,7 @@ impl RawRunFlags {
         // Named/anon volumes + CAS refs are the WP-VOL ring's job — an honest
         // exit 2 here, never a silent drop.
         let mut volumes: Vec<VolumeBind> = Vec::new();
+        let mut named_volumes: Vec<NamedVolumeBind> = Vec::new();
         for raw in &self.volume {
             let spec = match parse_v(raw) {
                 Ok(s) => s,
@@ -112,7 +133,14 @@ impl RawRunFlags {
                         readonly: spec.readonly,
                     });
                 }
-                MountKind::NamedVolume | MountKind::AnonVolume => {
+                MountKind::NamedVolume => {
+                    named_volumes.push(NamedVolumeBind {
+                        name: spec.source.unwrap_or_default(),
+                        target: spec.target,
+                        readonly: spec.readonly,
+                    });
+                }
+                MountKind::AnonVolume => {
                     eprintln!(
                         "lightr: -v {raw}: named/anonymous volumes are Phase 2 (WP-VOL); use a \
                          host path SRC:DST[:ro] (a bind) on the native engine"
@@ -147,6 +175,7 @@ impl RawRunFlags {
 
         Ok(RunFlags {
             volumes,
+            named_volumes,
             tmpfs: self.tmpfs,
             ulimit: self.ulimit,
             name: self.name,

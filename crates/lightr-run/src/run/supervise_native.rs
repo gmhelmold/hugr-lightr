@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use super::ctl::ctl_sock_path;
 use super::memo::validate_mount_target;
 use super::respawn;
-use super::types::SpecOnDisk;
+use super::types::{MountOnDisk2, SpecOnDisk};
 use crate::restart::RestartPolicy;
 
 pub(super) fn supervise_native(
@@ -29,31 +29,115 @@ pub(super) fn supervise_native(
     store: &Store,
 ) -> Result<i32> {
     let cwd = PathBuf::from(&spec.cwd);
+    if named_volumes(spec).len() > 1 || (!named_volumes(spec).is_empty() && spec.restart.is_some())
+    {
+        return Err(LightrError::InvalidRef(
+            "named-volume runtime currently supports one non-restarting mount".to_string(),
+        ));
+    }
+    #[cfg(not(target_os = "linux"))]
+    if !named_volumes(spec).is_empty() {
+        return Err(LightrError::InvalidRef(
+            "named-volume runtime unsupported: atomic lock and stable process token required"
+                .to_string(),
+        ));
+    }
+
+    let volumes = named_volumes(spec);
+    let mut pending = Vec::new();
+    for (name, _) in &volumes {
+        // Validate the pre-existing registry before begin_owner can create its
+        // `.lightr/` lock directory. A missing/corrupt named mount leaves no
+        // owner artifact behind.
+        lightr_store::volume::inspect(store.root(), name)?;
+        match lightr_store::volume::begin_owner(store.root(), name, dir) {
+            Ok(owner) => pending.push((name.clone(), owner)),
+            Err(error) => {
+                return Err(cleanup_error(error, store.root(), &pending));
+            }
+        }
+    }
 
     // Hydrate mounts (same law as run_memoized), once for the run's lifetime.
     for m in &spec.mounts {
         validate_mount_target(&m.target)?;
         let dest = cwd.join(&m.target);
-        lightr_index::hydrate(&dest, store, &m.ref_name)?;
+        if let Err(error) = lightr_index::hydrate(&dest, store, &m.ref_name) {
+            return Err(cleanup_error(error, store.root(), &pending));
+        }
     }
 
     // WP-RUNFLAGS: materialize the persisted `-v/--volume` host binds + `--tmpfs`
     // scratch dirs (the tagged `mounts2` shape) once for the run's lifetime, the
     // same way the synchronous memo path does. Empty ⇒ no-op (behaviour-preserving).
-    super::bindmat::materialize_mounts2(&cwd, &spec.mounts2)?;
+    if let Err(error) = super::bindmat::materialize_mounts2(&cwd, store.root(), &spec.mounts2) {
+        return Err(cleanup_error(error, store.root(), &pending));
+    }
 
     // WP-RC-WORKDIR: honor `-w`/`--workdir` as the child's cwd (Docker WORKDIR),
     // creating it if absent. `None` ⇒ `cwd` unchanged + no mkdir.
-    let run_cwd = super::spawn::resolve_workdir(&cwd, spec.workdir.as_deref())?;
+    let run_cwd = match super::spawn::resolve_workdir(&cwd, spec.workdir.as_deref()) {
+        Ok(path) => path,
+        Err(error) => {
+            return Err(cleanup_error(error, store.root(), &pending));
+        }
+    };
 
     // WP-RC-RESTART: resolve the persisted policy. `None`/unparseable ⇒ `No`
     // (run once + exit, byte-identical to before).
     let policy = respawn::policy_from_spec(spec.restart.as_deref());
 
     // F-309 / WP-RC-4: load an optional healthcheck (probed on the monitor loop).
-    let health_cfg = crate::healthcheck::load_for(dir)?;
+    let health_cfg = match crate::healthcheck::load_for(dir) {
+        Ok(config) => config,
+        Err(error) => {
+            return Err(cleanup_error(error, store.root(), &pending));
+        }
+    };
 
-    run_supervisor_loop(dir, spec, &cwd, &run_cwd, policy, health_cfg)
+    #[cfg(unix)]
+    return run_supervisor_loop(
+        dir,
+        spec,
+        &cwd,
+        &run_cwd,
+        policy,
+        health_cfg,
+        OwnerSetup {
+            root: store.root(),
+            volumes,
+            pending,
+        },
+    );
+    #[cfg(windows)]
+    run_supervisor_loop(
+        dir,
+        spec,
+        &cwd,
+        &run_cwd,
+        policy,
+        health_cfg,
+        OwnerSetup {
+            root: store.root(),
+            volumes,
+            pending,
+        },
+    )
+}
+
+fn cleanup_error(
+    error: LightrError,
+    root: &std::path::Path,
+    pending: &[(String, lightr_store::volume::VolumeOwner)],
+) -> LightrError {
+    for (name, owner) in pending {
+        if let Err(cleanup) = lightr_store::volume::abandon_pending(root, name, owner.nonce()) {
+            return LightrError::InvalidRef(format!(
+                "{error}; named-volume pending cleanup failed: {cleanup}"
+            ));
+        }
+    }
+    error
 }
 
 // FIX-#76 (godfile split): the per-concern setup helpers (`spawn_child`,
@@ -62,7 +146,27 @@ pub(super) fn supervise_native(
 // under the 400-line cap after the teardown-order fix.
 #[path = "supervise_native_setup.rs"]
 mod setup;
+#[cfg(unix)]
+use setup::ExecBarrier;
 use setup::{maybe_auto_remove, spawn_child, start_forwarders};
+
+fn named_volumes(spec: &SpecOnDisk) -> Vec<(String, String)> {
+    spec.mounts2
+        .iter()
+        .filter_map(|mount| match mount {
+            MountOnDisk2::NamedVolume { source, target, .. } => {
+                Some((source.clone(), target.clone()))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+struct OwnerSetup<'a> {
+    root: &'a std::path::Path,
+    volumes: Vec<(String, String)>,
+    pending: Vec<(String, lightr_store::volume::VolumeOwner)>,
+}
 
 #[cfg(unix)]
 fn run_supervisor_loop(
@@ -72,6 +176,7 @@ fn run_supervisor_loop(
     run_cwd: &std::path::Path,
     policy: RestartPolicy,
     health_cfg: Option<crate::healthcheck::Healthcheck>,
+    owners: OwnerSetup<'_>,
 ) -> Result<i32> {
     use std::io::{BufRead, BufReader, Write};
     use std::os::unix::net::UnixListener;
@@ -99,7 +204,45 @@ fn run_supervisor_loop(
     let mut restarts_done: u32 = 0;
 
     let final_exit = 'restart: loop {
-        let (mut child, child_pid) = spawn_child(dir, spec, run_cwd)?;
+        let barrier = (!owners.pending.is_empty())
+            .then(ExecBarrier::new)
+            .transpose()?;
+        let (mut child, child_pid) = match spawn_child(dir, spec, run_cwd, barrier.as_ref()) {
+            Ok(child) => child,
+            Err(error) => {
+                for (name, owner) in owners.pending {
+                    let _ =
+                        lightr_store::volume::abandon_pending(owners.root, &name, owner.nonce());
+                }
+                return Err(error);
+            }
+        };
+        for ((name, target), (_, owner)) in owners.volumes.iter().zip(&owners.pending) {
+            let mount_id = format!("{name}:{target}");
+            if let Err(error) = lightr_store::volume::activate_owner(
+                owners.root,
+                name,
+                dir,
+                owner.nonce(),
+                dir.file_name()
+                    .and_then(|id| id.to_str())
+                    .unwrap_or_default(),
+                child_pid,
+                &mount_id,
+            ) {
+                kill_and_reap(&mut child, child_pid);
+                for (name, owner) in &owners.pending {
+                    let _ = lightr_store::volume::abandon_pending(owners.root, name, owner.nonce());
+                }
+                return Err(error);
+            }
+        }
+        if let Some(barrier) = &barrier {
+            if let Err(error) = barrier.release() {
+                kill_and_reap(&mut child, child_pid);
+                return Err(error);
+            }
+        }
 
         // Per-child monitor: serve ctl.sock + poll child + probe health.
         let exit_code = loop {
@@ -192,10 +335,31 @@ fn run_supervisor_loop(
     // once any reader observes the socket gone (→ not-running), the terminal status
     // is already (about to be) written, so the two are never contradictory.
     let _ = std::fs::remove_file(&sock_path);
-    std::fs::write(dir.join("status"), format!("exited {final_exit}")).map_err(LightrError::Io)?;
+    write_terminal_status(dir, final_exit)?;
+    for (name, _) in &owners.volumes {
+        lightr_store::volume::terminal_run_owner(dir)?;
+        lightr_store::volume::release_owner(owners.root, name, dir)?;
+    }
     // WP-RUNFLAGS: `--rm` auto-clean on final exit (no-op unless `rm`).
     maybe_auto_remove(dir, spec);
     Ok(final_exit)
+}
+
+#[cfg(unix)]
+fn kill_and_reap(child: &mut std::process::Child, pid: i32) {
+    unsafe { libc::kill(-pid, libc::SIGKILL) };
+    unsafe { libc::kill(pid, libc::SIGKILL) };
+    let _ = child.wait();
+}
+
+#[cfg(unix)]
+fn write_terminal_status(dir: &std::path::Path, code: i32) -> Result<()> {
+    let status = dir.join("status");
+    std::fs::write(&status, format!("exited {code}")).map_err(LightrError::Io)?;
+    std::fs::File::open(&status)
+        .map_err(LightrError::Io)?
+        .sync_all()
+        .map_err(LightrError::Io)
 }
 
 #[cfg(windows)] // WIN-PATH: named-pipe control server, identical JSON wire protocol.
@@ -206,7 +370,9 @@ fn run_supervisor_loop(
     run_cwd: &std::path::Path,
     policy: RestartPolicy,
     health_cfg: Option<crate::healthcheck::Healthcheck>,
+    _owners: OwnerSetup<'_>,
 ) -> Result<i32> {
+    let _ = (&_owners.root, &_owners.volumes, &_owners.pending);
     use super::ctl::ctl_pipe_name;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;

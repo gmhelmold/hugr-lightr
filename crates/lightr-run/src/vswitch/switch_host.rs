@@ -190,18 +190,30 @@ const ATTACH_ACK: u8 = 0x01;
 /// Send `host`'s fd + `meta` over `stream`, then block for the switch's
 /// post-`add_member` ACK before handing back the `guest` end. Synchronizing on
 /// the ACK is what makes membership ESTABLISHED on return — the supervisor can
-/// boot the VM knowing eth1 is already wired into the switch. `host` is dropped
-/// here (the switch owns its dup); a missing ACK fails closed.
+/// boot the VM knowing eth1 is already wired into the switch. Keep `host` until
+/// that ACK confirms receiver ownership; a missing ACK fails closed.
 fn pass_and_ack(
-    mut stream: UnixStream,
+    stream: UnixStream,
     host: UnixDatagram,
     meta: &[u8],
     guest: UnixDatagram,
 ) -> io::Result<OwnedFd> {
+    pass_and_ack_observed(stream, host, meta, guest, || {})
+}
+
+fn pass_and_ack_observed(
+    mut stream: UnixStream,
+    host: UnixDatagram,
+    meta: &[u8],
+    guest: UnixDatagram,
+    before_ack: impl FnOnce(),
+) -> io::Result<OwnedFd> {
     use std::io::Read;
-    send_fd(&stream, host.as_raw_fd(), meta)?;
-    drop(host); // the switch owns its own dup now
+    // Configure before sending: the peer may ACK and close immediately. Darwin
+    // rejects socket-option changes after close even while the ACK is buffered.
     stream.set_read_timeout(Some(BIRTH_CONNECT_TIMEOUT))?;
+    send_fd(&stream, host.as_raw_fd(), meta)?;
+    before_ack();
     let mut ack = [0u8; 1];
     stream.read_exact(&mut ack)?;
     if ack[0] != ATTACH_ACK {
@@ -210,6 +222,8 @@ fn pass_and_ack(
             "switch host returned a bad attach ack",
         ));
     }
+    // Keep the sender's endpoint alive until receiver ownership is acknowledged.
+    drop(host);
     Ok(OwnedFd::from(guest))
 }
 
@@ -283,6 +297,14 @@ pub fn detach(home: &Path, network_id: &str, name: &str) -> io::Result<()> {
 /// stopped cleanly (socket + threads reclaimed). A consumer's binary entry
 /// dispatches here on [`SWITCH_HOST_ARGV`].
 pub fn run_switch_host(home: &Path, network_id: &str) -> io::Result<()> {
+    run_switch_host_observed(home, network_id, || {})
+}
+
+fn run_switch_host_observed(
+    home: &Path,
+    network_id: &str,
+    listener_ready: impl FnOnce(),
+) -> io::Result<()> {
     let id = network_id.to_string();
     let reg = NetworkRegistry::open(home, &id)?;
     let switch = Arc::new(VSwitch::start(&id, reg.subnet())?);
@@ -298,6 +320,7 @@ pub fn run_switch_host(home: &Path, network_id: &str) -> io::Result<()> {
     let accept = std::thread::Builder::new()
         .name(format!("vswitch-accept-{id}"))
         .spawn(move || accept_loop(&listener, &acc_switch, &acc_stop))?;
+    listener_ready();
 
     // Refcount self-watch: poll members.json (under the registry lock). The
     // switch is born BEFORE the first member's attach completes, so wait for the

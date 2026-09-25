@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "contract": "S3 named-volume lifecycle v1",
+  "nonce_a": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "nonce_b": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "fixtures": [
+    {
+      "id": "normal-teardown",
+      "processes": 2,
+      "initial": {"volume_exists": true, "owners": []},
+      "trace": [
+        {"event":"lock.acquire","actor":"coordinator"},
+        {"event":"owner.pending","nonce":"nonce_a","coordinator":{"pid":100,"start_token":"linux:100:10"}},
+        {"event":"write.tmp","owners":["pending:nonce_a"]},
+        {"event":"sync_all.tmp"},
+        {"event":"rename.owners"},
+        {"event":"fsync.parent"},
+        {"event":"barrier.spawn","run_id":"run-a"},
+        {"event":"owner.active","nonce":"nonce_a","run_id":"run-a","process":{"pid":200,"start_token":"linux:200:20"},"mount_id":"mount-a"},
+        {"event":"write.tmp","owners":["active:nonce_a"]},
+        {"event":"sync_all.tmp"},
+        {"event":"rename.owners"},
+        {"event":"fsync.parent"},
+        {"event":"registry.active","run_id":"run-a","nonce":"nonce_a","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a"},
+        {"event":"registry.sync","run_id":"run-a"},
+        {"event":"barrier.release","run_id":"run-a"},
+        {"event":"registry.terminal","run_id":"run-a","nonce":"nonce_a"},
+        {"event":"registry.sync","run_id":"run-a"},
+        {"event":"owner.remove","nonce":"nonce_a","run_id":"run-a","process_start_token":"linux:200:20"},
+        {"event":"write.tmp","owners":[]},
+        {"event":"sync_all.tmp"},
+        {"event":"rename.owners"},
+        {"event":"fsync.parent"},
+        {"event":"lock.release","actor":"coordinator"}
+      ]
+    },
+    {
+      "id": "shared-mounts",
+      "processes": 3,
+      "initial": {"volume_exists": true, "owners": [{"phase":"active","nonce":"nonce_a","run_id":"run-a","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a"}, {"phase":"active","nonce":"nonce_b","run_id":"run-b","pid":201,"process_start_token":"linux:201:21","mount_id":"mount-b"}]},
+      "trace": [
+        {"event":"owner.active","nonce":"nonce_a","run_id":"run-a","process":{"pid":200,"start_token":"linux:200:20"},"mount_id":"mount-a"},
+        {"event":"registry.active","run_id":"run-a","nonce":"nonce_a","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a"},
+        {"event":"registry.terminal","run_id":"run-a","nonce":"nonce_a"},
+        {"event":"registry.sync","run_id":"run-a"},
+        {"event":"owner.remove","nonce":"nonce_a","run_id":"run-a","process_start_token":"linux:200:20"},
+        {"event":"owner.active","nonce":"nonce_b","run_id":"run-b","process":{"pid":201,"start_token":"linux:201:21"},"mount_id":"mount-b"},
+        {"event":"registry.active","run_id":"run-b","nonce":"nonce_b","pid":201,"process_start_token":"linux:201:21","mount_id":"mount-b"},
+        {"event":"registry.terminal","run_id":"run-b","nonce":"nonce_b"},
+        {"event":"registry.sync","run_id":"run-b"},
+        {"event":"owner.remove","nonce":"nonce_b","run_id":"run-b","process_start_token":"linux:201:21"}
+      ]
+    },
+    {
+      "id": "failed-spawn",
+      "processes": 1,
+      "initial": {"volume_exists": true, "owners": []},
+      "trace": [
+        {"event":"lock.acquire","actor":"coordinator"},
+        {"event":"owner.pending","nonce":"nonce_a","coordinator":{"pid":100,"start_token":"linux:100:10"}},
+        {"event":"write.tmp","owners":["pending:nonce_a"]},
+        {"event":"sync_all.tmp"},
+        {"event":"rename.owners"},
+        {"event":"fsync.parent"},
+        {"event":"pending.remove","nonce":"nonce_a"},
+        {"event":"lock.release","actor":"coordinator"}
+      ]
+    },
+    {
+      "id": "terminal-registry-positive-death-proof",
+      "processes": 2,
+      "initial": {"volume_exists": true, "owners": [{"phase":"active","nonce":"nonce_a","run_id":"run-a","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a"}], "registries": [{"run_id":"run-a","nonce":"nonce_a","phase":"active","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a","terminal_status":"exited"}]},
+      "trace": [
+        {"event":"lock.acquire","actor":"recovery"},
+        {"event":"registry.observe","run_id":"run-a","nonce":"nonce_a","result":"terminal"},
+        {"event":"recover.active","nonce":"nonce_a","run_id":"run-a","process_start_token":"linux:200:20"},
+        {"event":"write.tmp","owners":[]},
+        {"event":"sync_all.tmp"},
+        {"event":"rename.owners"},
+        {"event":"fsync.parent"},
+        {"event":"lock.release","actor":"recovery"}
+      ]
+    },
+    {
+      "id": "pid-reused-token-positive-death-proof",
+      "processes": 2,
+      "initial": {"volume_exists": true, "owners": [{"phase":"active","nonce":"nonce_a","run_id":"run-a","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a"}], "registries": [{"run_id":"run-a","nonce":"nonce_a","phase":"active","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a","terminal_status":null}]},
+      "trace": [
+        {"event":"lock.acquire","actor":"recovery"},
+        {"event":"registry.observe","run_id":"run-a","nonce":"nonce_a","result":"readable"},
+        {"event":"process.observe","pid":200,"token":"linux:200:99","result":"mismatch"},
+        {"event":"recover.active","nonce":"nonce_a","run_id":"run-a","process_start_token":"linux:200:20"},
+        {"event":"write.tmp","owners":[]},
+        {"event":"sync_all.tmp"},
+        {"event":"rename.owners"},
+        {"event":"fsync.parent"},
+        {"event":"lock.release","actor":"recovery"}
+      ]
+    },
+    {
+      "id": "ambiguous-registry-refuses-rm-prune",
+      "processes": 2,
+      "initial": {"volume_exists": true, "owners": ["active:nonce_a"]},
+      "trace": [
+        {"event":"lock.acquire","actor":"rm"},
+        {"event":"registry.observe","run_id":"run-a","nonce":"nonce_a","result":"unreadable"},
+        {"event":"rm","actor":"rm"},
+        {"event":"lock.release","actor":"rm"},
+        {"event":"lock.acquire","actor":"prune"},
+        {"event":"registry.observe","run_id":"run-a","nonce":"nonce_a","result":"unreadable"},
+        {"event":"prune","actor":"prune"},
+        {"event":"lock.release","actor":"prune"}
+      ]
+    },
+    {
+      "id": "concurrent-rm-prune-refuse-active",
+      "processes": 3,
+      "initial": {"volume_exists": true, "owners": ["active:nonce_a"]},
+      "trace": [
+        {"event":"lock.acquire","actor":"rm"},
+        {"event":"rm","actor":"rm"},
+        {"event":"lock.release","actor":"rm"},
+        {"event":"lock.acquire","actor":"prune"},
+        {"event":"prune","actor":"prune"},
+        {"event":"lock.release","actor":"prune"}
+      ]
+    },
+    {
+      "id": "lock-loss-refuses-without-deletion",
+      "processes": 2,
+      "initial": {"volume_exists": true, "owners": ["active:nonce_a"]},
+      "trace": [{"event":"lock.acquire","actor":"rm"}, {"event":"lock.loss","actor":"rm"}, {"event":"fault","point":"lock.loss","operation":"rm"}]
+    },
+    {
+      "id": "sync-all-failure-refuses-without-deletion",
+      "processes": 2,
+      "initial": {"volume_exists": true, "owners": [{"phase":"active","nonce":"nonce_a","run_id":"run-a","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a"}], "registries": [{"run_id":"run-a","nonce":"nonce_a","phase":"active","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a","terminal_status":"exited"}]},
+      "trace": [{"event":"lock.acquire","actor":"rm"}, {"event":"registry.observe","run_id":"run-a","nonce":"nonce_a","result":"terminal"}, {"event":"recover.active","nonce":"nonce_a","run_id":"run-a","process_start_token":"linux:200:20"}, {"event":"write.tmp","owners":[]}, {"event":"sync_all.tmp"}, {"event":"fault","point":"sync_all.tmp","operation":"rm"}]
+    },
+    {
+      "id": "rename-failure-refuses-without-deletion",
+      "processes": 2,
+      "initial": {"volume_exists": true, "owners": [{"phase":"active","nonce":"nonce_a","run_id":"run-a","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a"}], "registries": [{"run_id":"run-a","nonce":"nonce_a","phase":"active","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a","terminal_status":"exited"}]},
+      "trace": [{"event":"lock.acquire","actor":"prune"}, {"event":"registry.observe","run_id":"run-a","nonce":"nonce_a","result":"terminal"}, {"event":"recover.active","nonce":"nonce_a","run_id":"run-a","process_start_token":"linux:200:20"}, {"event":"write.tmp","owners":[]}, {"event":"sync_all.tmp"}, {"event":"rename.owners"}, {"event":"fault","point":"rename.owners","operation":"prune"}]
+    },
+    {
+      "id": "parent-fsync-failure-refuses-without-deletion",
+      "processes": 2,
+      "initial": {"volume_exists": true, "owners": [{"phase":"active","nonce":"nonce_a","run_id":"run-a","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a"}], "registries": [{"run_id":"run-a","nonce":"nonce_a","phase":"active","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a","terminal_status":"exited"}]},
+      "trace": [{"event":"lock.acquire","actor":"rm"}, {"event":"registry.observe","run_id":"run-a","nonce":"nonce_a","result":"terminal"}, {"event":"recover.active","nonce":"nonce_a","run_id":"run-a","process_start_token":"linux:200:20"}, {"event":"write.tmp","owners":[]}, {"event":"sync_all.tmp"}, {"event":"rename.owners"}, {"event":"fsync.parent"}, {"event":"fault","point":"fsync.parent","operation":"rm"}]
+    },
+    {
+      "id": "barrier-failure-refuses-without-deletion",
+      "processes": 2,
+      "initial": {"volume_exists": true, "owners": []},
+      "trace": [{"event":"lock.acquire","actor":"coordinator"}, {"event":"owner.pending","nonce":"nonce_a","coordinator":{"pid":100,"start_token":"linux:100:10"}}, {"event":"write.tmp","owners":["pending:nonce_a"]}, {"event":"sync_all.tmp"}, {"event":"rename.owners"}, {"event":"fsync.parent"}, {"event":"barrier.spawn","run_id":"run-a"}, {"event":"owner.active","nonce":"nonce_a","run_id":"run-a","process":{"pid":200,"start_token":"linux:200:20"},"mount_id":"mount-a"}, {"event":"write.tmp","owners":["active:nonce_a"]}, {"event":"sync_all.tmp"}, {"event":"rename.owners"}, {"event":"fsync.parent"}, {"event":"registry.active","run_id":"run-a","nonce":"nonce_a","pid":200,"process_start_token":"linux:200:20","mount_id":"mount-a"}, {"event":"registry.sync","run_id":"run-a"}, {"event":"barrier.release","run_id":"run-a"}, {"event":"fault","point":"barrier.release","operation":"acquire"}]
+    }
+  ]
+}

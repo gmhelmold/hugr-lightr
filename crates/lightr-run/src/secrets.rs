@@ -200,3 +200,51 @@ fn apply_mode_recursive(path: &Path, mode: u32) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn secret_and_config_names_cannot_escape_run_dir() {
+        assert!(validate_file_name("token").is_ok());
+        assert!(validate_file_name("nested/token").is_ok());
+        assert!(validate_file_name("").is_err());
+        assert!(validate_file_name("../token").is_err());
+        assert!(validate_file_name("nested/../../token").is_err());
+        assert!(validate_file_name("/token").is_err());
+    }
+
+    #[test]
+    fn missing_secret_or_config_ref_aborts_hydration() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = Store::open(tmp.path().join("store")).unwrap();
+        let missing = || StoreFile {
+            name: "token".to_string(),
+            ref_name: "missing".to_string(),
+        };
+        assert!(hydrate(tmp.path(), &store, &[missing()], &[]).is_err());
+        assert!(hydrate(tmp.path(), &store, &[], &[missing()]).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn secret_and_config_modes_are_exact() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let secret = tmp.path().join("secret");
+        let config = tmp.path().join("config");
+        std::fs::write(&secret, b"secret").unwrap();
+        std::fs::write(&config, b"config").unwrap();
+        apply_mode_recursive(&secret, 0o600).unwrap();
+        apply_mode_recursive(&config, 0o644).unwrap();
+        assert_eq!(
+            std::fs::metadata(secret).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(
+            std::fs::metadata(config).unwrap().permissions().mode() & 0o777,
+            0o644
+        );
+    }
+}

@@ -178,6 +178,10 @@ struct NsEngineStub;
 
 #[cfg(not(target_os = "linux"))]
 impl Engine for NsEngineStub {
+    fn kind(&self) -> super::super::EngineKind {
+        super::super::EngineKind::Ns
+    }
+
     fn run(&self, _spec: &ExecSpec) -> Result<i32> {
         Err(LightrError::InvalidRef(
             "ns engine requires Linux".to_string(),

@@ -5,12 +5,14 @@
 //! parsed inputs each branch needs; all behaviour is identical to the inlined
 //! code (same branch conditions, same order, same exit codes).
 
-use lightr_core::ResourceLimits;
+use lightr_core::{LightrError, ResourceLimits, Result};
 use lightr_engine::{engine_for, EngineKind, ExecSpec, TmpfsMount, Ulimit};
 use lightr_index;
 use lightr_store::Store;
 
 use crate::exit::die_lightr;
+
+const IMAGE_CONFIG_FILE: &str = ".lightr-image.json";
 
 // The vz-memo path helper lives in `paths_vz.rs`, pulled in as a child module
 // via `#[path]` to keep this file under the 400-line godfile cap, and re-exported
@@ -121,12 +123,11 @@ pub(super) fn run_engine(
         rootfs_path = None;
     }
 
-    // Load the hydrated image's config sidecar (WP-DF-IMGCFG). Absent (no rootfs,
-    // or an image without the sidecar) ⇒ the DEFAULT config, so the argv/cwd below
-    // are byte-identical to the pre-WP behaviour (no entrypoint, cmd == command).
-    let cfg = match &rootfs_path {
-        Some(p) => lightr_build::ImageConfig::load(p),
-        None => lightr_build::ImageConfig::default(),
+    // Build sidecars express Lightr image semantics and therefore win. OCI-only
+    // images fall back to their retained config, which must parse or fail closed.
+    let cfg = match load_image_config(rootfs_path.as_deref(), rootfs_ref, store) {
+        Ok(cfg) => cfg,
+        Err(e) => return die_lightr(&e),
     };
 
     // ENTRYPOINT + CMD: prepend the image entrypoint; a non-empty CLI `command`
@@ -149,24 +150,84 @@ pub(super) fn run_engine(
     // `None` everywhere ⇒ the engine runs as the current user (behavior-preserving).
     let eff_user = user.or(cfg.user.as_deref());
 
-    let engine = match engine_for(engine_kind) {
-        Ok(e) => e,
-        Err(e) => return die_lightr(&e),
-    };
-
-    let spec = ExecSpec {
-        cwd: &run_cwd,
-        command: &argv,
-        rootfs: rootfs_path.as_deref(),
+    let spec = build_exec_spec(
+        &run_cwd,
+        &argv,
+        rootfs_path.as_deref(),
         limits,
-        net: false,   // synchronous CLI engine path; networked vz is detached (supervisor)
-        net_isolate,  // WP-NET-ISO: `--net=none` ⇒ ns engine creates a netns (loopback only)
+        net_isolate,
+        &env,
+        eff_user,
+        add_host,
+        read_only,
+        shm_size,
+        cap_drop,
+        cap_add,
+        init,
+        apparmor,
+        seccomp,
+        tmpfs,
+        ulimits,
+        oom_score_adj,
+    );
+
+    let code = run_engine_with(&spec, |spec| match engine_for(engine_kind) {
+        Ok(engine) => match engine.run(spec) {
+            Ok(code) => code,
+            Err(error) => die_lightr(&error),
+        },
+        Err(error) => die_lightr(&error),
+    });
+
+    // Keep temp dir alive until after engine.run completes
+    drop(rootfs_tmp);
+
+    code
+}
+
+/// Single execution boundary for the hydrated CLI path. Tests supply a capture
+/// executor; production preserves the existing engine error mapping above.
+pub(super) fn run_engine_with<F>(spec: &ExecSpec<'_>, execute: F) -> i32
+where
+    F: FnOnce(&ExecSpec<'_>) -> i32,
+{
+    execute(spec)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn build_exec_spec<'a>(
+    cwd: &'a std::path::Path,
+    command: &'a [String],
+    rootfs: Option<&'a std::path::Path>,
+    limits: ResourceLimits,
+    net_isolate: bool,
+    env: &'a [(String, String)],
+    user: Option<&'a str>,
+    add_host: &'a [(String, String)],
+    read_only: bool,
+    shm_size: Option<u64>,
+    cap_drop: &'a [String],
+    cap_add: &'a [String],
+    init: bool,
+    apparmor: Option<&'a str>,
+    seccomp: Option<&'a str>,
+    tmpfs: &'a [TmpfsMount],
+    ulimits: &'a [Ulimit],
+    oom_score_adj: Option<i32>,
+) -> ExecSpec<'a> {
+    ExecSpec {
+        cwd,
+        command,
+        rootfs,
+        limits,
+        net: false, // synchronous CLI engine path; networked vz is detached (supervisor)
+        net_isolate,
         net_fd: None, // mesh NIC is wired by the supervisor path (ADR-0018), not here
         net_mac: None,
         mounts: &[],
-        env: &env,
+        env,
         workdir: None,
-        user: eff_user,
+        user,
         hostname: None,
         // `--add-host`: the ns engine appends `(ip, hostname)` lines to the
         // container's /etc/hosts before pivot. Empty ⇒ unchanged.
@@ -218,17 +279,82 @@ pub(super) fn run_engine(
         // native ignores this field (it applies oom-score-adj via apply_cfg on the
         // memo path — no double-apply); vz's OOM tuning lives in the guest.
         oom_score_adj,
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct OciImageConfig {
+    #[serde(default)]
+    config: OciRuntimeConfig,
+}
+
+#[derive(Default, serde::Deserialize)]
+struct OciRuntimeConfig {
+    #[serde(rename = "Entrypoint")]
+    entrypoint: Option<Vec<String>>,
+    #[serde(rename = "Cmd")]
+    cmd: Option<Vec<String>>,
+    #[serde(rename = "Env", default)]
+    env: Vec<String>,
+    #[serde(rename = "WorkingDir", default)]
+    workdir: String,
+    #[serde(rename = "User", default)]
+    user: String,
+}
+
+fn load_image_config(
+    rootfs: Option<&std::path::Path>,
+    ref_name: Option<&str>,
+    store: &Store,
+) -> Result<lightr_build::ImageConfig> {
+    let Some(rootfs) = rootfs else {
+        return Ok(lightr_build::ImageConfig::default());
     };
 
-    let code = match engine.run(&spec) {
-        Ok(c) => c,
-        Err(e) => return die_lightr(&e),
+    if rootfs
+        .join(IMAGE_CONFIG_FILE)
+        .try_exists()
+        .map_err(LightrError::Io)?
+    {
+        return Ok(lightr_build::ImageConfig::load(rootfs));
+    }
+
+    let Some(ref_name) = ref_name else {
+        return Ok(lightr_build::ImageConfig::default());
     };
+    match store.image_config_get(ref_name)? {
+        Some(bytes) => image_config_from_oci(&bytes),
+        None => Ok(lightr_build::ImageConfig::default()),
+    }
+}
 
-    // Keep temp dir alive until after engine.run completes
-    drop(rootfs_tmp);
+fn image_config_from_oci(bytes: &[u8]) -> Result<lightr_build::ImageConfig> {
+    let oci: OciImageConfig = serde_json::from_slice(bytes)
+        .map_err(|e| LightrError::InvalidManifest(format!("OCI image config parse: {e}")))?;
+    let env = oci
+        .config
+        .env
+        .into_iter()
+        .map(|entry| {
+            entry.split_once('=').map_or_else(
+                || {
+                    Err(LightrError::InvalidManifest(format!(
+                        "OCI image config Env entry lacks '=': {entry:?}"
+                    )))
+                },
+                |(key, value)| Ok((key.to_owned(), value.to_owned())),
+            )
+        })
+        .collect::<Result<Vec<_>>>()?;
 
-    code
+    Ok(lightr_build::ImageConfig {
+        entrypoint: oci.config.entrypoint,
+        cmd: oci.config.cmd,
+        env,
+        workdir: (!oci.config.workdir.is_empty()).then_some(oci.config.workdir),
+        user: (!oci.config.user.is_empty()).then_some(oci.config.user),
+        ..Default::default()
+    })
 }
 
 // `resolve_run_cwd` + `merge_image_env` (the pure `--rootfs` engine-path helpers)

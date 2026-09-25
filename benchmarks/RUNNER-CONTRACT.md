@@ -11,6 +11,9 @@ bench-runner verify-spec --spec PATH
 bench-runner run --spec PATH --chunk N --chunks N --rounds N --out DIR \
   --docker PATH --lightr PATH
 bench-runner merge --input DIR --out DIR
+bench-runner run-differential --spec PATH --chunk N --chunks N --rounds N --out DIR \
+  --docker PATH --lightr PATH --mode cold|warm|invalidate
+bench-runner merge-differential --input DIR --out DIR
 ```
 
 `verify-spec` rejects malformed YAML, non-250 corpus, duplicate IDs, unknown
@@ -88,9 +91,58 @@ version.
 `(scenario_id, tool, round)` tuples, writes `merged.jsonl` plus `summary.json`.
 It reports counts only; no derived statistical claim.
 
+## S2 Differential JSONL
+
+`run-differential` emits schema v2 only. It accepts `cold`, `warm`, and
+`invalidate`; every other mode fails with a stable explicit diagnostic. Before
+writing any v2 row, Docker client and server must both equal `28.3.2`; failures
+name observed values. Each v2 row retains every v1 field and adds non-empty
+`mode`, `hardware_identity` (OS-native probe, no fallback), `pair_id`, and
+`output_equivalence_sha256`, `equivalence_status`, mode precondition receipt
+(`cold_precondition`), `original_fixture_tree_sha256`, `mutation_sha256`, and
+`mutation_receipt`.
+Equivalence digest hashes only ordered shared `docker_and_lightr` assertion
+kind, declared expected value, and normalized passing result; command streams
+never enter it. No shared assertion produces `no_shared_assertions` and no
+factor. Cold accepts only `$DOCKER build --tag SAFE_TAG $FIXTURE_DIR`; runner
+constructs separate `$DOCKER build --no-cache --tag SAFE_TAG $FIXTURE_DIR`
+command and audit receipt. Before each cold pair, it removes only declared
+Docker build tag, verifies it absent, and clears/verifies private
+`LIGHTR_HOME`; unsupported Docker command shapes reject cold before recording.
+
+Warm accepts same strict Docker build grammar. Per scenario/round, runner runs
+untimed Docker and Lightr setup, verifies Docker image exists and private
+`LIGHTR_HOME` exists, then runs both timed commands using that exact state.
+Lightr setup and timed sample share one home; runner never creates a fresh home
+between them. Receipt is `docker_image_present:TAG;lightr_home_preserved`.
+
+Invalidate starts from verified warm setup. Runner accepts only fixture
+`Dockerfile` with `COPY data.txt ...`, declared Lightr command containing
+`$FIXTURE_DIR`, and existing local `data.txt`; other inputs fail explicit
+`invalidate unsupported`. Runner copies materialized fixture context, mutates
+copied `data.txt`, verifies source tree unchanged and copied tree differs, then
+runs both timed commands against copied context. Receipt names `data.txt` and
+old/new SHA-256 values, never source bytes. Both rows record mutated and
+original tree SHA-256 plus mutation receipt. Warm/invalidate reject non-strict
+Docker command grammar before timed command.
+
+`merge` accepts v1 only. `merge-differential` accepts v2 only and rejects v1,
+mixed/malformed rows, empty required fields, duplicate `(pair_id, tool)` tuples,
+and empty evidence. Every pair is exactly one Docker and one Lightr row with
+same mode, fixture identity, original fixture, mutation receipt, hardware, and
+mode precondition. Factors, medians, and ranges include only successful
+comparable pairs with equal output-equivalence digests and Docker 28.3.2.
+Invalidate compares mutated shared fixture identity. Other pairs get typed
+no-factor reasons; summary makes no target claim.
+
 ## Tests
 
 Unit tests must prove duplicate-ID rejection, source-order chunk partition,
 invalid chunk args, missing local fixture commit, failed command, timeout,
 typed skip, and duplicate raw tuple rejection. Mutation probe: remove
 duplicate-ID validation; duplicate-ID test must fail before restore.
+S2 tests prove warm setup preserves Docker image and Lightr home through timed
+sample, invalidate mutates copied `data.txt` while source stays unchanged, old
+marker paths fail gate, and mutation evidence mismatch emits no factor. Mutation
+probe: remove copied `data.txt` mutation; invalidate fixture test fails before
+restore.

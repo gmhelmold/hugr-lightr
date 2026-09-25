@@ -48,15 +48,15 @@ fn host_bind_ro_sets_readonly() {
 }
 
 #[test]
-fn named_volume_is_phase2_error() {
-    // A bare name (no path separator) parses as a NamedVolume → honest exit 2.
-    let err = RawRunFlags {
+fn named_volume_lowers_for_runtime() {
+    let flags = RawRunFlags {
         volume: vec!["myvol:data".to_string()],
         ..raw()
     }
     .resolve()
-    .unwrap_err();
-    assert_eq!(err, 2, "named volumes are Phase 2 → exit 2");
+    .unwrap();
+    assert_eq!(flags.named_volumes.len(), 1);
+    assert_eq!(flags.named_volumes[0].name, "myvol");
 }
 
 #[test]

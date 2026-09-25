@@ -31,7 +31,7 @@ mod flags;
 mod helpers;
 mod parse;
 mod paths;
-mod policy;
+pub(crate) mod policy;
 mod runflags;
 
 // Value parsers (`--tmpfs`/`--ulimit`/`size=`) split to `parse.rs` (godfile cap).
@@ -124,6 +124,14 @@ pub fn run(
         Ok(f) => f,
         Err(code) => return code,
     };
+    if let Some(code) = policy::named_volume_policy(&runflags, restart) {
+        return code;
+    }
+    if !runflags.named_volumes.is_empty() {
+        if let Err(error) = lightr_store::volume::owner_runtime_supported() {
+            return die_lightr(&error);
+        }
+    }
     // WP-RUNFLAGS: `--name`/`--rm` are detached-only (they need a run dir the
     // detached path creates) — honest exit 2 without `-d` (see policy fn).
     if let Some(code) = policy::detached_only_flags_policy(&runflags, detach) {

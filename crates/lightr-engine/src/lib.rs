@@ -18,7 +18,8 @@ pub use lightr_init::GUEST_PATH;
 
 pub use engine::{
     engine_for, pack_status, probe, BindMount, Engine, EngineCaps, EngineKind, ExecSpec, MountKind,
-    NativeEngine, ResolvedMount, TmpfsMount, Ulimit,
+    NativeEngine, ResolvedMount, ResumedInstance, SuspendResume, SuspendedArtifact, TmpfsMount,
+    Ulimit,
 };
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

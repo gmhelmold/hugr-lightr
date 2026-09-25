@@ -1,0 +1,65 @@
+name: SI00 integration gates
+on:
+  pull_request:
+    branches: [fix/snapshot-integrity]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: si00-integration-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  workspace-gates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_TERM_COLOR: never
+      RUST_BACKTRACE: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Install pinned compiler and test prerequisites
+        run: |
+          rustup toolchain install 1.96.0 --profile minimal --component rustfmt,clippy
+          sudo apt-get update
+          sudo apt-get install -y iproute2 iptables libcap-dev pkg-config libssl-dev clang lld
+      - name: Preserve candidate identity and source
+        run: |
+          mkdir si00-integration
+          git rev-parse HEAD > si00-integration/checkout.txt
+          git rev-parse HEAD^{tree} > si00-integration/tree.txt
+          git archive --format=zip --output=si00-integration/source.zip HEAD
+      - name: Required formatting gate
+        id: fmt
+        run: |
+          set -o pipefail
+          cargo +1.96.0 fmt --all -- --check 2>&1 | tee si00-integration/fmt.log
+      - name: Retain formatter suggestion on failure without qualifying altered code
+        if: ${{ failure() && steps.fmt.outcome == 'failure' }}
+        run: |
+          cargo +1.96.0 fmt --all
+          git diff > si00-integration/rustfmt.patch
+      - name: Build full workspace for acceptance executables
+        run: |
+          set -o pipefail
+          cargo +1.96.0 build --locked --workspace 2>&1 | tee si00-integration/build.log
+      - name: Full workspace tests (no new skips)
+        run: |
+          set -o pipefail
+          cargo +1.96.0 test --locked --workspace 2>&1 | tee si00-integration/tests.log
+      - name: Full all-targets clippy (deny warnings)
+        run: |
+          set -o pipefail
+          cargo +1.96.0 clippy --locked --workspace --all-targets -- -D warnings 2>&1 | tee si00-integration/clippy.log
+      - name: Real compiled negative controls in an isolated copy
+        run: python3 scripts/si00/legacy_negative_controls.py --out si00-integration/negative-controls
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: si00-integration-${{ github.sha }}
+          path: si00-integration/
+          if-no-files-found: error
+          retention-days: 30

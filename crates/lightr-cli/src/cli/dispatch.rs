@@ -66,14 +66,7 @@ pub(crate) fn dispatch(json: bool, explain: bool, events: bool, verb: &str, cmd:
             // behaves exactly as before (behavior-preserving).
             {
                 // WP-RC-4: bundle the wired --health-* flags.
-                let health = handlers::run::HealthFlags {
-                    cmd: a.health_cmd,
-                    interval: a.health_interval,
-                    timeout: a.health_timeout,
-                    start_period: a.health_start_period,
-                    retries: a.health_retries,
-                    no_healthcheck: a.no_healthcheck,
-                };
+                let health = handlers::run::HealthFlags::from(&a);
                 handlers::run::run(
                     &a.dir,
                     &a.input,
@@ -119,39 +112,11 @@ pub(crate) fn dispatch(json: bool, explain: bool, events: bool, verb: &str, cmd:
                     // resolves `--label` (KEY=VAL) + `--shm-size` (size)
                     // fail-closed, then honors each via the apply seam (or records
                     // an honest note).
-                    handlers::run::RawRcFlags {
-                        hostname: a.hostname,
-                        label: a.label,
-                        cap_add: a.cap_add,
-                        cap_drop: a.cap_drop,
-                        privileged: a.privileged,
-                        tty: a.tty,
-                        init: a.init,
-                        read_only: a.read_only,
-                        oom_score_adj: a.oom_score_adj,
-                        pids_limit: a.pids_limit,
-                        shm_size: a.shm_size,
-                        // WP-#106: `--apparmor <profile>` → ns-engine aa_change_onexec.
-                        apparmor: a.apparmor,
-                        // WP-#108: `--seccomp <path>` → ns-engine cBPF filter install.
-                        seccomp: a.seccomp,
-                    },
+                    handlers::run::RawRcFlags::from(&a),
                     // WP-RUNFLAGS: `-v`/`--tmpfs`/`--name`/`--rm`/`--entrypoint` +
                     // the honest Phase-2 networking flags → resolved in the handler
                     // into RunSpec carry-fields (RUNTIME-ONLY, never keyed).
-                    handlers::run::RawRunFlags {
-                        volume: a.volume,
-                        tmpfs: a.tmpfs,
-                        // --ulimit: parsed in the handler (parse_ulimits), like tmpfs.
-                        ulimit: a.ulimit,
-                        name: a.name,
-                        rm: a.rm,
-                        entrypoint: a.entrypoint,
-                        network: a.network,
-                        network_alias: a.network_alias,
-                        add_host: a.add_host,
-                        dns: a.dns,
-                    },
+                    handlers::run::RawRunFlags::from(&a),
                 )
             }
         }

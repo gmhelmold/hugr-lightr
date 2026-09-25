@@ -136,6 +136,11 @@ pub fn run(a: RunArgs, json: bool) -> i32 {
         Ok(f) => f,
         Err(code) => return code,
     };
+    if let Some(code) =
+        crate::handlers::run::policy::named_volume_policy(&runflags, a.restart.as_deref())
+    {
+        return code;
+    }
 
     // The native engine shares the host network — the vz networking flags have no
     // per-container netns to apply to. Mirror `run`'s honest exit 2 (never silent).
@@ -202,6 +207,7 @@ pub fn run(a: RunArgs, json: bool) -> i32 {
         pids_limit: rc.pids_limit,
         shm_size: rc.shm_size,
         volumes: runflags.volumes,
+        named_volumes: runflags.named_volumes,
         tmpfs: runflags.tmpfs,
         entrypoint: runflags.entrypoint,
         name: runflags.name.clone(),

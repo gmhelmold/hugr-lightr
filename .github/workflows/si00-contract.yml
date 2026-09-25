@@ -1,0 +1,42 @@
+name: SI00 contract evidence
+on:
+  pull_request:
+    branches: [fix/snapshot-integrity]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: si00-contract-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contract-vectors:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Preserve exact source
+        run: |
+          mkdir -p si00-contract
+          git rev-parse HEAD > si00-contract/checkout.txt
+          git rev-parse HEAD^{tree} > si00-contract/tree.txt
+          git archive --format=zip --output=si00-contract/source.zip HEAD
+      - name: Build test-only locked hash oracle
+        run: |
+          rustup toolchain install 1.96.0 --profile minimal
+          cargo +1.96.0 build --locked -p lightr-core --example si00_hash
+          cp target/debug/examples/si00_hash si00-contract/si00_hash
+          sha256sum si00-contract/si00_hash > si00-contract/hash-binary.sha256
+      - name: Verify immutable native-authored goldens without regeneration
+        run: |
+          python3 scripts/si00/schema_checks.py --hash-bin target/debug/examples/si00_hash --vectors docs/plans/snapshot-integrity/bootstrap/vectors/schema-vectors.json.gz --result si00-contract/schema-result.json
+          PYTHONPATH=scripts/si00 python3 -c "from goldens import golden_bytes; from pathlib import Path; Path('si00-contract/schema-vectors.json').write_bytes(golden_bytes(Path('docs/plans/snapshot-integrity/bootstrap/vectors/schema-vectors.json.gz')))"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: si00-contract-${{ github.sha }}
+          path: si00-contract/
+          if-no-files-found: error
+          retention-days: 30

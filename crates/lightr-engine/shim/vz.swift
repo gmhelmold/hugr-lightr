@@ -16,6 +16,60 @@
 import Foundation
 import Virtualization
 
+private let vzOk: Int32 = 0
+private let vzConfig: Int32 = -1
+private let vzUnsupported: Int32 = -2
+private let vzIo: Int32 = -3
+private let vzLifecycle: Int32 = -4
+private let vzInvalidState: Int32 = -5
+private let vzTimeout: Int32 = -6
+
+/// Opaque VM retained across start/pause/save/restore/resume calls. VZ callbacks
+/// run on this queue; C callers wait on `done`, never on VZ's queue.
+@available(macOS 14.0, *)
+private final class VzSession {
+    let vm: VZVirtualMachine
+    let queue: DispatchQueue
+    let done = DispatchSemaphore(value: 0)
+    var observation: NSKeyValueObservation?
+    var terminalStatus: Int32 = vzLifecycle
+
+    init(config: VZVirtualMachineConfiguration, queue: DispatchQueue) {
+        self.queue = queue
+        self.vm = VZVirtualMachine(configuration: config, queue: queue)
+        self.observation = vm.observe(\.state, options: [.new]) { session, _ in
+            switch session.state {
+            case .stopped:
+                self.terminalStatus = vzOk
+                self.done.signal()
+            case .error:
+                self.terminalStatus = vzLifecycle
+                self.done.signal()
+            default:
+                break
+            }
+        }
+    }
+}
+
+private let sessionLock = NSLock()
+private var sessions: [UInt64: VzSession] = [:]
+private var nextSessionHandle: UInt64 = 1
+
+@available(macOS 14.0, *)
+private func withSession(_ handle: UInt64, _ body: (VzSession) -> Int32) -> Int32 {
+    sessionLock.lock()
+    let session = sessions[handle]
+    sessionLock.unlock()
+    guard let session else { return vzInvalidState }
+    return body(session)
+}
+
+private func cString(_ pointer: UnsafePointer<CChar>?) -> String? {
+    guard let pointer else { return nil }
+    return String(cString: pointer)
+}
+
 /// Boot a Linux microVM, run the supplied command as the guest init, and
 /// report the VM's LIFECYCLE status.  Called from Rust via C ABI.
 ///
@@ -394,3 +448,233 @@ public func lightr_vz_run(
     _ = observation
     return result
 }
+
+// MARK: - Frozen retained-session C ABI
+
+/// Creates, validates, and retains a VM. No guest work starts here.
+@_cdecl("lightr_vz_session_create")
+public func lightr_vz_session_create(
+    kernel: UnsafePointer<CChar>, initrd: UnsafePointer<CChar>,
+    rootfs: UnsafePointer<CChar>, store: UnsafePointer<CChar>,
+    memoryMb: UInt64, cpuCount: UInt64, netFd: Int32,
+    netMac: UnsafePointer<CChar>?, consolePath: UnsafePointer<CChar>?,
+    outHandle: UnsafeMutablePointer<UInt64>?
+) -> Int32 {
+    #if !arch(arm64)
+    return vzUnsupported
+    #else
+    guard #available(macOS 14.0, *) else { return vzUnsupported }
+    guard let outHandle else { return vzConfig }
+    let kernelPath = String(cString: kernel)
+    let initrdPath = String(cString: initrd)
+    let rootfsPath = String(cString: rootfs)
+    let storePath = String(cString: store)
+    let wantsNet = !(ProcessInfo.processInfo.environment["LIGHTR_VZ_NET"] ?? "").isEmpty
+    let maxCPU = VZVirtualMachineConfiguration.maximumAllowedCPUCount
+    let minCPU = VZVirtualMachineConfiguration.minimumAllowedCPUCount
+    let resolvedCPU: Int
+    if cpuCount == 0 { resolvedCPU = max(minCPU, min(maxCPU, maxCPU / 4)) }
+    else if cpuCount > UInt64(maxCPU) || cpuCount < UInt64(minCPU) { return vzConfig }
+    else { resolvedCPU = Int(cpuCount) }
+    let minMem = VZVirtualMachineConfiguration.minimumAllowedMemorySize
+    let maxMem = VZVirtualMachineConfiguration.maximumAllowedMemorySize
+    let resolvedMemory: UInt64
+    if memoryMb == 0 { resolvedMemory = max(minMem, UInt64(256) * 1024 * 1024) }
+    else {
+        let requested = memoryMb.multipliedReportingOverflow(by: 1024 * 1024)
+        guard !requested.overflow, requested.partialValue >= minMem,
+              requested.partialValue <= maxMem else { return vzConfig }
+        resolvedMemory = requested.partialValue
+    }
+
+    let boot = VZLinuxBootLoader(kernelURL: URL(fileURLWithPath: kernelPath))
+    boot.initialRamdiskURL = URL(fileURLWithPath: initrdPath)
+    boot.commandLine = "console=hvc0"
+    let rootShare = VZSharedDirectory(url: URL(fileURLWithPath: rootfsPath), readOnly: false)
+    let rootDevice = VZVirtioFileSystemDeviceConfiguration(tag: "rootfs")
+    rootDevice.share = VZSingleDirectoryShare(directory: rootShare)
+    var shares: [VZDirectorySharingDeviceConfiguration] = [rootDevice]
+    if !storePath.isEmpty {
+        let storeShare = VZSharedDirectory(url: URL(fileURLWithPath: storePath), readOnly: true)
+        let storeDevice = VZVirtioFileSystemDeviceConfiguration(tag: "store")
+        storeDevice.share = VZSingleDirectoryShare(directory: storeShare)
+        shares.append(storeDevice)
+    }
+    let console = VZVirtioConsoleDeviceSerialPortConfiguration()
+    let output = cString(consolePath).flatMap { FileHandle(forWritingAtPath: $0) } ?? .standardOutput
+    console.attachment = VZFileHandleSerialPortAttachment(
+        fileHandleForReading: .standardInput, fileHandleForWriting: output)
+    var devices: [VZVirtioNetworkDeviceConfiguration] = []
+    if wantsNet {
+        let device = VZVirtioNetworkDeviceConfiguration()
+        device.attachment = VZNATNetworkDeviceAttachment()
+        if let mac = VZMACAddress(string: "0a:00:00:24:18:01") { device.macAddress = mac }
+        devices.append(device)
+        boot.commandLine = "console=hvc0 ip=dhcp"
+    }
+    if netFd >= 0 {
+        let fd = FileHandle(fileDescriptor: netFd, closeOnDealloc: false)
+        let device = VZVirtioNetworkDeviceConfiguration()
+        device.attachment = VZFileHandleNetworkDeviceAttachment(fileHandle: fd)
+        if let mac = cString(netMac).flatMap(VZMACAddress.init(string:)) { device.macAddress = mac }
+        devices.append(device)
+    }
+    let config = VZVirtualMachineConfiguration()
+    config.bootLoader = boot
+    config.cpuCount = resolvedCPU
+    config.memorySize = resolvedMemory
+    config.serialPorts = [console]
+    config.directorySharingDevices = shares
+    config.networkDevices = devices
+    do { try config.validate() } catch { return vzConfig }
+    let queue = DispatchQueue(label: "com.hugr.lightr.vz.session")
+    let session = VzSession(config: config, queue: queue)
+    sessionLock.lock()
+    let handle = nextSessionHandle
+    nextSessionHandle &+= 1
+    sessions[handle] = session
+    sessionLock.unlock()
+    outHandle.pointee = handle
+    return vzOk
+    #endif
+}
+
+@_cdecl("lightr_vz_session_start")
+public func lightr_vz_session_start(_ handle: UInt64) -> Int32 {
+    #if !arch(arm64)
+    return vzUnsupported
+    #else
+    guard #available(macOS 14.0, *) else { return vzUnsupported }
+    return withSession(handle) { (session: VzSession) -> Int32 in
+        guard session.vm.state == .stopped else { return vzInvalidState }
+        session.vm.start { result in if case .failure = result { session.terminalStatus = vzLifecycle; session.done.signal() } }
+        return vzOk
+    }
+    #endif
+}
+
+@_cdecl("lightr_vz_session_pause_save")
+public func lightr_vz_session_pause_save(_ handle: UInt64, _ statePath: UnsafePointer<CChar>) -> Int32 {
+    #if !arch(arm64)
+    return vzUnsupported
+    #else
+    guard #available(macOS 14.0, *) else { return vzUnsupported }
+    return withSession(handle) { session in
+        pauseAndSave(session, statePath: String(cString: statePath))
+    }
+    #endif
+}
+
+@_cdecl("lightr_vz_session_stop")
+public func lightr_vz_session_stop(_ handle: UInt64) -> Int32 {
+    #if !arch(arm64)
+    return vzUnsupported
+    #else
+    guard #available(macOS 14.0, *) else { return vzUnsupported }
+    return withSession(handle) { (session: VzSession) -> Int32 in
+        guard session.vm.canStop else { return vzInvalidState }
+        let done = DispatchSemaphore(value: 0)
+        session.vm.stop { _ in done.signal() }
+        return done.wait(timeout: .now() + 60) == .success ? vzOk : vzTimeout
+    }
+    #endif
+}
+
+@_cdecl("lightr_vz_session_restore")
+public func lightr_vz_session_restore(_ handle: UInt64, _ statePath: UnsafePointer<CChar>) -> Int32 {
+    #if !arch(arm64)
+    return vzUnsupported
+    #else
+    guard #available(macOS 14.0, *) else { return vzUnsupported }
+    return withSession(handle) { session in
+        restore(session, statePath: String(cString: statePath))
+    }
+    #endif
+}
+
+@_cdecl("lightr_vz_session_resume")
+public func lightr_vz_session_resume(_ handle: UInt64) -> Int32 {
+    #if !arch(arm64)
+    return vzUnsupported
+    #else
+    guard #available(macOS 14.0, *) else { return vzUnsupported }
+    return withSession(handle) { session in
+        resume(session)
+    }
+    #endif
+}
+
+@_cdecl("lightr_vz_session_destroy")
+public func lightr_vz_session_destroy(_ handle: UInt64) -> Int32 {
+    #if !arch(arm64)
+    return vzUnsupported
+    #else
+    guard #available(macOS 14.0, *) else { return vzUnsupported }
+    sessionLock.lock(); let session = sessions.removeValue(forKey: handle); sessionLock.unlock()
+    guard let session else { return vzInvalidState }
+    if session.vm.canStop { session.vm.stop { _ in } }
+    return vzOk
+    #endif
+}
+
+
+#if arch(arm64)
+@available(macOS 14.0, *)
+private func pauseAndSave(_ session: VzSession, statePath: String) -> Int32 {
+    guard session.vm.state == .running else { return vzInvalidState }
+    let done = DispatchSemaphore(value: 0)
+    var status = vzLifecycle
+    session.vm.pause(completionHandler: { (result: Result<Void, Error>) in
+        guard case .success = result else { done.signal(); return }
+        session.vm.saveMachineStateTo(url: URL(fileURLWithPath: statePath), completionHandler: { (error: Error?) in
+            status = error == nil ? vzOk : vzLifecycle
+            done.signal()
+        })
+    })
+    return done.wait(timeout: .now() + 60) == .success ? status : vzTimeout
+}
+
+@available(macOS 14.0, *)
+private func restore(_ session: VzSession, statePath: String) -> Int32 {
+    guard session.vm.state == .stopped else { return vzInvalidState }
+    let done = DispatchSemaphore(value: 0)
+    var status = vzLifecycle
+    session.vm.restoreMachineStateFrom(url: URL(fileURLWithPath: statePath), completionHandler: { (error: Error?) in
+        status = error == nil ? vzOk : vzIo
+        done.signal()
+    })
+    return done.wait(timeout: .now() + 60) == .success ? status : vzTimeout
+}
+
+@available(macOS 14.0, *)
+private func resume(_ session: VzSession) -> Int32 {
+    guard session.vm.state == .paused else { return vzInvalidState }
+    let done = DispatchSemaphore(value: 0)
+    var status = vzLifecycle
+    session.vm.resume { (result: Result<Void, Error>) in
+        switch result { case .success: status = vzOk; case .failure: status = vzLifecycle }
+        done.signal()
+    }
+    return done.wait(timeout: .now() + 60) == .success ? status : vzTimeout
+}
+#else
+@available(macOS 14.0, *)
+private func pauseAndSave(_ session: VzSession, statePath: String) -> Int32 {
+    _ = session
+    _ = statePath
+    return vzUnsupported
+}
+
+@available(macOS 14.0, *)
+private func restore(_ session: VzSession, statePath: String) -> Int32 {
+    _ = session
+    _ = statePath
+    return vzUnsupported
+}
+
+@available(macOS 14.0, *)
+private func resume(_ session: VzSession) -> Int32 {
+    _ = session
+    return vzUnsupported
+}
+#endif
