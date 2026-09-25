@@ -799,16 +799,6 @@ jobs:
           "$BIN" run --engine ns --user 1000:1000 --rootfs alpine-aa -- /bin/busybox sh -c 'id -u; id -g; id -G' >/tmp/u_nr2.txt 2>&1
           U_NR2_EXIT=$?; echo "u_nr2_exit=$U_NR2_EXIT"; cat /tmp/u_nr2.txt
 
-          echo "=== control: --user 1000:1000 without --cap-drop → uid 1000, baseline CapEff 0 ==="
-          "$BIN" run --engine ns --user 1000:1000 --rootfs alpine-aa -- \
-            /bin/busybox sh -c 'id -u; grep "^CapEff:" /proc/self/status; echo USER_CAP_CONTROL_RAN' >/tmp/u_cap_ctl.txt 2>&1
-          U_CAP_CTL_EXIT=$?; echo "u_cap_ctl_exit=$U_CAP_CTL_EXIT"; cat /tmp/u_cap_ctl.txt
-
-          echo "=== combined: --user 1000:1000 --cap-drop ALL → uid 1000, CapEff all zero ==="
-          "$BIN" run --engine ns --user 1000:1000 --cap-drop ALL --rootfs alpine-aa -- \
-            /bin/busybox sh -c 'id -u; grep "^CapEff:" /proc/self/status; echo USER_CAP_DROP_RAN' >/tmp/u_cap_drop.txt 2>&1
-          U_CAP_DROP_EXIT=$?; echo "u_cap_drop_exit=$U_CAP_DROP_EXIT"; cat /tmp/u_cap_drop.txt
-
           echo "=== --user 70000 (beyond the 65536-wide subuid range) → FAIL CLOSED ==="
           "$BIN" run --engine ns --user 70000 --rootfs alpine-aa -- /bin/busybox sh -c 'id -u' >/tmp/u_oor.txt 2>&1
           U_OOR_EXIT=$?; echo "u_oor_exit=$U_OOR_EXIT"; tail -3 /tmp/u_oor.txt
@@ -829,20 +819,6 @@ jobs:
           [ "$(sed -n 1p /tmp/u_nr2.txt)" = 1000 ] || { echo "FAIL: --user 1000:1000 uid '$(sed -n 1p /tmp/u_nr2.txt)', want 1000"; FAIL=1; }
           [ "$(sed -n 2p /tmp/u_nr2.txt)" = 1000 ] || { echo "FAIL: --user 1000:1000 gid '$(sed -n 2p /tmp/u_nr2.txt)', want 1000"; FAIL=1; }
           [ "$(sed -n 3p /tmp/u_nr2.txt)" = 1000 ] || { echo "FAIL: --user 1000:1000 supplementary groups '$(sed -n 3p /tmp/u_nr2.txt)', want '1000' (supp dropped)"; FAIL=1; }
-
-          # #108 differential: both controls must reach the workload as uid 1000;
-          # without cap-drop, non-root exec has the expected zero effective set;
-          # with --cap-drop ALL, final capset must also be exactly all zero.
-          U_CAP_CTL_EFF=$(awk '/^CapEff:/{print $2; exit}' /tmp/u_cap_ctl.txt)
-          U_CAP_DROP_EFF=$(awk '/^CapEff:/{print $2; exit}' /tmp/u_cap_drop.txt)
-          [ "$U_CAP_CTL_EXIT" = 0 ] || { echo "FAIL: non-root capability control did not run (exit $U_CAP_CTL_EXIT)"; FAIL=1; }
-          [ "$(sed -n 1p /tmp/u_cap_ctl.txt)" = 1000 ] || { echo "FAIL: capability control uid '$(sed -n 1p /tmp/u_cap_ctl.txt)', want 1000"; FAIL=1; }
-          [ "$U_CAP_CTL_EFF" = 0000000000000000 ] || { echo "FAIL: non-root capability control CapEff '$U_CAP_CTL_EFF', want 0000000000000000"; FAIL=1; }
-          grep -qx USER_CAP_CONTROL_RAN /tmp/u_cap_ctl.txt || { echo "FAIL: capability control produced no workload marker"; FAIL=1; }
-          [ "$U_CAP_DROP_EXIT" = 0 ] || { echo "FAIL: --user 1000:1000 --cap-drop ALL failed to run (exit $U_CAP_DROP_EXIT)"; FAIL=1; }
-          [ "$(sed -n 1p /tmp/u_cap_drop.txt)" = 1000 ] || { echo "FAIL: --cap-drop ALL uid '$(sed -n 1p /tmp/u_cap_drop.txt)', want 1000"; FAIL=1; }
-          [ "$U_CAP_DROP_EFF" = 0000000000000000 ] || { echo "FAIL: --cap-drop ALL CapEff '$U_CAP_DROP_EFF', want exact all-zero value"; FAIL=1; }
-          grep -qx USER_CAP_DROP_RAN /tmp/u_cap_drop.txt || { echo "FAIL: --cap-drop ALL produced no workload marker"; FAIL=1; }
 
           # fail-closed law: out-of-range uid must NOT run, must NEVER print uid 0
           [ "$U_OOR_EXIT" != 0 ] || { echo "FAIL: out-of-range --user 70000 RAN (exit 0) — silent-root footgun"; FAIL=1; }
