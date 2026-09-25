@@ -70,8 +70,8 @@ persistent-create ordering; late native errors; operation-created destination
 roots; concurrent planned-name appearance; cancellation after creation;
 replacement identity; unknown children; root replacement; leaf replacement;
 foreign root occupancy; explicit rollback and best-effort Drop; CAS success,
-missing-object rollback and payload cancellation. Fifteen original plus coordinator
-Linux/macOS methods are mandatory.
+missing-object rollback and payload cancellation. The registered 31-test family,
+including coordinator Linux/macOS methods, is mandatory.
 
 ### Quality standards
 

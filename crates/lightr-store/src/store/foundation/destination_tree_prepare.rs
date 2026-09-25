@@ -7,8 +7,6 @@
 use super::destination_anchor::DestinationAnchor;
 use super::destination_name_probe::DestinationNameProbeFailure;
 use super::scratch_name_probe::NameProbeLimits;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-use super::topology;
 use super::tree_plan::TreePlan;
 use super::Wait;
 use crate::Store;
@@ -17,6 +15,10 @@ use std::{fmt, io};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[path = "destination_tree_prepare_native.rs"]
 mod native;
+
+#[path = "destination_tree_prepare_builder.rs"]
+mod prepare_builder;
+use prepare_builder::prepare_checked;
 
 /// Failure while preparing or explicitly rolling back operation-owned output.
 #[derive(Debug)]
@@ -199,41 +201,47 @@ impl PreparedDestinationTree<'_, '_> {
         {
             let mut this = self;
             if let Err(error) = this.anchor.revalidate(wait) {
-                return Err(fail_and_cleanup(this.inner, error));
+                return Err(prepare_builder::fail_and_cleanup(this.inner, error));
             }
             if let Err(error) = after_initial_root_check() {
-                return Err(fail_and_cleanup(this.inner, error));
+                return Err(prepare_builder::fail_and_cleanup(this.inner, error));
             }
             match this.inner.complete(wait) {
                 Ok(()) => {
                     if let Err(error) = after_inner_complete() {
-                        return Err(fail_and_cleanup(this.inner, error));
+                        return Err(prepare_builder::fail_and_cleanup(this.inner, error));
                     }
                     if let Err(error) = this.inner.revalidate_final_descendants(wait) {
-                        return Err(fail_and_cleanup(this.inner, error));
+                        return Err(prepare_builder::fail_and_cleanup(this.inner, error));
                     }
                     if let Err(error) = after_final_descendants() {
-                        return Err(fail_and_cleanup(this.inner, error));
+                        return Err(prepare_builder::fail_and_cleanup(this.inner, error));
                     }
                     if let Err(error) = this.inner.revalidate_root_namespace(wait) {
-                        return Err(fail_and_cleanup(this.inner, error));
+                        return Err(prepare_builder::fail_and_cleanup(this.inner, error));
                     }
                     if let Err(error) = this.anchor.revalidate(wait) {
                         // Final root binding after descendants, before disarm.
-                        return Err(fail_and_cleanup(this.inner, error));
+                        return Err(prepare_builder::fail_and_cleanup(this.inner, error));
                     }
                     if let Err(error) = wait.check() {
-                        return Err(fail_and_cleanup(this.inner, error));
+                        return Err(prepare_builder::fail_and_cleanup(this.inner, error));
                     }
                     this.inner.disarm();
                     Ok(())
                 }
-                Err(error) => Err(fail_and_cleanup(this.inner, error)),
+                Err(error) => Err(prepare_builder::fail_and_cleanup(this.inner, error)),
             }
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
-            let _ = (self, wait);
+            let _ = (
+                self,
+                wait,
+                &mut after_initial_root_check,
+                &mut after_inner_complete,
+                &mut after_final_descendants,
+            );
             Err(DestinationTreePrepareFailure::primary(io::Error::new(
                 io::ErrorKind::Unsupported,
                 "prepared destination tree requires qualified native topology",
@@ -317,91 +325,6 @@ pub(super) enum PrepareStep {
     Created,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     BeforeFinalValidation,
-}
-
-fn prepare_checked<'anchor, 'inspection>(
-    anchor: &'anchor DestinationAnchor<'inspection>,
-    plan: &TreePlan<'_>,
-    limits: NameProbeLimits,
-    wait: Wait<'_>,
-    mut observe: impl FnMut(PrepareStep, &str, Option<&std::fs::File>) -> io::Result<()>,
-) -> Result<PreparedDestinationTree<'anchor, 'inspection>, DestinationTreePrepareFailure> {
-    wait.check()
-        .map_err(DestinationTreePrepareFailure::primary)?;
-    anchor
-        .probe_tree_names(plan, limits, wait)
-        .map_err(DestinationTreePrepareFailure::from_probe)?;
-    observe(PrepareStep::AfterRepresentation, "", None)
-        .map_err(DestinationTreePrepareFailure::primary)?;
-    wait.check()
-        .map_err(DestinationTreePrepareFailure::primary)?;
-    anchor
-        .revalidate(wait)
-        .map_err(DestinationTreePrepareFailure::primary)?;
-
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    {
-        topology::require_empty_handle(anchor.retained_handle(), wait)
-            .map_err(DestinationTreePrepareFailure::primary)?;
-        observe(
-            PrepareStep::BeforeCreate,
-            "",
-            Some(anchor.retained_handle()),
-        )
-        .map_err(DestinationTreePrepareFailure::primary)?;
-        wait.check()
-            .map_err(DestinationTreePrepareFailure::primary)?;
-        let inner = match native::PreparedTree::create(
-            anchor.retained_handle(),
-            plan,
-            wait,
-            &mut observe,
-        ) {
-            Ok(tree) => tree,
-            Err(error) => {
-                return Err(DestinationTreePrepareFailure {
-                    primary: Some(error.primary),
-                    cleanup: error.cleanup,
-                    cleanup_complete: error.cleanup_complete,
-                })
-            }
-        };
-        if let Err(error) = observe(PrepareStep::BeforeFinalValidation, "", None) {
-            return Err(fail_and_cleanup(inner, error));
-        }
-        if let Err(error) = wait.check() {
-            return Err(fail_and_cleanup(inner, error));
-        }
-        if let Err(error) = anchor.revalidate(wait) {
-            return Err(fail_and_cleanup(inner, error));
-        }
-        if let Err(error) = inner.revalidate(wait) {
-            return Err(fail_and_cleanup(inner, error));
-        }
-        Ok(PreparedDestinationTree { anchor, inner })
-    }
-
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-    {
-        let _ = (anchor, plan, limits, observe);
-        Err(DestinationTreePrepareFailure::primary(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "prepared destination tree requires qualified native topology",
-        )))
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-fn fail_and_cleanup(
-    mut inner: native::PreparedTree,
-    primary: io::Error,
-) -> DestinationTreePrepareFailure {
-    let cleanup = inner.rollback();
-    DestinationTreePrepareFailure {
-        primary: Some(primary),
-        cleanup: cleanup.errors,
-        cleanup_complete: cleanup.complete,
-    }
 }
 
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]

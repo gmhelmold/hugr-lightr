@@ -1,13 +1,17 @@
 //! Native prepared-tree orchestration under one retained destination root.
 use super::{PrepareStep, TreePlan, Wait};
 use crate::Store;
-use entry::{require_child_count, OwnedDirectory, OwnedFile, OwnedLink, OwnedName};
+use directory::require_child_count;
+use entry::{OwnedDirectory, OwnedFile, OwnedLink, OwnedName};
 use lightr_core::{Entry, LightrError};
 use std::fs::File;
 use std::io;
 
 #[path = "destination_tree_prepare_native_entry.rs"]
 mod entry;
+
+#[path = "destination_tree_prepare_native_directory.rs"]
+mod directory;
 
 pub(super) struct PreparedTree {
     root: File,
