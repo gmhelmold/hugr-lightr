@@ -43,31 +43,29 @@ pub fn logs(dir: &std::path::Path, stream: LogStream, follow: bool) -> Result<()
     // Follow mode
     let mut stdout_off = 0u64;
     let mut stderr_off = 0u64;
+    let mut polls = 0u32;
 
     loop {
-        let mut had_new = false;
         match stream {
             LogStream::Stdout => {
                 if stdout_path.exists() {
-                    had_new |= print_file(&stdout_path, &mut stdout_off)?;
+                    let _ = print_file(&stdout_path, &mut stdout_off)?;
                 }
             }
             LogStream::Stderr => {
                 if stderr_path.exists() {
-                    had_new |= print_file(&stderr_path, &mut stderr_off)?;
+                    let _ = print_file(&stderr_path, &mut stderr_off)?;
                 }
             }
             LogStream::Both => {
                 if stdout_path.exists() {
-                    had_new |= print_file(&stdout_path, &mut stdout_off)?;
+                    let _ = print_file(&stdout_path, &mut stdout_off)?;
                 }
                 if stderr_path.exists() {
-                    had_new |= print_file(&stderr_path, &mut stderr_off)?;
+                    let _ = print_file(&stderr_path, &mut stderr_off)?;
                 }
             }
         }
-        let _ = had_new;
-
         // Check if exited and no new bytes
         let status = read_status_file(dir).unwrap_or_default();
         if status.starts_with("exited") {
@@ -98,8 +96,32 @@ pub fn logs(dir: &std::path::Path, stream: LogStream, follow: bool) -> Result<()
             }
         }
 
+        polls += 1;
+        if follow_poll_cap_reached(polls) {
+            eprintln!("lightr: logs --follow stopped at poll cap ({FOLLOW_MAX_POLLS})");
+            break;
+        }
+
         std::thread::sleep(std::time::Duration::from_millis(200));
     }
 
     Ok(())
+}
+
+/// Direct `lightr-run` callers get same no-hang guarantee as CLI follow.
+const FOLLOW_MAX_POLLS: u32 = 3000;
+
+fn follow_poll_cap_reached(polls: u32) -> bool {
+    polls >= FOLLOW_MAX_POLLS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{follow_poll_cap_reached, FOLLOW_MAX_POLLS};
+
+    #[test]
+    fn follow_poll_cap_is_bounded() {
+        assert!(!follow_poll_cap_reached(FOLLOW_MAX_POLLS - 1));
+        assert!(follow_poll_cap_reached(FOLLOW_MAX_POLLS));
+    }
 }

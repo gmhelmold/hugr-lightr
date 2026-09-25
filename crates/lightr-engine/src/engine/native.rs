@@ -9,6 +9,10 @@ use lightr_core::{LightrError, Result};
 pub struct NativeEngine;
 
 impl Engine for NativeEngine {
+    fn kind(&self) -> super::EngineKind {
+        super::EngineKind::Native
+    }
+
     fn run(&self, spec: &ExecSpec) -> Result<i32> {
         if spec.rootfs.is_some() {
             return Err(LightrError::InvalidRef(

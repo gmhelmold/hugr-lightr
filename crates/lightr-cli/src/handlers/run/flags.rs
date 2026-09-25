@@ -10,6 +10,8 @@ use lightr_run::healthcheck::Healthcheck;
 use lightr_run::{Mount, StoreFile};
 use serde::Serialize;
 
+use crate::cli::cmd::RunArgs;
+
 #[derive(Serialize)]
 pub(crate) struct RunJson {
     pub(crate) key: String,
@@ -210,6 +212,28 @@ impl RawRcFlags {
     }
 }
 
+/// Production CLI-parser lowering. Dispatch consumes this conversion, making
+/// parser-to-`RcConfig` wiring compile-visible rather than test-only metadata.
+impl From<&RunArgs> for RawRcFlags {
+    fn from(args: &RunArgs) -> Self {
+        Self {
+            hostname: args.hostname.clone(),
+            label: args.label.clone(),
+            cap_add: args.cap_add.clone(),
+            cap_drop: args.cap_drop.clone(),
+            privileged: args.privileged,
+            tty: args.tty,
+            init: args.init,
+            read_only: args.read_only,
+            oom_score_adj: args.oom_score_adj,
+            pids_limit: args.pids_limit,
+            shm_size: args.shm_size.clone(),
+            apparmor: args.apparmor.clone(),
+            seccomp: args.seccomp.clone(),
+        }
+    }
+}
+
 /// The `--health-*` CLI flags, bundled (WP-RC-4). Built from the parsed `Cmd`
 /// in dispatch and lowered to a [`Healthcheck`] by [`HealthFlags::build`].
 ///
@@ -242,6 +266,19 @@ impl HealthFlags {
             start_period_s: self.start_period,
             retries: self.retries,
         })
+    }
+}
+
+impl From<&RunArgs> for HealthFlags {
+    fn from(args: &RunArgs) -> Self {
+        Self {
+            cmd: args.health_cmd.clone(),
+            interval: args.health_interval,
+            timeout: args.health_timeout,
+            start_period: args.health_start_period,
+            retries: args.health_retries,
+            no_healthcheck: args.no_healthcheck,
+        }
     }
 }
 

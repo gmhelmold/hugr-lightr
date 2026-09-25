@@ -61,8 +61,8 @@ pub fn run(id: &str, opts: &LogOpts) -> i32 {
     };
 
     // Honest disclosure: the on-disk log format has no per-line timestamps, so
-    // `--since`/`-t` cannot operate per-line. We surface a single file-level
-    // mtime and say so, rather than fabricate a clock (tense-law).
+    // `--since`/`-t` cannot operate per-line. We surface each selected stream's
+    // file mtime and say so, rather than fabricate a clock (tense-law).
     let enrich = opts.timestamps || opts.since.is_some();
 
     // Fast path: no tail, no enrichment, no follow ⇒ delegate to the frozen
@@ -74,20 +74,28 @@ pub fn run(id: &str, opts: &LogOpts) -> i32 {
         };
     }
 
+    let stream_paths = stream_paths(&run_dir, &stream);
     if enrich {
-        emit_timestamp_note(&run_dir, &stream, opts.since);
-        if since_excludes_all(&run_dir, &stream, opts.since) {
-            return 0;
-        }
+        emit_timestamp_note(&stream_paths, opts.since);
     }
 
-    let paths = stream_paths(&run_dir, &stream);
+    let (initial_paths, follow_paths) =
+        initial_and_follow_paths(stream_paths, opts.since, file_mtime_seconds);
 
-    // Print the (optionally tail-limited) existing content first.
-    for p in &paths {
-        if let Err(e) = print_tail(p, opts.tail) {
-            return die_lightr(&e);
+    // Snapshot every followed stream. `--since` skips only initial backlog;
+    // old streams retain their offset and receive later appends under follow.
+    let mut offsets = Vec::with_capacity(follow_paths.len());
+    for p in &follow_paths {
+        let (data, offset) = match initial_log_bytes(p, opts.tail) {
+            Ok(value) => value,
+            Err(e) => return die_lightr(&e),
+        };
+        if initial_paths.contains(p) {
+            if let Err(e) = write_log_bytes(&data) {
+                return die_lightr(&e);
+            }
         }
+        offsets.push(offset);
     }
 
     if !opts.follow {
@@ -97,7 +105,7 @@ pub fn run(id: &str, opts: &LogOpts) -> i32 {
     // Bounded follow: poll for appends, stop when the run has exited and the
     // streams are drained, OR when a hard cap is hit (never hang forever —
     // no-daemon discipline: nothing of ours should spin unbounded).
-    follow_bounded(&resolved, &home, &paths)
+    follow_bounded(&resolved, &home, &follow_paths, offsets)
 }
 
 /// Resolve the concrete log file path(s) for the selected stream.
@@ -111,17 +119,19 @@ fn stream_paths(run_dir: &Path, stream: &LogStream) -> Vec<std::path::PathBuf> {
     }
 }
 
-/// Print the last `tail` lines of `path` (or all when `tail` is `None`).
-/// Missing file ⇒ nothing (a stream may have produced no output).
-fn print_tail(path: &Path, tail: Option<usize>) -> lightr_core::Result<()> {
+/// Read initial bytes and offset from one snapshot. Missing stream ⇒ empty.
+fn initial_log_bytes(path: &Path, tail: Option<usize>) -> lightr_core::Result<(Vec<u8>, u64)> {
     if !path.exists() {
-        return Ok(());
+        return Ok((Vec::new(), 0));
     }
     let data = std::fs::read(path).map_err(lightr_core::LightrError::Io)?;
-    let selected = select_tail(&data, tail);
+    let offset = data.len() as u64;
+    Ok((select_tail(&data, tail).to_vec(), offset))
+}
+
+fn write_log_bytes(data: &[u8]) -> lightr_core::Result<()> {
     let mut out = std::io::stdout();
-    out.write_all(selected)
-        .map_err(lightr_core::LightrError::Io)?;
+    out.write_all(data).map_err(lightr_core::LightrError::Io)?;
     out.flush().map_err(lightr_core::LightrError::Io)?;
     Ok(())
 }
@@ -164,14 +174,30 @@ fn select_tail(data: &[u8], tail: Option<usize>) -> &[u8] {
 const FOLLOW_MAX_POLLS: u32 = 3000; // ~10 minutes ceiling
 const FOLLOW_POLL_MS: u64 = 200;
 
+#[derive(Debug, PartialEq, Eq)]
+enum FollowStop {
+    Drained,
+    PollCap,
+}
+
+fn follow_stop_reason(terminal: bool, had_new: bool, polls: u32) -> Option<FollowStop> {
+    if terminal && !had_new {
+        Some(FollowStop::Drained)
+    } else if polls >= FOLLOW_MAX_POLLS {
+        Some(FollowStop::PollCap)
+    } else {
+        None
+    }
+}
+
 /// Stream appends to `paths`, stopping when the run has exited and the streams
 /// are drained, or when the poll cap is reached. Bounded — no infinite spin.
-fn follow_bounded(id: &str, home: &Path, paths: &[std::path::PathBuf]) -> i32 {
-    let mut offsets: Vec<u64> = paths
-        .iter()
-        .map(|p| std::fs::metadata(p).map(|m| m.len()).unwrap_or(0))
-        .collect();
-
+fn follow_bounded(
+    id: &str,
+    home: &Path,
+    paths: &[std::path::PathBuf],
+    mut offsets: Vec<u64>,
+) -> i32 {
     let mut polls = 0u32;
     loop {
         let mut had_new = false;
@@ -189,15 +215,15 @@ fn follow_bounded(id: &str, home: &Path, paths: &[std::path::PathBuf]) -> i32 {
             run_status(home, id),
             Ok(RunStatus::Exited(_)) | Ok(RunStatus::Unknown) | Err(_)
         );
-        if terminal && !had_new {
-            return 0;
-        }
-
         polls += 1;
-        if polls >= FOLLOW_MAX_POLLS {
-            // Bounded stop — honest, not a silent hang.
-            eprintln!("lightr: logs --follow stopped at poll cap ({FOLLOW_MAX_POLLS})");
-            return 0;
+        match follow_stop_reason(terminal, had_new, polls) {
+            Some(FollowStop::Drained) => return 0,
+            Some(FollowStop::PollCap) => {
+                // Bounded stop — honest, not a silent hang.
+                eprintln!("lightr: logs --follow stopped at poll cap ({FOLLOW_MAX_POLLS})");
+                return 0;
+            }
+            None => {}
         }
         std::thread::sleep(std::time::Duration::from_millis(FOLLOW_POLL_MS));
     }
@@ -230,50 +256,88 @@ fn bytes_after(path: &Path, offset: u64) -> lightr_core::Result<(Vec<u8>, u64)> 
     Ok((data[start..].to_vec(), new_off))
 }
 
-/// The single honest timestamp signal: the log file's mtime. Printed to stderr
-/// so it never corrupts the log stream on stdout.
-fn emit_timestamp_note(run_dir: &Path, stream: &LogStream, since: Option<&str>) {
-    let mtime = stream_paths(run_dir, stream)
+/// File-level timestamp signals, one per selected stream. Printed to stderr so
+/// they never corrupt log bytes on stdout.
+fn emit_timestamp_note(paths: &[std::path::PathBuf], since: Option<&str>) {
+    let streams = paths
         .iter()
-        .filter_map(|p| std::fs::metadata(p).ok())
-        .filter_map(|m| m.modified().ok())
-        .max();
-    let when = mtime
-        .map(format_systemtime)
-        .unwrap_or_else(|| "unknown".to_string());
-    if since.is_some() {
-        eprintln!(
+        .map(|path| {
+            let name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("unknown")
+                .to_string();
+            (name, file_mtime_seconds(path))
+        })
+        .collect::<Vec<_>>();
+    eprintln!("{}", timestamp_note(since.is_some(), &streams));
+}
+
+fn timestamp_note(since: bool, streams: &[(String, Option<u64>)]) -> String {
+    let mtimes = streams
+        .iter()
+        .map(|(path, mtime)| {
+            format!(
+                "{path}={}",
+                mtime.map_or_else(|| "unknown".to_string(), |time| time.to_string())
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    if since {
+        format!(
             "lightr: logs has no per-line timestamps; --since compares against \
-             the log file's last-modified time ({when})"
-        );
+             each selected stream's last-modified time: {mtimes}"
+        )
     } else {
-        eprintln!(
+        format!(
             "lightr: logs has no per-line timestamps; -t reports the log file's \
-             last-modified time ({when})"
-        );
+             last-modified time: {mtimes}"
+        )
     }
 }
 
-/// `--since` honest semantics: with no per-line clock, the only honest cutoff is
-/// the whole file's mtime. If the file was last written BEFORE the cutoff, there
-/// is nothing "since" then ⇒ exclude all. Unparseable cutoff ⇒ include (lenient,
-/// matching docker's best-effort disposition rather than failing closed here).
-fn since_excludes_all(run_dir: &Path, stream: &LogStream, since: Option<&str>) -> bool {
-    let Some(s) = since else { return false };
-    let Some(cutoff) = parse_since(s) else {
-        return false;
+/// `--since` filters each stream independently. Raw logs have no line clock, so
+/// a stream is included whole only when its own mtime is at or after cutoff.
+fn filter_paths_since<F>(
+    paths: Vec<std::path::PathBuf>,
+    since: Option<&str>,
+    mut mtime: F,
+) -> Vec<std::path::PathBuf>
+where
+    F: FnMut(&Path) -> Option<u64>,
+{
+    let Some(cutoff) = since.and_then(parse_since) else {
+        return paths;
     };
-    let mtime = stream_paths(run_dir, stream)
-        .iter()
-        .filter_map(|p| std::fs::metadata(p).ok())
-        .filter_map(|m| m.modified().ok())
-        .filter_map(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs())
-        .max();
-    match mtime {
-        Some(m) => m < cutoff,
-        None => false,
-    }
+    paths
+        .into_iter()
+        .filter(|path| mtime(path).is_none_or(|time| time >= cutoff))
+        .collect()
+}
+
+/// `--since` filters existing backlog only. Follow must keep all selected
+/// streams so bytes appended after setup are never silently dropped.
+fn initial_and_follow_paths<F>(
+    paths: Vec<std::path::PathBuf>,
+    since: Option<&str>,
+    mtime: F,
+) -> (Vec<std::path::PathBuf>, Vec<std::path::PathBuf>)
+where
+    F: FnMut(&Path) -> Option<u64>,
+{
+    let initial = filter_paths_since(paths.clone(), since, mtime);
+    (initial, paths)
+}
+
+fn file_mtime_seconds(path: &Path) -> Option<u64> {
+    std::fs::metadata(path)
+        .ok()?
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|duration| duration.as_secs())
 }
 
 /// Parse a `--since` value: unix seconds. We avoid a chrono dep — only the
@@ -281,14 +345,6 @@ fn since_excludes_all(run_dir: &Path, stream: &LogStream, since: Option<&str>) -
 /// (lenient include, honest about the limitation in the stderr note above).
 fn parse_since(s: &str) -> Option<u64> {
     s.trim().parse::<u64>().ok()
-}
-
-/// Format a SystemTime as unix seconds (honest, dependency-free).
-fn format_systemtime(t: std::time::SystemTime) -> String {
-    match t.duration_since(std::time::UNIX_EPOCH) {
-        Ok(d) => format!("{}", d.as_secs()),
-        Err(_) => "pre-epoch".to_string(),
-    }
 }
 
 #[cfg(test)]

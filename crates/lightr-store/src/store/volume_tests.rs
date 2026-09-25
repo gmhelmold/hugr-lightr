@@ -108,6 +108,7 @@ fn inspect_json_has_fields() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn remove_then_gone() {
     let (_d, root) = tmp_root();
     create(&root, "tmp", &[]).unwrap();
@@ -117,6 +118,7 @@ fn remove_then_gone() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn remove_missing_errors() {
     let (_d, root) = tmp_root();
     let err = remove(&root, "nope", false).unwrap_err();
@@ -124,6 +126,7 @@ fn remove_missing_errors() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn remove_in_use_refused() {
     let (_d, root) = tmp_root();
     create(&root, "busy", &[]).unwrap();
@@ -135,6 +138,7 @@ fn remove_in_use_refused() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn prune_removes_dangling() {
     let (_d, root) = tmp_root();
     create(&root, "a", &[]).unwrap();
@@ -149,9 +153,23 @@ fn prune_removes_dangling() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn prune_empty_registry_ok() {
     let (_d, root) = tmp_root();
     assert!(prune(&root).unwrap().is_empty());
+}
+
+#[test]
+#[cfg(not(target_os = "linux"))]
+fn destructive_verbs_are_unsupported_without_mutation() {
+    let (_d, root) = tmp_root();
+    create(&root, "locked", &[]).unwrap();
+    assert!(matches!(
+        remove(&root, "locked", false),
+        Err(LightrError::Unsupported(_))
+    ));
+    assert!(matches!(prune(&root), Err(LightrError::Unsupported(_))));
+    assert!(volume_dir(&root, "locked").exists());
 }
 
 #[test]
@@ -163,5 +181,373 @@ fn meta_json_escapes_label_values() {
         got.labels,
         vec![("note".to_string(), "a\"b\\c".to_string())],
         "escaped quote/backslash must roundtrip"
+    );
+}
+
+#[test]
+fn run_owner_record_roundtrips_strict_owner_shape() {
+    let record = RunOwnerRecord {
+        volume: "data".to_string(),
+        owner: VolumeOwner::Active {
+            nonce: "a".repeat(64),
+            run_id: "run".to_string(),
+            pid: 42,
+            process_start_token: "linux:42:99".to_string(),
+            mount_id: "data:target".to_string(),
+        },
+        terminal: false,
+    };
+    let bytes = serde_json::to_vec(&record).unwrap();
+    assert_eq!(
+        serde_json::from_slice::<RunOwnerRecord>(&bytes).unwrap(),
+        record
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn owner_pending_active_terminal_release_is_exact() {
+    let (_d, root) = tmp_root();
+    create(&root, "owned", &[]).unwrap();
+    let run = root.join("run-1");
+    let pending = begin_owner(&root, "owned", &run).unwrap();
+    let nonce = pending.nonce().to_string();
+    let active = activate_owner(
+        &root,
+        "owned",
+        &run,
+        &nonce,
+        "run-1",
+        std::process::id() as i32,
+        "mount-1",
+    )
+    .unwrap();
+    let lock = owner_lock(&root, "owned").unwrap();
+    assert_eq!(
+        read_owners(&root, "owned", &lock).unwrap().owners,
+        vec![active]
+    );
+    drop(lock);
+    assert!(
+        remove(&root, "owned", false).is_err(),
+        "active owner blocks rm"
+    );
+    terminal_run_owner(&run).unwrap();
+    release_owner(&root, "owned", &run).unwrap();
+    remove(&root, "owned", false).unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn recovery_removes_only_terminal_matching_owner() {
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "recover", &[]).unwrap();
+    let run = home.join("run/r1");
+    let pending = begin_owner(&root, "recover", &run).unwrap();
+    activate_owner(
+        &root,
+        "recover",
+        &run,
+        pending.nonce(),
+        "r1",
+        std::process::id() as i32,
+        "m1",
+    )
+    .unwrap();
+    fs::write(run.join("status"), "exited 0").unwrap();
+    terminal_run_owner(&run).unwrap();
+    recover(&root, "recover", &home).unwrap();
+    let lock = owner_lock(&root, "recover").unwrap();
+    assert!(read_owners(&root, "recover", &lock)
+        .unwrap()
+        .owners
+        .is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn recovery_refuses_missing_run_witness() {
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "ambiguous", &[]).unwrap();
+    let run = home.join("run/r2");
+    let pending = begin_owner(&root, "ambiguous", &run).unwrap();
+    activate_owner(
+        &root,
+        "ambiguous",
+        &run,
+        pending.nonce(),
+        "r2",
+        std::process::id() as i32,
+        "m2",
+    )
+    .unwrap();
+    fs::remove_file(run.join("volume-owner.json")).unwrap();
+    assert!(recover(&root, "ambiguous", &home).is_err());
+    assert!(remove(&root, "ambiguous", false).is_err());
+    assert!(volume_dir(&root, "ambiguous").exists());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn sigkill_owner_recovers_after_matching_process_death_proof() {
+    use std::io::Read;
+    use std::os::fd::{FromRawFd, RawFd};
+
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "killed", &[]).unwrap();
+    let run = home.join("run/killed-run");
+    let mut fds: [RawFd; 2] = [0; 2];
+    assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
+    let child = unsafe { libc::fork() };
+    assert!(child >= 0);
+    if child == 0 {
+        unsafe { libc::close(fds[0]) };
+        let pending = begin_owner(&root, "killed", &run).unwrap();
+        activate_owner(
+            &root,
+            "killed",
+            &run,
+            pending.nonce(),
+            "killed-run",
+            std::process::id() as i32,
+            "m-killed",
+        )
+        .unwrap();
+        let mut ready = unsafe { std::fs::File::from_raw_fd(fds[1]) };
+        use std::io::Write;
+        ready.write_all(&[1]).unwrap();
+        loop {
+            std::thread::park();
+        }
+    }
+    unsafe { libc::close(fds[1]) };
+    let mut ready = unsafe { std::fs::File::from_raw_fd(fds[0]) };
+    let mut byte = [0; 1];
+    ready.read_exact(&mut byte).unwrap();
+    assert_eq!(unsafe { libc::kill(child, libc::SIGKILL) }, 0);
+    let mut status = 0;
+    assert_eq!(unsafe { libc::waitpid(child, &mut status, 0) }, child);
+    recover(&root, "killed", &home).unwrap();
+    let lock = owner_lock(&root, "killed").unwrap();
+    assert!(read_owners(&root, "killed", &lock)
+        .unwrap()
+        .owners
+        .is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn shared_active_owners_require_each_exact_terminal_release() {
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "shared", &[]).unwrap();
+    for id in ["one", "two"] {
+        let run = home.join("run").join(id);
+        let pending = begin_owner(&root, "shared", &run).unwrap();
+        activate_owner(
+            &root,
+            "shared",
+            &run,
+            pending.nonce(),
+            id,
+            std::process::id() as i32,
+            &format!("m-{id}"),
+        )
+        .unwrap();
+    }
+    let one = home.join("run/one");
+    fs::write(one.join("status"), "exited 0").unwrap();
+    terminal_run_owner(&one).unwrap();
+    release_owner(&root, "shared", &one).unwrap();
+    assert!(remove(&root, "shared", false).is_err());
+    let two = home.join("run/two");
+    fs::write(two.join("status"), "exited 0").unwrap();
+    terminal_run_owner(&two).unwrap();
+    release_owner(&root, "shared", &two).unwrap();
+    remove(&root, "shared", false).unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn failed_spawn_abandons_only_its_pending_nonce() {
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "failed", &[]).unwrap();
+    let first = begin_owner(&root, "failed", &home.join("run/one")).unwrap();
+    let second = begin_owner(&root, "failed", &home.join("run/two")).unwrap();
+    abandon_pending(&root, "failed", first.nonce()).unwrap();
+    let lock = owner_lock(&root, "failed").unwrap();
+    let owners = read_owners(&root, "failed", &lock).unwrap();
+    assert_eq!(owners.owners.len(), 1);
+    assert_eq!(owners.owners[0].nonce(), second.nonce());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn activation_witness_failure_restores_exact_pending_owner() {
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "rollback", &[]).unwrap();
+    let run = home.join("run/r1");
+    let pending = begin_owner(&root, "rollback", &run).unwrap();
+    let nonce = pending.nonce().to_string();
+    fs::remove_file(run.join("volume-owner.json")).unwrap();
+    fs::create_dir(run.join("volume-owner.json")).unwrap();
+    assert!(activate_owner(
+        &root,
+        "rollback",
+        &run,
+        &nonce,
+        "r1",
+        std::process::id() as i32,
+        "rollback:mounted",
+    )
+    .is_err());
+    let lock = owner_lock(&root, "rollback").unwrap();
+    let owners = read_owners(&root, "rollback", &lock).unwrap();
+    assert_eq!(owners.owners, vec![pending]);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn begin_owner_witness_failure_removes_just_written_pending() {
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "ghost", &[]).unwrap();
+    let run = home.join("run/r1");
+    fs::create_dir_all(run.join("volume-owner.json")).unwrap();
+    assert!(begin_owner(&root, "ghost", &run).is_err());
+    let lock = owner_lock(&root, "ghost").unwrap();
+    assert!(read_owners(&root, "ghost", &lock)
+        .unwrap()
+        .owners
+        .is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn recovery_refuses_each_active_witness_identity_mismatch() {
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "active", &[]).unwrap();
+    let run = home.join("run/r1");
+    let pending = begin_owner(&root, "active", &run).unwrap();
+    let active = activate_owner(
+        &root,
+        "active",
+        &run,
+        pending.nonce(),
+        "r1",
+        std::process::id() as i32,
+        "active:mounted",
+    )
+    .unwrap();
+    let VolumeOwner::Active {
+        nonce,
+        run_id,
+        pid,
+        process_start_token,
+        mount_id,
+    } = &active
+    else {
+        unreachable!()
+    };
+    let mismatches = vec![
+        VolumeOwner::Active {
+            nonce: nonce.clone(),
+            run_id: "other".to_string(),
+            pid: *pid,
+            process_start_token: process_start_token.clone(),
+            mount_id: mount_id.clone(),
+        },
+        VolumeOwner::Active {
+            nonce: "b".repeat(64),
+            run_id: run_id.clone(),
+            pid: *pid,
+            process_start_token: process_start_token.clone(),
+            mount_id: mount_id.clone(),
+        },
+        VolumeOwner::Active {
+            nonce: nonce.clone(),
+            run_id: run_id.clone(),
+            pid: pid.saturating_add(1),
+            process_start_token: process_start_token.clone(),
+            mount_id: mount_id.clone(),
+        },
+        VolumeOwner::Active {
+            nonce: nonce.clone(),
+            run_id: run_id.clone(),
+            pid: *pid,
+            process_start_token: "linux:bad:token".to_string(),
+            mount_id: mount_id.clone(),
+        },
+        VolumeOwner::Active {
+            nonce: nonce.clone(),
+            run_id: run_id.clone(),
+            pid: *pid,
+            process_start_token: process_start_token.clone(),
+            mount_id: "other:mount".to_string(),
+        },
+    ];
+    // Mutation proof: remove any exact active-field comparison and its case passes.
+    for witness in mismatches {
+        write_run_owner(&run, "active", &witness, false).unwrap();
+        assert!(recover(&root, "active", &home).is_err());
+        let lock = owner_lock(&root, "active").unwrap();
+        assert_eq!(
+            read_owners(&root, "active", &lock).unwrap().owners,
+            vec![active.clone()]
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn recovery_refuses_pending_coordinator_token_mismatch() {
+    let (temp, _ignored) = tmp_root();
+    let home = temp.path().join("home");
+    let root = home.join("store");
+    fs::create_dir_all(&root).unwrap();
+    create(&root, "pending", &[]).unwrap();
+    let run = home.join("run/r1");
+    let pending = begin_owner(&root, "pending", &run).unwrap();
+    let VolumeOwner::Pending {
+        nonce,
+        coordinator_pid,
+        ..
+    } = &pending
+    else {
+        unreachable!()
+    };
+    let witness = VolumeOwner::Pending {
+        nonce: nonce.clone(),
+        coordinator_pid: *coordinator_pid,
+        coordinator_start_token: "linux:bad:token".to_string(),
+    };
+    write_run_owner(&run, "pending", &witness, false).unwrap();
+    assert!(recover(&root, "pending", &home).is_err());
+    let lock = owner_lock(&root, "pending").unwrap();
+    assert_eq!(
+        read_owners(&root, "pending", &lock).unwrap().owners,
+        vec![pending]
     );
 }

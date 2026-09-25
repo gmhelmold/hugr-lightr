@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "fixture_required": ["id", "processes", "initial", "trace"],
+  "golden_required": ["id", "outcome", "state", "observations"],
+  "golden_state_required": ["volume_exists", "owners"],
+  "active_owner_required": ["phase", "nonce", "run_id", "pid", "process_start_token", "mount_id"],
+  "registry_required": ["run_id", "nonce", "phase", "pid", "process_start_token", "mount_id", "terminal_status"],
+  "fault_points": ["lock.loss", "sync_all.tmp", "rename.owners", "fsync.parent", "barrier.release"],
+  "events": {
+    "lock.acquire": ["actor"],
+    "lock.release": ["actor"],
+    "lock.loss": ["actor"],
+    "owner.pending": ["nonce", "coordinator"],
+    "owner.active": ["nonce", "run_id", "process", "mount_id"],
+    "pending.remove": ["nonce"],
+    "owner.remove": ["nonce", "run_id", "process_start_token"],
+    "write.tmp": ["owners"],
+    "sync_all.tmp": [],
+    "rename.owners": [],
+    "fsync.parent": [],
+    "barrier.spawn": ["run_id"],
+    "barrier.release": ["run_id"],
+    "registry.active": ["run_id", "nonce", "pid", "process_start_token", "mount_id"],
+    "registry.terminal": ["run_id", "nonce"],
+    "registry.sync": ["run_id"],
+    "process.observe": ["pid", "token", "result"],
+    "registry.observe": ["run_id", "nonce", "result"],
+    "recover.active": ["nonce", "run_id", "process_start_token"],
+    "rm": ["actor"],
+    "prune": ["actor"],
+    "fault": ["point", "operation"]
+  }
+}

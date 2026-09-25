@@ -13,6 +13,7 @@ pub mod down;
 /// precedence than the inline `environment` block). Consumed by `lower.rs`.
 pub(crate) mod envfile;
 pub mod interp;
+pub(crate) mod lazy;
 pub(crate) mod lower;
 /// SKELETON-FREEZE per-aspect lowering bodies, grouped cohesively so a feature WP
 /// touching one aspect group is FILE-DISJOINT from another. Re-exported through

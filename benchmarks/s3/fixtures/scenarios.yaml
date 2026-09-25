@@ -1,0 +1,11 @@
+scenarios:
+  - case_id: s3-scratch-copy
+    legacy_overlap: none
+    fixture: ../../fixtures/scratch-copy
+    lightr_engine: native
+    docker: ["${DOCKER}", "build", "--tag", "${S3_NAMESPACE}", "${FIXTURE_DIR}"]
+    lightr: ["${LIGHTR}", "build", "${FIXTURE_DIR}"]
+    assertions:
+      - id: exit-code
+        expected: {"exit_code": 0}
+        shared: true

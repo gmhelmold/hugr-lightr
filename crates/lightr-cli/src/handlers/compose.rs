@@ -199,44 +199,61 @@ pub fn up(
 
 // ── `compose down` handler ────────────────────────────────────────────────────
 
-/// The project name recorded in a stack dir's `spec.json`, if readable.
+/// The project name recorded in a stack dir's `spec.json`.
 /// Pre-CMP-P1-PROJECT specs (no `project` field) read back as `"default"` via
 /// the model's serde default.
-fn stack_project(stack_dir: &std::path::Path) -> Option<String> {
-    let bytes = std::fs::read(stack_dir.join("spec.json")).ok()?;
-    let spec: StackSpec = serde_json::from_slice(&bytes).ok()?;
-    Some(spec.project)
+fn stack_project(stack_dir: &std::path::Path) -> lightr_core::Result<String> {
+    let spec_path = stack_dir.join("spec.json");
+    let bytes = std::fs::read(&spec_path).map_err(lightr_core::LightrError::Io)?;
+    let spec: StackSpec = serde_json::from_slice(&bytes).map_err(|error| {
+        lightr_core::LightrError::InvalidManifest(format!(
+            "compose stack {}: {error}",
+            spec_path.display()
+        ))
+    })?;
+    Ok(spec.project)
 }
 
 /// Resolve the stack directory for `compose down`.
 ///
 /// Strategy: walk `$LIGHTR_HOME/compose/` and return the most-recently
 /// created subdirectory (name is `<nanos>-<pid>` so lexicographic sort
-/// gives newest-last). If none found, return `None`.
+/// gives newest-last). Only a missing compose directory means no stack; every
+/// other discovery failure propagates to the caller.
 ///
 /// CMP-P1-PROJECT: when `project` is `Some`, only stacks whose recorded
 /// `project` matches are considered, so `compose down -p A` never tears down
 /// project B (the projects-don't-collide invariant). When `None`, behavior is
 /// preserved exactly: the newest stack regardless of project.
-fn resolve_latest_stack(project: Option<&str>) -> Option<std::path::PathBuf> {
+fn resolve_latest_stack(project: Option<&str>) -> lightr_core::Result<Option<std::path::PathBuf>> {
     let home = crate::lightr_home();
     let compose_dir = home.join("compose");
-    if !compose_dir.is_dir() {
-        return None;
+    let directory = match std::fs::read_dir(&compose_dir) {
+        Ok(directory) => directory,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(lightr_core::LightrError::Io(error)),
+    };
+    let mut entries = Vec::new();
+    for entry in directory {
+        let entry = entry.map_err(lightr_core::LightrError::Io)?;
+        if !entry
+            .file_type()
+            .map_err(lightr_core::LightrError::Io)?
+            .is_dir()
+        {
+            continue;
+        }
+        let path = entry.path();
+        if let Some(name) = project {
+            if stack_project(&path)? != name {
+                continue;
+            }
+        }
+        entries.push(path);
     }
-    let mut entries: Vec<std::path::PathBuf> = std::fs::read_dir(&compose_dir)
-        .ok()?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().is_dir())
-        .map(|e| e.path())
-        .filter(|p| match project {
-            Some(name) => stack_project(p).as_deref() == Some(name),
-            None => true,
-        })
-        .collect();
     // Sort ascending by name (nanos prefix) ⇒ last = newest
     entries.sort();
-    entries.into_iter().last()
+    Ok(entries.into_iter().last())
 }
 
 /// `down` resolves the project name (cli>env>`name:`>basename) only when it
@@ -274,13 +291,12 @@ pub fn down(compose_file: Option<&str>, project: Option<&str>) -> i32 {
     };
 
     let stack_dir = match resolve_latest_stack(scope.as_deref()) {
-        Some(d) => d,
-        None => {
-            match &scope {
-                Some(p) => eprintln!("lightr: compose down: no active stack for project '{p}'"),
-                None => eprintln!("lightr: compose down: no active compose stack found"),
-            }
-            return 1;
+        Err(error) => return die_lightr(&error),
+        Ok(Some(directory)) => directory,
+        Ok(None) => {
+            // `compose down` is idempotent: lazy setup can remove its failed
+            // stack before a caller retries down, which remains successful.
+            return 0;
         }
     };
 
@@ -318,17 +334,29 @@ mod tests {
         assert_eq!(code, 0);
     }
 
-    /// `compose down` with no active stack ⇒ exit 1
+    /// `compose down` remains successful after failed lazy setup removed its stack.
     #[test]
-    fn compose_down_no_stack_exits_1() {
+    fn compose_down_no_stack_exits_0() {
         let _env = crate::test_lock::ENV_LOCK
             .lock()
             .unwrap_or_else(|p| p.into_inner());
         let tmp = TempDir::new().unwrap();
         std::env::set_var("LIGHTR_HOME", tmp.path());
+        let failed_stack = tmp
+            .path()
+            .join("compose/failed-lazy-setup/services/web/rootfs");
+        std::fs::create_dir_all(&failed_stack).unwrap();
+        std::fs::write(
+            tmp.path().join("compose/failed-lazy-setup/spec.json"),
+            b"{}",
+        )
+        .unwrap();
+        std::fs::write(tmp.path().join("compose/failed-lazy-setup/pid"), b"123").unwrap();
+        let failed_stack = tmp.path().join("compose/failed-lazy-setup");
+        std::fs::remove_dir_all(&failed_stack).unwrap();
         let code = super::down(None, None);
         std::env::remove_var("LIGHTR_HOME");
-        assert_eq!(code, 1, "no active stack must exit 1");
+        assert_eq!(code, 0, "missing failed lazy stack must be idempotent");
     }
 
     /// resolve_latest_stack: returns None when compose dir is absent
@@ -339,9 +367,25 @@ mod tests {
             .unwrap_or_else(|p| p.into_inner());
         let tmp = TempDir::new().unwrap();
         std::env::set_var("LIGHTR_HOME", tmp.path());
-        let result = super::resolve_latest_stack(None);
+        let result = super::resolve_latest_stack(None).unwrap();
         std::env::remove_var("LIGHTR_HOME");
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn compose_down_discovery_io_error_exits_1() {
+        let _env = crate::test_lock::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let tmp = TempDir::new().unwrap();
+        std::env::set_var("LIGHTR_HOME", tmp.path());
+        std::fs::write(tmp.path().join("compose"), b"not a directory").unwrap();
+        let code = super::down(None, None);
+        std::env::remove_var("LIGHTR_HOME");
+        assert_eq!(
+            code, 1,
+            "compose discovery I/O failure must not become success"
+        );
     }
 
     // ── CMP-P1-PROFILES: union_profiles (pure, env injected; parallel-safe) ──
