@@ -239,6 +239,7 @@ fn prepared_tree_complete_rejects_root_replacement() {
                 Ok(())
             },
             || Ok(()),
+            || Ok(()),
         )
         .unwrap_err();
     assert_eq!(failure.primary.unwrap().kind(), io::ErrorKind::InvalidData);
@@ -282,6 +283,7 @@ fn prepared_tree_complete_rejects_leaf_replacement_after_inner_validation() {
                 fs::write(output.join("a"), b"replacement")?;
                 Ok(())
             },
+            || Ok(()),
         )
         .unwrap_err();
 
@@ -324,6 +326,7 @@ fn prepared_tree_complete_rejects_same_inode_payload_mutation() {
                 fs::write(output.join("a"), b"replacement")?;
                 Ok(())
             },
+            || Ok(()),
         )
         .unwrap_err();
 
@@ -366,6 +369,7 @@ fn prepared_tree_complete_rejects_same_inode_mode_mutation() {
                 fs::set_permissions(output.join("a"), fs::Permissions::from_mode(0o600))?;
                 Ok(())
             },
+            || Ok(()),
         )
         .unwrap_err();
 
@@ -373,6 +377,52 @@ fn prepared_tree_complete_rejects_same_inode_mode_mutation() {
     assert!(failure.cleanup.is_empty());
     assert!(failure.cleanup_complete);
     assert!(!output.join("a").exists());
+}
+
+#[test]
+fn prepared_tree_complete_checks_root_after_descendants() {
+    let f = Fixture::new();
+    let output = f.parent.join("output");
+    let retained = f.parent.join("retained");
+    fs::create_dir(&output).unwrap();
+    let observed = f.inspect(&output);
+    let anchor = observed.anchor_empty(Wait::Try).unwrap();
+    let manifest = Manifest {
+        version: 1,
+        total_size: 0,
+        entries: vec![Entry::File {
+            path: "a".into(),
+            mode: 0o640,
+            size: 0,
+            digest: Digest::of_bytes(&[]),
+        }],
+    };
+    let mut prepared = anchor
+        .prepare_tree(&plan(&manifest), limits(), Wait::Try)
+        .unwrap();
+    let mut source = io::Cursor::new(&[] as &[u8]);
+    prepared
+        .write_file_payload("a", &mut source, Wait::Try)
+        .unwrap();
+
+    let failure = prepared
+        .complete_checked(
+            Wait::Try,
+            || Ok(()),
+            || Ok(()),
+            || {
+                fs::rename(&output, &retained)?;
+                fs::create_dir(&output)?;
+                Ok(())
+            },
+        )
+        .unwrap_err();
+
+    assert_eq!(failure.primary.unwrap().kind(), io::ErrorKind::InvalidData);
+    assert!(failure.cleanup.is_empty());
+    assert!(failure.cleanup_complete);
+    assert_eq!(fs::read_dir(&retained).unwrap().count(), 0);
+    assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
 }
 
 #[test]

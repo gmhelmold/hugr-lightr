@@ -176,6 +176,14 @@ DEST_PREPARE_CASES = [
         'store::foundation::destination_tree_prepare::tests::races::prepared_tree_complete_rejects_leaf_replacement_after_inner_validation',
         'called `Result::unwrap_err()` on an `Ok` value',
     ),
+    (
+        'dest-prepare-complete-root-after-descendants',
+        'destination_tree_prepare.rs',
+        '                    if let Err(error) = this.inner.revalidate_final_descendants(wait) {\n                        return Err(fail_and_cleanup(this.inner, error));\n                    }\n                    if let Err(error) = after_final_descendants() {\n                        return Err(fail_and_cleanup(this.inner, error));\n                    }\n                    if let Err(error) = this.inner.revalidate_root_namespace(wait) {\n                        return Err(fail_and_cleanup(this.inner, error));\n                    }\n                    if let Err(error) = this.anchor.revalidate(wait) {\n                        // Final root binding after descendants, before disarm.\n                        return Err(fail_and_cleanup(this.inner, error));\n                    }',
+        '                    if let Err(error) = this.inner.revalidate_final_descendants(wait) {\n                        return Err(fail_and_cleanup(this.inner, error));\n                    }\n                    if let Err(error) = this.anchor.revalidate(wait) {\n                        // Final root binding after descendants, before disarm.\n                        return Err(fail_and_cleanup(this.inner, error));\n                    }\n                    if let Err(error) = after_final_descendants() {\n                        return Err(fail_and_cleanup(this.inner, error));\n                    }\n                    if let Err(error) = this.inner.revalidate_root_namespace(wait) {\n                        return Err(fail_and_cleanup(this.inner, error));\n                    }',
+        'store::foundation::destination_tree_prepare::tests::races::prepared_tree_complete_checks_root_after_descendants',
+        'called `Result::unwrap_err()` on an `Ok` value',
+    ),
 ]
 
 def main():
@@ -227,7 +235,7 @@ def main():
     repr_suite = cargo + ["store::foundation::destination_name_probe::tests::", "--", "--nocapture"]
     repr_expected = r"test result: ok\. 14 passed; 0 failed; 0 ignored;"
     prepare_suite = cargo + ["store::foundation::destination_tree_prepare::tests::", "--", "--nocapture"]
-    prepare_expected = r"test result: ok\. 30 passed; 0 failed; 0 ignored;"
+    prepare_expected = r"test result: ok\. 31 passed; 0 failed; 0 ignored;"
     try:
         require(not git("status", "--porcelain", "--untracked-files=no"), "tracked source dirty")
         archive = subprocess.check_output(["git", "archive", "--format=zip", "HEAD"], cwd=ROOT)

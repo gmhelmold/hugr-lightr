@@ -184,7 +184,7 @@ impl PreparedDestinationTree<'_, '_> {
     /// An incomplete or invalid tree is rolled back instead.
     #[allow(dead_code)]
     pub(crate) fn complete(self, wait: Wait<'_>) -> Result<(), DestinationTreePrepareFailure> {
-        self.complete_checked(wait, || Ok(()), || Ok(()))
+        self.complete_checked(wait, || Ok(()), || Ok(()), || Ok(()))
     }
 
     #[allow(dead_code)]
@@ -193,6 +193,7 @@ impl PreparedDestinationTree<'_, '_> {
         wait: Wait<'_>,
         mut after_initial_root_check: impl FnMut() -> io::Result<()>,
         mut after_inner_complete: impl FnMut() -> io::Result<()>,
+        mut after_final_descendants: impl FnMut() -> io::Result<()>,
     ) -> Result<(), DestinationTreePrepareFailure> {
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
@@ -209,6 +210,9 @@ impl PreparedDestinationTree<'_, '_> {
                         return Err(fail_and_cleanup(this.inner, error));
                     }
                     if let Err(error) = this.inner.revalidate_final_descendants(wait) {
+                        return Err(fail_and_cleanup(this.inner, error));
+                    }
+                    if let Err(error) = after_final_descendants() {
                         return Err(fail_and_cleanup(this.inner, error));
                     }
                     if let Err(error) = this.inner.revalidate_root_namespace(wait) {

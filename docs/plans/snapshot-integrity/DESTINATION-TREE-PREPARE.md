@@ -79,8 +79,8 @@ Rust 1.96.0, source files below the repository 400-LOC production guard, formatt
 denied-warning Clippy, full Store/doctests/support/CI and Windows-GNU compile.
 Exact-head native/full Actions remain mandatory. Preserve all existing
 topology/listing/anchor/representation causal tuples. Destination preparation now
-has seven compiling controls, including final root binding before disarm. Every
-mutant must fail its exact assertion, then the restored 27-test family must pass.
+has nine compiling controls, including descendant checks before final root binding.
+Every mutant must fail its exact assertion, then the restored 31-test family must pass.
 
 ### Invariants
 
