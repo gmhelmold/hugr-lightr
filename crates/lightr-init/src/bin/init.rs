@@ -14,8 +14,9 @@ fn main() -> std::process::ExitCode {
 #[cfg(target_os = "linux")]
 mod linux {
     use lightr_init::{
-        run_init, ExitSink, GuestOps, InitSpec, CMD_FILE, EXIT_FILE, IP_FILE, ROOTFS_DEST,
-        ROOTFS_TAG, STDERR_FILE, STDOUT_FILE,
+        run_init, ExitSink, GuestOps, InitSpec, SuspendGate, CMD_FILE, EXIT_FILE, IP_FILE,
+        ROOTFS_DEST, ROOTFS_TAG, STDERR_FILE, STDOUT_FILE, SUSPEND_GATE_FILE, SUSPEND_READY_FILE,
+        SUSPEND_RELEASE_FILE,
     };
     use std::ffi::CString;
     use std::io::{self, Write};
@@ -127,7 +128,21 @@ mod linux {
                 .stdout(std::process::Stdio::from(stdout_file))
                 .stderr(std::process::Stdio::from(stderr_file));
 
-            let status = c.spawn()?.wait()?;
+            let mut child = c.spawn()?;
+            // Snapshot resume proof: this is after exact gate release and before
+            // waiting, so host can establish a real guest workload PID.
+            let mut pid = std::fs::File::create(lightr_init::WORKLOAD_PID_FILE)?;
+            let gate: SuspendGate = serde_json::from_slice(&std::fs::read(SUSPEND_GATE_FILE)?)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+            write!(
+                pid,
+                "{} {} {}",
+                gate.instance_id,
+                gate.release_token,
+                child.id()
+            )?;
+            pid.sync_all()?;
+            let status = child.wait()?;
 
             // CRITICAL ORDERING: make the capture files durable on virtiofs BEFORE
             // run_init reports the exit (which the host taps via the console
@@ -152,6 +167,32 @@ mod linux {
             write!(f, "{ip}")?;
             f.sync_all()?;
             Ok(())
+        }
+
+        fn await_suspend_release(&mut self) -> io::Result<()> {
+            let bytes = std::fs::read(SUSPEND_GATE_FILE)?;
+            let gate: SuspendGate = serde_json::from_slice(&bytes)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+            gate.validate()?;
+
+            // Ready exists only after rootfs mount, command parse, chroot, and
+            // optional guest networking. sync_all makes it VZ-host observable.
+            let mut ready = std::fs::File::create(SUSPEND_READY_FILE)?;
+            ready.write_all(gate.instance_id.as_bytes())?;
+            ready.sync_all()?;
+
+            loop {
+                if let Ok(token) = std::fs::read_to_string(SUSPEND_RELEASE_FILE) {
+                    if token == gate.release_token {
+                        return Ok(());
+                    }
+                    return Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "suspend release token mismatch",
+                    ));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
         }
     }
 

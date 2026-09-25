@@ -10,6 +10,7 @@ fn sample_spec() -> InitSpec {
             ("LANG".to_string(), "C".to_string()),
         ],
         net: false,
+        suspend_gate: false,
     }
 }
 
@@ -51,6 +52,7 @@ struct FakeOps {
     spawn_result: io::Result<i32>,
     spawned: Option<SpawnCall>,
     published: bool,
+    released: bool,
     fail_at: Option<&'static str>, // "mount" | "read" | "enter"
 }
 
@@ -62,6 +64,7 @@ impl FakeOps {
             spawn_result: Ok(code),
             spawned: None,
             published: false,
+            released: false,
             fail_at: None,
         }
     }
@@ -73,6 +76,7 @@ impl FakeOps {
             spawn_result: Err(io::Error::from_raw_os_error(2)), // ENOENT
             spawned: None,
             published: false,
+            released: false,
             fail_at: None,
         }
     }
@@ -84,6 +88,7 @@ impl FakeOps {
             spawn_result: Ok(0),
             spawned: None,
             published: false,
+            released: false,
             fail_at: Some(step),
         }
     }
@@ -131,6 +136,12 @@ impl GuestOps for FakeOps {
     fn publish_ip(&mut self) -> io::Result<()> {
         self.steps.push("publish_ip");
         self.published = true;
+        Ok(())
+    }
+
+    fn await_suspend_release(&mut self) -> io::Result<()> {
+        self.steps.push("release");
+        self.released = true;
         Ok(())
     }
 }
@@ -199,6 +210,19 @@ fn run_init_publishes_ip_when_net_enabled() {
         "publish_ip is between enter and spawn"
     );
     assert!(ops.published, "the guest IP was published");
+}
+
+#[test]
+fn suspend_gate_releases_before_workload_spawn() {
+    let mut ops = FakeOps::spawning(0);
+    ops.spec.suspend_gate = true;
+    let mut sink = VecSink::default();
+    run_init(&mut ops, &mut sink).expect("gated init succeeds");
+    assert_eq!(
+        ops.steps,
+        vec!["mount", "read", "enter", "release", "spawn"]
+    );
+    assert!(ops.released, "gate release must precede workload spawn");
 }
 
 #[test]

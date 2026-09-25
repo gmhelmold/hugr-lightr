@@ -5,9 +5,8 @@
 //! ROOT is resolved once here and INJECTED into every registry call (house
 //! convention — the registry never reads the global env itself).
 //!
-//! In-use ref-counting against running containers is WP-VOL-5; nothing mounts
-//! named volumes yet (mount-wiring is VOL-8/9/10), so `rm` passes `in_use=false`
-//! and `prune` removes every volume. We do NOT fake an in-use signal.
+//! `rm`/`prune` delegate owner recovery and flock-protected nonempty refusal to
+//! the registry. `in_use=false` is legacy caller input, not ownership authority.
 
 use std::path::Path;
 
@@ -68,9 +67,9 @@ fn ls(root: &Path, json: bool) -> i32 {
 // ── rm ──────────────────────────────────────────────────────────────────────
 
 /// `docker volume rm <name>...`. Removes each named volume. `-f/--force`
-/// ignores a missing volume (docker's `--force` semantics). In-use is always
-/// false today (WP-VOL-5). Any non-ignored error fails the whole command with
-/// that error's exit code, after attempting the rest.
+/// ignores a missing volume (docker's `--force` semantics). Registry recovery
+/// runs before flock-protected ownership refusal. Any non-ignored error fails
+/// the whole command with that error's exit code, after attempting the rest.
 fn rm(root: &Path, targets: &[String], force: bool) -> i32 {
     if targets.is_empty() {
         eprintln!("lightr: volume rm: requires at least one volume name");
@@ -111,10 +110,9 @@ fn print_inspect(info: &VolumeInfo) {
 
 // ── prune ─────────────────────────────────────────────────────────────────────
 
-/// `docker volume prune`. Removes all dangling (not-in-use) volumes. Today no
-/// volume is in use (WP-VOL-5 owns ref-counting), so every volume is dangling.
-/// `-f/--force` skips the interactive prompt — we never prompt (daemonless,
-/// non-interactive), so the flag is accepted and is a no-op.
+/// `docker volume prune`. Removes only volumes whose recovered owner snapshot
+/// is empty. `-f/--force` skips the interactive prompt — we never prompt
+/// (daemonless, non-interactive), so the flag is accepted and is a no-op.
 fn prune(root: &Path, _force: bool) -> i32 {
     match volume::prune(root) {
         Ok(removed) => {

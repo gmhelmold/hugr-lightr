@@ -25,6 +25,8 @@ jobs:
         run: |
           bash benchmarks/ci/validate_paths.sh
           bash benchmarks/ci/test_validate_paths.sh
+      - name: Verify volume lifecycle contract
+        run: bash benchmarks/s3/volume/contract/test_gate.sh
       - name: Check shell syntax
         run: |
           bash -n benchmarks/ci/docker

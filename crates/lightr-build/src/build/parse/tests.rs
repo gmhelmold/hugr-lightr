@@ -123,6 +123,32 @@ fn run_shell_form_wraps_in_sh() {
 }
 
 #[test]
+fn run_mount_is_rejected_before_becoming_shell_text() {
+    let err = parse_dockerfile("RUN --mount=type=cache,target=/cache make").unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "invalid manifest: RUN: unsupported flag --mount"
+    );
+}
+
+#[test]
+fn run_unknown_flag_is_rejected_and_plain_run_is_preserved() {
+    let err = parse_dockerfile("RUN --network=host make").unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "invalid manifest: RUN: unknown flag --network"
+    );
+
+    assert_eq!(
+        parse("RUN echo hi")[0].instr,
+        Instr::Run {
+            argv: vec!["/bin/sh".into(), "-c".into(), "echo hi".into()],
+            form: CmdForm::Shell("echo hi".into()),
+        }
+    );
+}
+
+#[test]
 fn entrypoint_both_forms() {
     let exec = parse(r#"ENTRYPOINT ["/app","--serve"]"#);
     assert!(matches!(

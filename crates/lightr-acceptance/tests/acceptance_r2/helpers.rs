@@ -79,13 +79,22 @@ pub(crate) fn make_oci_layout_real_sha256(dir: &Path, layers: &[Vec<u8>]) -> Pat
         }));
     }
 
+    let architecture = match std::env::consts::ARCH {
+        "x86_64" => "amd64",
+        "aarch64" => "arm64",
+        other => other,
+    };
+    let config = format!(r#"{{"architecture":"{architecture}","os":"linux"}}"#).into_bytes();
+    let config_hex = sha256_hex_of(&config);
+    fs::write(layout_dir.join("blobs/sha256").join(&config_hex), &config).unwrap();
+
     let manifest = serde_json::json!({
         "schemaVersion": 2,
         "mediaType": "application/vnd.oci.image.manifest.v1+json",
         "config": {
             "mediaType": "application/vnd.oci.image.config.v1+json",
-            "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-            "size": 0
+            "digest": format!("sha256:{config_hex}"),
+            "size": config.len()
         },
         "layers": layer_descs
     });
@@ -103,7 +112,8 @@ pub(crate) fn make_oci_layout_real_sha256(dir: &Path, layers: &[Vec<u8>]) -> Pat
         "manifests": [{
             "mediaType": "application/vnd.oci.image.manifest.v1+json",
             "digest": format!("sha256:{manifest_hex}"),
-            "size": manifest_bytes.len()
+            "size": manifest_bytes.len(),
+            "platform": {"os": "linux", "architecture": architecture}
         }]
     });
     fs::write(

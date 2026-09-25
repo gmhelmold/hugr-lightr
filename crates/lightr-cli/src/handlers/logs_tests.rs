@@ -11,7 +11,10 @@
 
 use std::fs;
 
-use super::{bytes_after, parse_since, select_tail, since_excludes_all};
+use super::{
+    bytes_after, follow_stop_reason, initial_and_follow_paths, initial_log_bytes, parse_since,
+    select_tail, stream_paths, timestamp_note, FollowStop,
+};
 use super::{run as logs_run, LogOpts};
 use crate::test_lock::ENV_LOCK;
 use lightr_run::LogStream;
@@ -62,6 +65,23 @@ fn tail_empty_input() {
     assert_eq!(select_tail(b"", None), b"");
 }
 
+#[test]
+fn stdout_and_stderr_select_only_requested_streams() {
+    let tmp = tempfile::tempdir().unwrap();
+    assert_eq!(
+        stream_paths(tmp.path(), &LogStream::Stdout),
+        vec![tmp.path().join("stdout.log")]
+    );
+    assert_eq!(
+        stream_paths(tmp.path(), &LogStream::Stderr),
+        vec![tmp.path().join("stderr.log")]
+    );
+    assert_eq!(
+        stream_paths(tmp.path(), &LogStream::Both),
+        vec![tmp.path().join("stdout.log"), tmp.path().join("stderr.log")]
+    );
+}
+
 // ── bytes_after (the --follow append core) ──────────────────────────────────
 
 #[test]
@@ -107,6 +127,35 @@ fn follow_offset_past_eof_clamps() {
     assert_eq!(off, 3);
 }
 
+#[test]
+fn follow_setup_emits_append_after_initial_tail_exactly_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    let log = tmp.path().join("stdout.log");
+    fs::write(&log, b"first\nsecond\n").unwrap();
+
+    // This read and returned offset are same snapshot. Simulate append while
+    // initial tail waits to print, then verify follow emits only new bytes.
+    let (initial, offset) = initial_log_bytes(&log, Some(1)).unwrap();
+    fs::write(&log, b"first\nsecond\nthird\n").unwrap();
+    let (append, next) = bytes_after(&log, offset).unwrap();
+    assert_eq!(initial, b"second\n");
+    assert_eq!(append, b"third\n");
+    assert_eq!(next, 19);
+}
+
+#[test]
+fn bounded_follow_stops_after_drain_or_poll_cap() {
+    assert_eq!(
+        follow_stop_reason(true, false, 0),
+        Some(FollowStop::Drained)
+    );
+    assert_eq!(follow_stop_reason(true, true, 0), None);
+    assert_eq!(
+        follow_stop_reason(false, false, super::FOLLOW_MAX_POLLS),
+        Some(FollowStop::PollCap)
+    );
+}
+
 // ── --since honest semantics ────────────────────────────────────────────────
 
 #[test]
@@ -118,35 +167,58 @@ fn parse_since_unix_seconds() {
 }
 
 #[test]
-fn since_excludes_old_file_includes_recent() {
+fn timestamp_disclosure_is_explicitly_mtime_only() {
+    let streams = vec![
+        ("stdout.log".to_string(), Some(1_717_600_000)),
+        ("stderr.log".to_string(), Some(1_717_600_001)),
+    ];
+    let note = timestamp_note(false, &streams);
+    assert!(note.contains("no per-line timestamps"));
+    assert!(note.contains("stdout.log=1717600000"));
+    assert!(note.contains("stderr.log=1717600001"));
+    assert!(note.contains("-t reports"));
+
+    let since = timestamp_note(true, &streams);
+    assert!(since.contains("no per-line timestamps"));
+    assert!(since.contains("--since compares"));
+    assert!(since.contains("stdout.log=1717600000"));
+    assert!(since.contains("stderr.log=1717600001"));
+}
+
+#[test]
+fn since_skips_old_backlog_but_follow_keeps_both_streams() {
     let tmp = tempfile::tempdir().unwrap();
-    let log = tmp.path().join("stdout.log");
-    fs::write(&log, b"line\n").unwrap();
+    let stdout = tmp.path().join("stdout.log");
+    let stderr = tmp.path().join("stderr.log");
+    let (initial, follow) =
+        initial_and_follow_paths(vec![stdout.clone(), stderr.clone()], Some("20"), |path| {
+            if path == stdout {
+                Some(10)
+            } else if path == stderr {
+                Some(30)
+            } else {
+                None
+            }
+        });
+    assert_eq!(initial, vec![stderr.clone()]);
+    assert_eq!(follow, vec![stdout.clone(), stderr.clone()]);
 
-    // Cutoff far in the future ⇒ file mtime is older ⇒ exclude all.
-    let far_future = "9999999999";
-    assert!(since_excludes_all(
-        tmp.path(),
-        &LogStream::Stdout,
-        Some(far_future)
-    ));
-
-    // Cutoff at epoch ⇒ file is newer ⇒ include.
-    assert!(!since_excludes_all(
-        tmp.path(),
-        &LogStream::Stdout,
-        Some("0")
-    ));
-
-    // No --since ⇒ never excludes.
-    assert!(!since_excludes_all(tmp.path(), &LogStream::Stdout, None));
-
-    // Unparseable --since ⇒ lenient include (don't exclude).
-    assert!(!since_excludes_all(
-        tmp.path(),
-        &LogStream::Stdout,
-        Some("yesterday")
-    ));
+    // No or malformed cutoff preserves all initial and follow streams.
+    assert_eq!(
+        initial_and_follow_paths(vec![stdout.clone(), stderr.clone()], None, |_| Some(0)),
+        (
+            vec![stdout.clone(), stderr.clone()],
+            vec![stdout.clone(), stderr.clone()]
+        )
+    );
+    assert_eq!(
+        initial_and_follow_paths(
+            vec![stdout.clone(), stderr.clone()],
+            Some("yesterday"),
+            |_| Some(0)
+        ),
+        (vec![stdout.clone(), stderr.clone()], vec![stdout, stderr])
+    );
 }
 
 // ── exit-code contract (end-to-end, under ENV_LOCK) ─────────────────────────

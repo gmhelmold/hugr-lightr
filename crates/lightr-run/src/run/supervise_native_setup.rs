@@ -12,12 +12,52 @@ use lightr_core::{LightrError, Result};
 
 use crate::run::types::SpecOnDisk;
 
+#[cfg(unix)]
+pub(super) struct ExecBarrier {
+    read: std::fs::File,
+    write: std::fs::File,
+}
+
+#[cfg(unix)]
+impl ExecBarrier {
+    pub(super) fn new() -> Result<Self> {
+        use std::os::fd::FromRawFd;
+        let mut fds = [0; 2];
+        if unsafe { libc::pipe(fds.as_mut_ptr()) } != 0 {
+            return Err(LightrError::Io(std::io::Error::last_os_error()));
+        }
+        // Shim must inherit only read end. Parent write end never leaks through
+        // its exec, so EOF/release semantics remain bounded to supervisor.
+        if unsafe { libc::fcntl(fds[1], libc::F_SETFD, libc::FD_CLOEXEC) } == -1 {
+            let error = std::io::Error::last_os_error();
+            unsafe { libc::close(fds[0]) };
+            unsafe { libc::close(fds[1]) };
+            return Err(LightrError::Io(error));
+        }
+        Ok(Self {
+            read: unsafe { std::fs::File::from_raw_fd(fds[0]) },
+            write: unsafe { std::fs::File::from_raw_fd(fds[1]) },
+        })
+    }
+
+    pub(super) fn release(&self) -> Result<()> {
+        use std::io::Write;
+        (&self.write).write_all(&[1]).map_err(LightrError::Io)
+    }
+
+    pub(super) fn read_fd(&self) -> std::os::fd::RawFd {
+        use std::os::fd::AsRawFd;
+        self.read.as_raw_fd()
+    }
+}
+
 /// Spawn one child with the run's persisted command/env/identity in `run_cwd`,
 /// writing its pid + a `running` status. Returns the spawned `Child` + its pid.
 pub(super) fn spawn_child(
     dir: &std::path::Path,
     spec: &SpecOnDisk,
     run_cwd: &std::path::Path,
+    #[cfg(unix)] barrier: Option<&ExecBarrier>,
 ) -> Result<(std::process::Child, i32)> {
     // Append, not truncate, on a re-spawn so a restarting service's logs are not
     // lost. The first spawn creates the files; subsequent ones append.
@@ -35,9 +75,25 @@ pub(super) fn spawn_child(
     // WP-RUNFLAGS: `--entrypoint` prepends to the persisted command (Docker CMD).
     // `None` ⇒ argv == command (byte-identical to before).
     let argv = crate::run::bindmat::effective_argv(spec.entrypoint.as_deref(), &spec.command);
+    #[cfg(unix)]
+    let mut cmd = if let Some(barrier) = barrier {
+        let shim = gate_shim_path().map_err(LightrError::Io)?;
+        let mut shim = std::process::Command::new(shim);
+        shim.arg("__volume_gate")
+            .arg(barrier.read_fd().to_string())
+            .arg("--")
+            .args(&argv);
+        shim
+    } else {
+        let mut direct = std::process::Command::new(&argv[0]);
+        direct.args(&argv[1..]);
+        direct
+    };
+    #[cfg(not(unix))]
     let mut cmd = std::process::Command::new(&argv[0]);
-    cmd.args(&argv[1..])
-        .current_dir(run_cwd)
+    #[cfg(not(unix))]
+    cmd.args(&argv[1..]);
+    cmd.current_dir(run_cwd)
         // WP-DISC: explicit per-child env (compose service discovery + service
         // env). Empty for a plain `lightr run -d` (byte-identical to before).
         .envs(spec.env.iter().cloned())
@@ -72,6 +128,33 @@ pub(super) fn spawn_child(
     std::fs::write(dir.join("pid"), format!("{pid}")).map_err(LightrError::Io)?;
     std::fs::write(dir.join("status"), "running").map_err(LightrError::Io)?;
     Ok((child, pid))
+}
+
+#[cfg(all(unix, not(test)))]
+fn gate_shim_path() -> std::io::Result<std::path::PathBuf> {
+    std::env::current_exe()
+}
+
+#[cfg(all(unix, test))]
+fn gate_shim_path() -> std::io::Result<std::path::PathBuf> {
+    std::env::var_os("LIGHTR_VOLUME_GATE_SHIM")
+        .map(Into::into)
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "test gate shim unset"))
+}
+
+#[cfg(all(test, unix))]
+mod gate_tests {
+    use super::gate_shim_path;
+
+    #[test]
+    fn test_selection_uses_fixture() {
+        std::env::set_var("LIGHTR_VOLUME_GATE_SHIM", "/tmp/lightr-volume-gate");
+        let selected = gate_shim_path().unwrap();
+        assert_eq!(
+            selected,
+            std::path::PathBuf::from("/tmp/lightr-volume-gate")
+        );
+    }
 }
 
 /// WP-RUNFLAGS: `--rm` — when the run's supervisor reaches its final exit, remove

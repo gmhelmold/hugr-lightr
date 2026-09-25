@@ -42,6 +42,7 @@ pub use run::types::{
 // (MountOnDisk2 / PortOnDisk are pub(super) serde-mirror types in run::types,
 // used by SpecOnDisk — not re-exported, exactly like MountOnDisk.)
 pub use run::mount::{parse_mount_long, parse_tmpfs, parse_v, MountKind, MountSpec, ResolvedMount};
+pub use run::types::NamedVolumeBind;
 
 // registry (WP-LIFE-01) — name→id registry API; consumed by the CLI-lifecycle
 // wiring WPs (LIFE-02/03 --name + verb name-resolution).
@@ -70,6 +71,8 @@ pub use run::deepmemo::{deep_memo_available, run_memoized_deep};
 // WP-D: `create_run_prepared` is the prepare-without-launch primitive the CLI
 // `create` verb calls (docker `create` = the "Created" state: dir + spec.json,
 // no supervisor). `spawn_detached_engine` now = prepare + launch.
+#[cfg(unix)]
+pub use run::spawn::volume_gate_dispatch;
 pub use run::spawn::{
     create_run_prepared, spawn_detached, spawn_detached_engine, spawn_detached_with_health,
 };
@@ -85,6 +88,7 @@ pub use run::logs::logs;
 
 // stop
 pub use run::stop::stop;
+pub use run::suspend::{SuspendedIdentity, SuspensionOwner};
 
 // exec
 pub use run::exec::exec_in;

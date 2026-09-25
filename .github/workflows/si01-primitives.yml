@@ -1,0 +1,66 @@
+name: SI01 wire and publication primitives
+on:
+  pull_request:
+    branches: [fix/snapshot-integrity]
+    paths:
+      - 'crates/lightr-store/**'
+      - 'crates/lightr-core/**'
+      - 'Cargo.*'
+      - 'rust-toolchain.toml'
+      - 'scripts/si01/**'
+      - 'docs/plans/snapshot-integrity/bootstrap/**'
+      - '.github/workflows/si01-primitives.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: si01-primitives-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  primitives:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_INCREMENTAL: '0'
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - run: |
+          mkdir si01-evidence
+          git rev-parse HEAD > si01-evidence/checkout.txt
+          git rev-parse HEAD^{tree} > si01-evidence/tree.txt
+          git archive --format=zip --output=si01-evidence/source.zip HEAD
+          rustup toolchain install 1.96.0 --profile minimal --component rustfmt,clippy
+      - name: Bind Rust vectors to immutable SI00 bytes
+        run: python3 scripts/si01/check_vectors.py
+      - name: Execute store tests and retain their real output
+        run: |
+          set -o pipefail
+          cargo +1.96.0 test --locked -p lightr-store --lib 2>&1 | tee si01-evidence/tests.log
+      - name: Check all store targets without suppressing warnings
+        run: |
+          set -o pipefail
+          cargo +1.96.0 clippy --locked -p lightr-store --all-targets -- -D warnings 2>&1 | tee si01-evidence/clippy.log
+      - name: Compiling causal controls in isolated source
+        run: python3 scripts/si01/negative_controls.py
+      - name: Required formatting
+        id: fmt
+        run: |
+          set -o pipefail
+          cargo +1.96.0 fmt --all -- --check 2>&1 | tee si01-evidence/fmt.log
+      - name: Retain formatter patch without qualifying altered code
+        if: ${{ failure() && steps.fmt.outcome == 'failure' }}
+        run: |
+          cargo +1.96.0 fmt --all
+          git diff > si01-evidence/rustfmt.patch
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: si01-primitives-${{ github.sha }}
+          path: si01-evidence/
+          if-no-files-found: error
+          retention-days: 30

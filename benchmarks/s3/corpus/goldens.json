@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "baseline": "bea26dd843f5ecdc8f32cab4dd6faa8740436723",
+  "goldens": [
+    {
+      "id": "S3-GOLDEN-ENGINE-001",
+      "clause_id": "S3-CORPUS-ENGINE-001",
+      "stdout_sha256": "ace53e1b13fe9280ccb0a143a331c44bb3a26eb723c43b3d92c3e3d27be0c7bf",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "S3-GOLDEN-STORE-001",
+      "clause_id": "S3-CORPUS-STORE-001",
+      "stdout_sha256": "fc76514d17870ef8050b86781e4dfb7a826305fc4d8d29a56c47a3146db614f6",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

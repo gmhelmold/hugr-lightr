@@ -81,14 +81,40 @@ fn parse_memory(s: &str) -> Result<u64> {
 }
 
 fn parse_cpus(s: &str) -> Result<u64> {
-    let f: f64 = s
-        .trim()
+    let raw = s.trim();
+    let (whole, fraction) = raw.split_once('.').unwrap_or((raw, ""));
+    if whole.is_empty()
+        || !whole.bytes().all(|b| b.is_ascii_digit())
+        || !fraction.bytes().all(|b| b.is_ascii_digit())
+    {
+        return Err(LightrError::InvalidRef(format!("invalid cpus: {s}")));
+    }
+    let whole: u64 = whole
         .parse()
-        .map_err(|_| LightrError::InvalidRef(format!("invalid cpus: {s}")))?;
-    if !(f.is_finite() && f > 0.0) {
+        .map_err(|_| LightrError::InvalidRef(format!("cpu limit overflow: {s}")))?;
+    let mut millis = whole
+        .checked_mul(1000)
+        .ok_or_else(|| LightrError::InvalidRef(format!("cpu limit overflow: {s}")))?;
+
+    // Decimal arithmetic prevents float casts from silently saturating or turning
+    // a positive sub-milli request into an unenforced zero limit.
+    let mut digits = fraction.bytes();
+    let mut fractional_millis = 0u64;
+    for place in [100, 10, 1] {
+        if let Some(digit) = digits.next() {
+            fractional_millis += u64::from(digit - b'0') * place;
+        }
+    }
+    if matches!(digits.next(), Some(b'5'..=b'9')) {
+        fractional_millis += 1;
+    }
+    millis = millis
+        .checked_add(fractional_millis)
+        .ok_or_else(|| LightrError::InvalidRef(format!("cpu limit overflow: {s}")))?;
+    if millis == 0 {
         return Err(LightrError::InvalidRef(format!("cpus must be > 0: {s}")));
     }
-    Ok((f * 1000.0).round() as u64)
+    Ok(millis)
 }
 
 #[cfg(test)]
@@ -147,6 +173,32 @@ mod resource_limits_tests {
         assert!(ResourceLimits::parse(None, Some("0")).is_err());
         assert!(ResourceLimits::parse(None, Some("-1")).is_err());
         assert!(ResourceLimits::parse(None, Some("x")).is_err());
+        assert!(ResourceLimits::parse(None, Some("1e3")).is_err());
+        assert!(ResourceLimits::parse(None, Some(".5")).is_err());
+    }
+
+    #[test]
+    fn cpu_rounding_rejects_zero_effective_limits() {
+        assert_eq!(
+            ResourceLimits::parse(None, Some("0.0005"))
+                .unwrap()
+                .cpu_millis,
+            Some(1)
+        );
+        assert!(ResourceLimits::parse(None, Some("0.0004")).is_err());
+        assert_eq!(
+            ResourceLimits::parse(None, Some("1.2345"))
+                .unwrap()
+                .cpu_millis,
+            Some(1235)
+        );
+        assert!(ResourceLimits::parse(None, Some("18446744073709552")).is_err());
+    }
+
+    #[test]
+    fn memory_unit_overflow_fails_closed() {
+        assert!(ResourceLimits::parse(Some("18446744073709551615k"), None).is_err());
+        assert!(ResourceLimits::parse(Some("18446744073709551616"), None).is_err());
     }
 
     #[test]

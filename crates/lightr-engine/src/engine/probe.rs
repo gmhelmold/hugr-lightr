@@ -82,7 +82,7 @@ fn probe_ns() -> EngineCaps {
     }
 }
 
-#[cfg(all(target_os = "macos", feature = "vz"))]
+#[cfg(all(target_os = "macos", target_arch = "aarch64", feature = "vz"))]
 fn probe_vz() -> EngineCaps {
     let dir = pack_dir();
     let kernel = dir.join("kernel");
@@ -109,11 +109,11 @@ fn probe_vz() -> EngineCaps {
     }
 }
 
-#[cfg(not(all(target_os = "macos", feature = "vz")))]
+#[cfg(not(all(target_os = "macos", target_arch = "aarch64", feature = "vz")))]
 fn probe_vz() -> EngineCaps {
     EngineCaps {
         available: false,
-        detail: "vz engine requires macOS + the 'vz' build feature + a linux pack \
+        detail: "vz snapshot engine requires macOS arm64 + macOS 14 + the 'vz' build feature + a linux pack \
                  — see 'lightr engine install-pack'"
             .to_string(),
     }

@@ -24,3 +24,4 @@ the batch acceptance of 0001/0002/0004/0006/0007 were Accepted under the
 | [0014](0014-vm-states.md) | VM states as refs, boot-never | Accepted (ratified 2026-07-02) — gated on S2/S5 |
 | [0015](0015-lazy-compose.md) | Lazy compose (socket activation + resume) | Accepted (ratified 2026-07-02) |
 | [0016](0016-deep-memo.md) | Deep-memo (FS view as tracer) | Accepted (ratified 2026-07-02) |
+| [0020](0020-snapshot-integrity-activation.md) | Snapshot integrity: bounded metadata and coordinated activation | Accepted design (2026-09-17, delegated coordinator review); runtime/activation gates remain |

@@ -2,8 +2,12 @@
 
 use super::layer::{apply_and_snapshot, LayerBlob};
 use super::model::{DockerSaveItem, ImportReport, OciIndex, OciManifest};
+use super::reference::pick_from_manifest_list;
 use super::retain::{retain_image_manifest, RetainBlob};
-use super::util::{path_is_safe, platform_of_config, sha256_hex, verify_sha256};
+use super::util::{
+    path_is_safe, platform_of_config, required_sha256_hex, sha256_hex, validate_image_config,
+    verify_sha256,
+};
 use flate2::read::GzDecoder;
 use lightr_core::{LightrError, Result};
 use lightr_store::Store;
@@ -48,14 +52,8 @@ pub(super) fn import_oci_layout_dir(
         ));
     }
 
-    // Pick first manifest (single-arch layouts typically have one entry)
-    let manifest_desc = &index.manifests[0];
-    let manifest_hex = sha256_hex(&manifest_desc.digest).ok_or_else(|| {
-        LightrError::InvalidManifest(format!(
-            "unsupported manifest digest: {}",
-            manifest_desc.digest
-        ))
-    })?;
+    let manifest_desc = pick_from_manifest_list(&index.manifests)?;
+    let manifest_hex = required_sha256_hex(&manifest_desc.digest, "manifest")?;
 
     let manifest_path = layout_dir.join("blobs").join("sha256").join(manifest_hex);
     let manifest_bytes = fs::read(&manifest_path).map_err(|_| {
@@ -69,6 +67,20 @@ pub(super) fn import_oci_layout_dir(
 
     let manifest: OciManifest = serde_json::from_slice(&manifest_bytes)
         .map_err(|e| LightrError::InvalidManifest(format!("manifest parse error: {e}")))?;
+
+    let cfg_hex = required_sha256_hex(&manifest.config.digest, "config")?;
+    let cfg_path = layout_dir.join("blobs").join("sha256").join(cfg_hex);
+    let cfg_bytes = fs::read(&cfg_path)
+        .map_err(|_| LightrError::InvalidManifest(format!("config blob not found: {cfg_hex}")))?;
+    verify_sha256(&cfg_bytes, cfg_hex)?;
+    validate_image_config(&cfg_bytes)?;
+    let platform = platform_of_config(&cfg_bytes);
+    let config_blob = RetainOwned {
+        media_type: manifest.config.media_type.clone(),
+        sha256_hex: Some(cfg_hex.to_string()),
+        size: manifest.config.size,
+        bytes: cfg_bytes.clone(),
+    };
 
     let layer_count = manifest.layers.len() as u64;
 
@@ -103,40 +115,18 @@ pub(super) fn import_oci_layout_dir(
         blobs.push(LayerBlob::Bytes(layer_bytes));
     }
 
-    let report = apply_and_snapshot(blobs, layer_count, store, name)?;
-
-    // push-fidelity: capture the image config blob from the layout (it sits at
-    // blobs/sha256/<config-hex>). sha256-verified; best-effort (the filesystem
-    // is already snapshotted, so a missing config only costs push-fidelity).
-    let mut platform = String::new();
-    let mut config_blob: Option<RetainOwned> = None;
-    if let Some(cfg_hex) = sha256_hex(&manifest.config.digest) {
-        let cfg_path = layout_dir.join("blobs").join("sha256").join(cfg_hex);
-        if let Ok(cfg_bytes) = fs::read(&cfg_path) {
-            if verify_sha256(&cfg_bytes, cfg_hex).is_ok() {
-                let _ = store.image_config_put(name, &cfg_bytes);
-                platform = platform_of_config(&cfg_bytes);
-                config_blob = Some(RetainOwned {
-                    media_type: manifest.config.media_type.clone(),
-                    sha256_hex: Some(cfg_hex.to_string()),
-                    size: manifest.config.size,
-                    bytes: cfg_bytes,
-                });
-            }
-        }
-    }
-
-    // WP-IMG-01: retain verbatim manifest + ordered descriptors (config first,
-    // then layers) + platform. Verify-then-retain is fail-closed (the per-blob
-    // sha256 above already errored on mismatch; retain_image_manifest re-checks).
+    // Validate and retain all descriptor content before snapshot can publish ref.
+    store.image_config_put(name, &cfg_bytes)?;
     retain_owned(
         store,
         name,
         &manifest_bytes,
         &platform,
-        config_blob,
+        Some(config_blob),
         retained,
     )?;
+
+    let report = apply_and_snapshot(blobs, layer_count, store, name)?;
 
     Ok(report)
 }
@@ -253,6 +243,45 @@ pub(super) fn import_docker_save_tar(
         LightrError::InvalidManifest("docker save manifest.json is empty".to_string())
     })?;
 
+    let config_path = Path::new(&item.config);
+    if item.config.is_empty() || !path_is_safe(config_path) {
+        return Err(LightrError::InvalidManifest(format!(
+            "unsafe docker save config path: {}",
+            item.config
+        )));
+    }
+    let cfg_key = item.config.trim_start_matches("./").to_string();
+    let cfg_bytes = layer_data.get(&cfg_key).cloned().ok_or_else(|| {
+        LightrError::InvalidManifest(format!("docker save config not found: {cfg_key}"))
+    })?;
+    let cfg_hex = if let Some(hex) = cfg_key.strip_prefix("blobs/sha256/") {
+        required_sha256_hex(&format!("sha256:{hex}"), "config")?;
+        verify_sha256(&cfg_bytes, hex)?;
+        Some(hex.to_string())
+    } else {
+        let filename = Path::new(&cfg_key)
+            .file_name()
+            .and_then(|name| name.to_str());
+        if let Some(hex) = filename.and_then(|name| name.strip_suffix(".json")) {
+            if super::util::hex_to_digest(hex).is_some() {
+                verify_sha256(&cfg_bytes, hex)?;
+                Some(hex.to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+    validate_image_config(&cfg_bytes)?;
+    let platform = platform_of_config(&cfg_bytes);
+    let config_blob = RetainOwned {
+        media_type: "application/vnd.oci.image.config.v1+json".to_string(),
+        sha256_hex: cfg_hex,
+        size: cfg_bytes.len() as u64,
+        bytes: cfg_bytes.clone(),
+    };
+
     let layer_count = item.layers.len() as u64;
 
     // docker-save format: layers are named by path (not digest), so there is
@@ -289,54 +318,17 @@ pub(super) fn import_docker_save_tar(
         blobs.push(LayerBlob::Bytes(data));
     }
 
-    let report = apply_and_snapshot(blobs, layer_count, store, name)?;
-
-    // push-fidelity: capture the image config JSON the manifest points at
-    // (legacy `<hex>.json` or modern `blobs/sha256/<hex>`, both collected in the
-    // first pass). sha256-verified when the path carries a digest; best-effort.
-    let mut platform = String::new();
-    let mut config_blob: Option<RetainOwned> = None;
-    if !item.config.is_empty() {
-        let cfg_key = item.config.trim_start_matches("./").to_string();
-        if let Some(cfg_bytes) = layer_data.get(&cfg_key) {
-            let cfg_hex = match cfg_key.strip_prefix("blobs/sha256/") {
-                Some(hex) => {
-                    if verify_sha256(cfg_bytes, hex).is_ok() {
-                        Some(hex.to_string())
-                    } else {
-                        None // mismatch ⇒ skip config retention (best-effort)
-                    }
-                }
-                None => None, // legacy <hex>.json carries no in-path digest to check
-            };
-            // Retain only when the digest checks out (modern) or there is no
-            // digest to check (legacy <hex>.json — trusted, sha256_hex None).
-            let trustworthy = cfg_key.strip_prefix("blobs/sha256/").is_none() || cfg_hex.is_some();
-            if trustworthy {
-                let _ = store.image_config_put(name, cfg_bytes);
-                platform = platform_of_config(cfg_bytes);
-                config_blob = Some(RetainOwned {
-                    media_type: "application/vnd.oci.image.config.v1+json".to_string(),
-                    sha256_hex: cfg_hex,
-                    size: cfg_bytes.len() as u64,
-                    bytes: cfg_bytes.clone(),
-                });
-            }
-        }
-    }
-
-    // WP-IMG-01: retain the docker-save manifest.json verbatim + ordered
-    // descriptors (config first, then layers) + platform. Verify-then-retain is
-    // fail-closed for modern blobs (digest in path); legacy layers have no
-    // digest to check and are retained as-is (same trust boundary as apply).
+    store.image_config_put(name, &cfg_bytes)?;
     retain_owned(
         store,
         name,
         &manifest_bytes,
         &platform,
-        config_blob,
+        Some(config_blob),
         retained,
     )?;
+
+    let report = apply_and_snapshot(blobs, layer_count, store, name)?;
 
     Ok(report)
 }

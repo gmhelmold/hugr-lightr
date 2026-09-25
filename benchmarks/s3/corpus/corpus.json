@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "baseline": "bea26dd843f5ecdc8f32cab4dd6faa8740436723",
+  "clauses": [
+    {
+      "id": "S3-CORPUS-ENGINE-001",
+      "path": "crates/lightr-engine/src/lib.rs",
+      "symbol": "tests::from_str_roundtrip",
+      "package": "lightr-engine",
+      "manifest": "crates/lightr-engine/Cargo.toml",
+      "selector": "--lib",
+      "golden": "S3-GOLDEN-ENGINE-001",
+      "card": "S3-CARD-ENGINE-001",
+      "baseline": "bea26dd843f5ecdc8f32cab4dd6faa8740436723",
+      "source_sha256": "bc479afbc1a63a19727990431251f27005f67676278b4bb9220e427ac2dfd4f4",
+      "argv": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "crates/lightr-engine/Cargo.toml",
+        "-p",
+        "lightr-engine",
+        "--lib",
+        "tests::from_str_roundtrip",
+        "--",
+        "--exact",
+        "--format",
+        "pretty"
+      ],
+      "expected_exit": 0,
+      "stdout_sha256": "ace53e1b13fe9280ccb0a143a331c44bb3a26eb723c43b3d92c3e3d27be0c7bf",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "S3-CORPUS-STORE-001",
+      "path": "crates/lightr-store/src/lib.rs",
+      "symbol": "tests::default_root_honors_lightr_home",
+      "package": "lightr-store",
+      "manifest": "crates/lightr-store/Cargo.toml",
+      "selector": "--lib",
+      "golden": "S3-GOLDEN-STORE-001",
+      "card": "S3-CARD-STORE-001",
+      "baseline": "bea26dd843f5ecdc8f32cab4dd6faa8740436723",
+      "source_sha256": "9e0b82de4e55c1a3daec582e668f3ea224381d9f503787cad5390d4814305047",
+      "argv": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "crates/lightr-store/Cargo.toml",
+        "-p",
+        "lightr-store",
+        "--lib",
+        "tests::default_root_honors_lightr_home",
+        "--",
+        "--exact",
+        "--format",
+        "pretty"
+      ],
+      "expected_exit": 0,
+      "stdout_sha256": "fc76514d17870ef8050b86781e4dfb7a826305fc4d8d29a56c47a3146db614f6",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}
