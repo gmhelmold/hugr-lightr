@@ -114,9 +114,9 @@ impl LightrBackend {
             .as_ref()
             .and_then(|s| s.seccomp.as_ref())
             .map(|p| match p.profile_type {
-                crate::vocab::ProfileType::Localhost => Some(p.localhost_ref.clone()),
-                crate::vocab::ProfileType::Unconfined => Some("unconfined".to_string()),
-                crate::vocab::ProfileType::RuntimeDefault => Some("default".to_string()),
+                crate::vocab::ProfileType::Localhost => p.localhost_ref.clone(),
+                crate::vocab::ProfileType::Unconfined => "unconfined".to_string(),
+                crate::vocab::ProfileType::RuntimeDefault => "default".to_string(),
             });
 
         // WP-#107 (CRI GAP 1, "starting container with volume" + symlink-host-path):
