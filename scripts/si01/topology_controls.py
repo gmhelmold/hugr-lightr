@@ -163,8 +163,8 @@ DEST_PREPARE_CASES = [
     (
         'dest-prepare-complete-root-binding',
         'destination_tree_prepare.rs',
-        '                    if let Err(error) = this.anchor.revalidate(wait) {',
-        '                    if let Err(error) = Ok::<(), io::Error>(()) {',
+        '                    if let Err(error) = this.anchor.revalidate(wait) { // Final root binding before disarm.',
+        '                    if let Err(error) = Ok::<(), io::Error>(()) { // Final root binding before disarm.',
         'store::foundation::destination_tree_prepare::tests::races::prepared_tree_complete_rejects_root_replacement',
         'called `Result::unwrap_err()` on an `Ok` value',
     ),

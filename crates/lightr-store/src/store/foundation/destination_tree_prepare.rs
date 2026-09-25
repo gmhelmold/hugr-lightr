@@ -184,15 +184,28 @@ impl PreparedDestinationTree<'_, '_> {
     /// An incomplete or invalid tree is rolled back instead.
     #[allow(dead_code)]
     pub(crate) fn complete(self, wait: Wait<'_>) -> Result<(), DestinationTreePrepareFailure> {
+        self.complete_checked(wait, || Ok(()))
+    }
+
+    #[allow(dead_code)]
+    fn complete_checked(
+        self,
+        wait: Wait<'_>,
+        mut after_initial_root_check: impl FnMut() -> io::Result<()>,
+    ) -> Result<(), DestinationTreePrepareFailure> {
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
             let mut this = self;
             if let Err(error) = this.anchor.revalidate(wait) {
                 return Err(fail_and_cleanup(this.inner, error));
             }
+            if let Err(error) = after_initial_root_check() {
+                return Err(fail_and_cleanup(this.inner, error));
+            }
             match this.inner.complete(wait) {
                 Ok(()) => {
                     if let Err(error) = this.anchor.revalidate(wait) {
+                        // Final root binding before disarm.
                         return Err(fail_and_cleanup(this.inner, error));
                     }
                     if let Err(error) = wait.check() {

@@ -335,6 +335,8 @@ impl Drop for PreparedTree {
 fn cas_error(error: LightrError) -> io::Error {
     match error {
         LightrError::Io(error) => error,
+        LightrError::NotFound(_) => io::Error::new(io::ErrorKind::NotFound, error),
+        LightrError::Integrity { .. } => io::Error::new(io::ErrorKind::InvalidData, error),
         error => io::Error::other(error),
     }
 }

@@ -261,7 +261,8 @@ pub(crate) fn open_verified(
 fn open_object_file(root: &Path, d: &Digest) -> std::io::Result<File> {
     #[cfg(unix)]
     let file = {
-        let objects = open_directory(&root.join("objects"))?;
+        let root = open_directory(root)?;
+        let objects = openat_directory(&root, "objects")?;
         let hex = d.to_hex();
         let (shard, object) = shard_parts(&hex);
         let shard = openat_directory(&objects, shard)?;

@@ -230,10 +230,13 @@ fn prepared_tree_complete_rejects_root_replacement() {
     prepared
         .write_file_payload("a", &mut source, Wait::Try)
         .unwrap();
-    fs::rename(&output, &retained).unwrap();
-    fs::create_dir(&output).unwrap();
-
-    let failure = prepared.complete(Wait::Try).unwrap_err();
+    let failure = prepared
+        .complete_checked(Wait::Try, || {
+            fs::rename(&output, &retained)?;
+            fs::create_dir(&output)?;
+            Ok(())
+        })
+        .unwrap_err();
     assert_eq!(failure.primary.unwrap().kind(), io::ErrorKind::InvalidData);
     assert!(failure.cleanup.is_empty());
     assert!(failure.cleanup_complete);

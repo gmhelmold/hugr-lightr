@@ -462,7 +462,7 @@ fn cas_coordinator_missing_object_rolls_back_prior_payloads() {
     let failure = prepared
         .write_all_payloads_from_store(&store, Wait::Try)
         .unwrap_err();
-    assert!(failure.primary.is_some());
+    assert_eq!(failure.primary.unwrap().kind(), io::ErrorKind::NotFound);
     assert!(failure.cleanup.is_empty());
     assert!(failure.cleanup_complete);
     assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
