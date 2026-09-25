@@ -113,7 +113,7 @@ impl LightrBackend {
             .security
             .as_ref()
             .and_then(|s| s.seccomp.as_ref())
-            .and_then(|p| match p.profile_type {
+            .map(|p| match p.profile_type {
                 crate::vocab::ProfileType::Localhost => Some(p.localhost_ref.clone()),
                 crate::vocab::ProfileType::Unconfined => Some("unconfined".to_string()),
                 crate::vocab::ProfileType::RuntimeDefault => Some("default".to_string()),

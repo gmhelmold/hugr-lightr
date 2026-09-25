@@ -31,8 +31,8 @@ fn run_bpf_args(prog: &[libc::sock_filter], arch: u32, nr: u32, args: [u64; 6]) 
                 SECCOMP_DATA_NR_OFFSET => nr,
                 SECCOMP_DATA_ARCH_OFFSET => arch,
                 offset
-                    if offset >= SECCOMP_DATA_ARGS_OFFSET
-                        && offset < SECCOMP_DATA_ARGS_OFFSET + 48 =>
+                    if (SECCOMP_DATA_ARGS_OFFSET..SECCOMP_DATA_ARGS_OFFSET + 48)
+                        .contains(&offset) =>
                 {
                     let arg_offset = offset - SECCOMP_DATA_ARGS_OFFSET;
                     let index = (arg_offset / 8) as usize;
@@ -256,11 +256,12 @@ fn unsupported_default_action_is_rejected() {
 
 #[test]
 fn oversized_filter_fails_closed() {
-    let entries =
-        std::iter::repeat(r#"{ "names": ["read"], "action": "SCMP_ACT_ERRNO", "errnoRet": 1 }"#)
-            .take(1100)
-            .collect::<Vec<_>>()
-            .join(",");
+    let entries = std::iter::repeat_n(
+        r#"{ "names": ["read"], "action": "SCMP_ACT_ERRNO", "errnoRet": 1 }"#,
+        1100,
+    )
+    .collect::<Vec<_>>()
+    .join(",");
     let json = format!(r#"{{ "defaultAction": "SCMP_ACT_ALLOW", "syscalls": [{entries}] }}"#);
     assert!(profile(&json).is_err(), "oversized filter must fail closed");
 }
