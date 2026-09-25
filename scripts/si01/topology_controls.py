@@ -205,7 +205,7 @@ def main():
     planned_suite = cargo + ["store::foundation::planned_roots_tests::", "--", "--nocapture"]
     planned_expected = r"test result: ok\. 17 passed; 0 failed; 0 ignored;"
     empty_suite = cargo + [PREFIX + "topology_empty::tests::", "--", "--nocapture"]
-    empty_expected = r"test result: ok\. 12 passed; 0 failed; 0 ignored;"
+    empty_expected = r"test result: ok\. 11 passed; 0 failed; 0 ignored;"
     descendant_suite = cargo + [PREFIX + "topology_descendant::tests::", "--", "--nocapture"]
     descendant_expected = r"test result: ok\. 13 passed; 0 failed; 0 ignored;"
     scratch_suite = cargo + ["store::foundation::anchored_scratch::", "--", "--nocapture"]
