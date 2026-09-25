@@ -88,14 +88,10 @@ impl LightrBackend {
         };
 
         // WP-#106 (KPI 4): map the v1.2 security context's AppArmor profile to the
-        // profile NAME the ns engine execs under (aa_change_onexec). READY-BUT-INERT
-        // today: `rec.config.security` is usually `None` (the cross-repo seam #89 that
-        // maps the kubelet's proto profile into this field is not landed), so this is
-        // `None` and the start path is byte-identical to before. The mapping:
+        // profile NAME the ns engine execs under (aa_change_onexec). The mapping:
         //   Localhost      ⇒ the loaded profile name (`localhost_ref`)
         //   Unconfined     ⇒ "unconfined" (explicitly run unconfined)
-        //   RuntimeDefault ⇒ None (inherit for now — a named runtime-default profile
-        //                    is a future choice; documented, not yet wired)
+        //   RuntimeDefault ⇒ None (inherit host AppArmor policy)
         let apparmor: Option<String> = rec
             .config
             .security
@@ -107,14 +103,11 @@ impl LightrBackend {
                 crate::vocab::ProfileType::RuntimeDefault => None,
             });
 
-        // WP-#108 (seccomp): mirror the apparmor mapping above — `rec.config.security`
-        // is usually `None` today (the cross-repo seam mapping the kubelet's proto
-        // seccomp profile into this field is not landed), so this is `None` and the
-        // start path is byte-identical to before. The mapping:
+        // WP-#108 (seccomp): map the canonical security context to the OCI profile
+        // consumed by the ns engine. The mapping:
         //   Localhost      ⇒ the profile PATH (`localhost_ref`)
         //   Unconfined     ⇒ "unconfined" (explicitly run without a filter)
-        //   RuntimeDefault ⇒ None (inherit for now — a named runtime-default profile
-        //                    is a future choice; documented, not yet wired)
+        //   RuntimeDefault ⇒ "default" (the built-in OCI seccomp profile)
         let seccomp: Option<String> = rec
             .config
             .security
@@ -123,7 +116,7 @@ impl LightrBackend {
             .and_then(|p| match p.profile_type {
                 crate::vocab::ProfileType::Localhost => Some(p.localhost_ref.clone()),
                 crate::vocab::ProfileType::Unconfined => Some("unconfined".to_string()),
-                crate::vocab::ProfileType::RuntimeDefault => None,
+                crate::vocab::ProfileType::RuntimeDefault => Some("default".to_string()),
             });
 
         // WP-#107 (CRI GAP 1, "starting container with volume" + symlink-host-path):
@@ -184,13 +177,11 @@ impl LightrBackend {
             // `start_container_impl` right before spawn (so the fd's lifetime is the
             // spawn's). The plan itself carries None.
             exec_ready_fd: None,
-            // WP-#106: ready-but-inert AppArmor profile (None until the seam #89 maps
-            // the kubelet profile into rec.config.security). The ns engine applies it
-            // via aa_change_onexec right before the container's execv (fail-closed).
+            // WP-#106: AppArmor profile from the canonical security seam. The ns
+            // engine applies it via aa_change_onexec before execv (fail-closed).
             apparmor,
-            // WP-#108: ready-but-inert seccomp profile (None until the seam maps the
-            // kubelet profile into rec.config.security). The ns engine compiles it
-            // before pivot and installs the cBPF filter right before execv (fail-closed).
+            // WP-#108: seccomp profile from the canonical security seam. The ns
+            // engine compiles it before pivot and installs cBPF before execv.
             seccomp,
             // WP-#107 (CRI GAP 1/2/3): the volume bind mounts (host-side realpath'd),
             // the synthesized /etc/resolv.conf, and the sandbox hostname. The ns engine

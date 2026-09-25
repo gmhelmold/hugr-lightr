@@ -136,36 +136,25 @@ pub struct ContainerConfig {
     pub tty: bool,
     #[serde(default)]
     pub stdin: bool,
-    // v1.2 addition (owner-approved 2026-06-25): the security-context subset, so a
-    // profile name can physically reach the backend (the frozen seam had NO
-    // security field — KPI 4 / AppArmor was unreachable). Additive + `serde(default)`
-    // ⇒ backward-compatible (old specs/vectors deserialize with `None`), exactly
-    // like the v1.1 tty/stdin additions. None = runtime default / unset.
+    // v1.2 additive security context. `serde(default)` keeps v1.1 state and
+    // vectors compatible; None means runtime default/unset.
     #[serde(default)]
     pub security: Option<SecurityContext>,
 }
 
 /// v1.2 security-context subset mirrored from CRI
-/// `LinuxContainerSecurityContext`. **Enforcement status (HONEST — 2026-06-27):**
-/// `apparmor` enforcement IS now wired — the ns engine applies it at container
-/// start via `aa_change_onexec`, fail-closed on an unloadable profile (#106,
-/// CI-proven via `lightr run --apparmor`: a deny profile blocks the op, a missing
-/// profile fails the run). The CRI path is plumbed (RunDescriptor.apparmor +
-/// build_ns_plan mapping) but stays INERT until the owner-approved frozen-seam
-/// field + the lightr-cri shell's proto→seam mapping land (cross-repo #89) — only
-/// then does a kubelet-sourced profile reach the engine (→ critest AppArmor). By
-/// contrast `seccomp` and `capabilities` are carried-only, enforcement STAGED (not
-/// wired) — do NOT claim those enforced until their own validated landing.
+/// `LinuxContainerSecurityContext`. Profiles and capability sets cross the
+/// canonical shell seam and reach the ns engine; unsupported platform/privilege
+/// combinations still fail closed at the engine boundary.
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SecurityContext {
-    /// AppArmor profile. ENFORCED by the ns engine at container start (#106,
-    /// aa_change_onexec, fail-closed). CRI-sourced profile awaits the seam (#89).
+    /// AppArmor profile, enforced by the ns engine at container start.
     #[serde(default)]
     pub apparmor: Option<SecurityProfile>,
-    /// Seccomp profile. CARRIED on the seam; enforcement STAGED (not yet wired).
+    /// Seccomp OCI profile, compiled and installed by the ns engine.
     #[serde(default)]
     pub seccomp: Option<SecurityProfile>,
-    /// Linux capability add/drop. CARRIED on the seam; enforcement STAGED.
+    /// Linux capability add/drop, applied by the ns engine.
     #[serde(default)]
     pub capabilities: Option<Capabilities>,
 }

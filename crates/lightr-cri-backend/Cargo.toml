@@ -1,5 +1,5 @@
 [package]
-name = "lightr-cri-backend"
+name = "hugr-lightr-cri-backend"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,6 +10,10 @@ homepage.workspace = true
 readme.workspace = true
 keywords = ["cri", "kubernetes", "container", "runtime", "daemonless"]
 categories = ["development-tools", "virtualization"]
+
+[lib]
+name = "lightr_cri_backend"
+path = "src/lib.rs"
 
 # DEPENDENCY FIREWALL (ADR-0017 decision 5): NO tonic/prost/gRPC here, ever.
 # gRPC belongs only to the future CRI shell, which sits in FRONT of this seam.

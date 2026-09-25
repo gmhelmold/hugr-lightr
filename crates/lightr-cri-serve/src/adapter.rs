@@ -1,5 +1,5 @@
 //! The integration adapter: the real `LightrBackend` (this workspace) presented
-//! as a CANONICAL `cri_canon::CriBackend` so the sibling `lightr-cri-server`
+//! as a CANONICAL `cri_canon::CriBackend` so the vendored `lightr-cri-server`
 //! composition root can drive it unchanged.
 //!
 //! Each method converts canonical-typed ARGS → local types, calls the inner
@@ -66,7 +66,9 @@ impl canon::CriBackend for Adapter {
     }
 
     fn start_container(&self, id: &canon::ContainerId) -> canon::Result<()> {
-        self.0.start_container(&c2l_container_id(id)).map_err(l2c_err)
+        self.0
+            .start_container(&c2l_container_id(id))
+            .map_err(l2c_err)
     }
 
     fn stop_container(&self, id: &canon::ContainerId, grace_seconds: i64) -> canon::Result<()> {
@@ -81,10 +83,7 @@ impl canon::CriBackend for Adapter {
             .map_err(l2c_err)
     }
 
-    fn container_status(
-        &self,
-        id: &canon::ContainerId,
-    ) -> canon::Result<canon::ContainerStatus> {
+    fn container_status(&self, id: &canon::ContainerId) -> canon::Result<canon::ContainerStatus> {
         self.0
             .container_status(&c2l_container_id(id))
             .map(l2c_container_status)
@@ -101,10 +100,7 @@ impl canon::CriBackend for Adapter {
             .map_err(l2c_err)
     }
 
-    fn container_stats(
-        &self,
-        id: &canon::ContainerId,
-    ) -> canon::Result<canon::ContainerStatsRec> {
+    fn container_stats(&self, id: &canon::ContainerId) -> canon::Result<canon::ContainerStatsRec> {
         self.0
             .container_stats(&c2l_container_id(id))
             .map(l2c_stats)
@@ -137,7 +133,10 @@ impl canon::CriBackend for Adapter {
 
     // ── image plane ──────────────────────────────────────────────────────────
     fn pull_image(&self, image_ref: &str) -> canon::Result<canon::PulledImage> {
-        self.0.pull_image(image_ref).map(l2c_pulled).map_err(l2c_err)
+        self.0
+            .pull_image(image_ref)
+            .map(l2c_pulled)
+            .map_err(l2c_err)
     }
 
     fn image_status(&self, image_ref: &str) -> canon::Result<Option<canon::ImageRecord>> {

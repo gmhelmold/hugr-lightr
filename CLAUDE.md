@@ -27,7 +27,7 @@ on Intel x86_64** (F-205/F-206), and the **`ns` engine on public GitHub-hosted
 Linux CI** (cold-start benchmark + net-namespace isolation — `docs/benchmarks/
 RESULTS.md`). Honest-gated (not claimed validated): arm64 vz, Windows `wsl`,
 Linux aarch64 `ns`; publish owner-gated (`G-PUBLISH`). In flight: CRI integration
-front (`lightr-cri` sibling + this repo's `lightr-cri-backend`). Truth ledger:
+front (`crates/lightr-cri` vendored workspace + `lightr-cri-serve`). Truth ledger:
 `docs/spec/parity-audit.md`. TechLead installed (`.techlead/`, map at
 `.techlead/memory/MAP.md`).
 

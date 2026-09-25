@@ -23,7 +23,8 @@ name: linux-validation
 #                       real backend (smoke=Version; kpi3=one lifecycle; THIS=all of
 #                       it). Skip-list VENDORED at ci/critest-skips.txt (synced from
 #                       lightr-cri) + AppArmor pending #89. Real gate: critest exit
-#                       code; prints passed/failed/skipped + failing-spec list. This
+#                       code + non-regression GREENLIST; prints passed/failed/skipped
+#                       + failing-spec list. This
 #                       is the FIRST real-backend critest run — may surface gaps.
 #   security-flags    — WP-#92/#94: prove `ns`-engine --read-only (rootfs EROFS,
 #                       /dev/shm still writable) + --shm-size enforcement, REAL
@@ -215,14 +216,14 @@ jobs:
           JSON
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 2>/dev/null || true
       - name: Build CRI backend tests
-        run: cargo test -p lightr-cri-backend --no-run -j2
+        run: cargo test -p hugr-lightr-cri-backend --locked --no-run -j2
       - name: Run CRI cfg(linux) tests (netns/CNI + /proc) as root
         run: |
           set +e
           export LIGHTR_CNI_CONF=/etc/cni/net.d LIGHTR_CNI_BIN=/opt/cni/bin
           CARGO="$HOME/.rustup/toolchains/1.96.0-x86_64-unknown-linux-gnu/bin/cargo"
           sudo -E env "PATH=$PATH" LIGHTR_CNI_CONF=$LIGHTR_CNI_CONF LIGHTR_CNI_BIN=$LIGHTR_CNI_BIN \
-            "$CARGO" test -p lightr-cri-backend -j2 2>&1 | tail -45
+             "$CARGO" test -p hugr-lightr-cri-backend --locked -j2 2>&1 | tail -45
           code=${PIPESTATUS[0]}; echo "CRI_LINUX_EXIT=$code"; exit "$code"  # gate for real
 
   cri-netns-lifecycle:
@@ -249,14 +250,14 @@ jobs:
           JSON
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 2>/dev/null || true
       - name: Build the netns-lifecycle test binary
-        run: cargo test -p lightr-cri-backend --test netns_lifecycle --no-run -j2
+        run: cargo test -p hugr-lightr-cri-backend --locked --test netns_lifecycle --no-run -j2
       - name: Run the netns + CNI full-lifecycle test as root
         run: |
           set +e
           export LIGHTR_CNI_CONF=/etc/cni/net.d LIGHTR_CNI_BIN=/opt/cni/bin
           CARGO="$HOME/.rustup/toolchains/1.96.0-x86_64-unknown-linux-gnu/bin/cargo"
           sudo -E env "PATH=$PATH" LIGHTR_NETNS_IT=1 LIGHTR_CNI_CONF=$LIGHTR_CNI_CONF LIGHTR_CNI_BIN=$LIGHTR_CNI_BIN \
-            "$CARGO" test -p lightr-cri-backend --test netns_lifecycle -- --nocapture 2>&1 | tail -60
+           "$CARGO" test -p hugr-lightr-cri-backend --locked --test netns_lifecycle -- --nocapture 2>&1 | tail -60
           code=${PIPESTATUS[0]}; echo "NETNS_LIFECYCLE_EXIT=$code"; exit "$code"  # gate for real
 
   acceptance-batch:
@@ -897,23 +898,16 @@ jobs:
 
   cri-serve-smoke:
     # WP-#98: prove the COMPOSED CRI server (the REAL LightrBackend wired into the
-    # sibling lightr-cri shell via crates/lightr-cri-serve) BUILDS and ANSWERS
-    # crictl in CI — the integration landing proof. Needs the PRIVATE sibling repo,
-    # so: the LIGHTR_CRI_CI_TOKEN fine-grained RO PAT (configured via url.insteadOf)
-    # + CARGO_NET_GIT_FETCH_WITH_CLI. lightr-cri-serve is excluded from the default
-    # workspace ⇒ built explicitly via --manifest-path (the gate never pulls tonic).
+    # vendored lightr-cri shell via crates/lightr-cri-serve) BUILDS and ANSWERS
+    # crictl in CI — the integration landing proof. lightr-cri-serve is excluded
+    # from the default workspace ⇒ built explicitly via --manifest-path (the gate never pulls tonic).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Toolchain
         run: rustup toolchain install 1.96.0 --profile minimal --no-self-update && rustup default 1.96.0
-      - name: Auth git for the private sibling (cargo git-dep)
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.LIGHTR_CRI_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
-      - name: Build lightr-cri-serve (real backend + sibling shell, git-deps)
-        env:
-          CARGO_NET_GIT_FETCH_WITH_CLI: "true"
-        run: cargo build --release --manifest-path crates/lightr-cri-serve/Cargo.toml -j2
+      - name: Build lightr-cri-serve (real backend + vendored shell)
+        run: cargo build --release --locked --manifest-path crates/lightr-cri-serve/Cargo.toml -j2
       - name: Install crictl
         run: |
           set -e -x
@@ -942,7 +936,7 @@ jobs:
 
   cri-kpi3:
     # WP-#88 (KPI 3): prove a REAL container runs END-TO-END through the COMPOSED
-    # CRI server (the real LightrBackend wired into the sibling lightr-cri shell
+    # CRI server (the real LightrBackend wired into the vendored lightr-cri shell
     # via crates/lightr-cri-serve) — kubelet→gRPC→LightrBackend→host-process. The
     # server runs AS ROOT so the pod sandbox (host_network:false) does netns + CNI
     # ADD (the path validated in #83) and the container joins the pod netns at
@@ -958,21 +952,16 @@ jobs:
     # crictl round-trip is common to both arms and cancels in the ratio). The
     # containerd bring-up is SOFT/non-fatal (TODO if its CRI can't come up), but
     # if it DOES come up the measurement runs and the A/B ratio is SIGNED.
-    # Same private-sibling auth + manifest-path build as cri-serve-smoke.
+    # Same manifest-path build as cri-serve-smoke.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Toolchain
         run: rustup toolchain install 1.96.0 --profile minimal --no-self-update && rustup default 1.96.0
-      - name: Auth git for the private sibling (cargo git-dep)
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.LIGHTR_CRI_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
-      - name: Build lightr-cri-serve (real backend + sibling shell, git-deps)
-        env:
-          CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+      - name: Build lightr-cri-serve (real backend + vendored shell)
         run: cargo build --release --manifest-path crates/lightr-cri-serve/Cargo.toml -j2
       - name: Build lightr (release) — for the pre-seed image fallback
-        run: cargo build -p lightr-cli --release -j2
+        run: cargo build -p lightr-cli --release --locked -j2
       - name: Install crictl
         run: |
           set -e -x
@@ -1476,23 +1465,23 @@ jobs:
     # REAL composed CRI server — lightr-cri-serve = the real LightrBackend behind
     # the canonical CriBackend (the SAME binary cri-serve-smoke / cri-kpi3 build).
     # cri-serve-smoke proves Version answers; cri-kpi3 proves ONE lifecycle + exec
-    # + apparmor. THIS proves the WHOLE CRI surface conforms on the real backend.
+    # + CNI. THIS proves the WHOLE CRI surface conforms on the real backend.
     #
     # The lightr-cri TL confirmed this run is OURS: their firewall forbids linking
     # LightrBackend in lightr-cri CI, so the fake-vs-critest gate lives there and
     # the REAL-backend critest gate lives here.
     #
     # HARNESS replicated from lightr-cri ci/critest-gate.sh + ci/ci.yml:
-    #   - critest pinned to cri-tools v1.33.0 (sha256-verified) — SAME version the
-    #     sibling pins in its critest-gate (kubelet 1.33 matrix).
+    #   - critest pinned to cri-tools v1.33.0 (sha256-verified) — same version
+    #     used by the vendored shell's conformance gate (kubelet 1.33 matrix).
     #   - invocation: critest --runtime-endpoint unix://<sock> --ginkgo.skip <re>
     #       --ginkgo.v --ginkgo.json-report <json>   (mirrors critest-gate.sh).
-    #   - skip regex is BUILT from our VENDORED ci/critest-skips.txt (synced from
-    #     lightr-cri @ 219b686; self-contained — no CI-time dep on the sibling),
+    #   - skip regex is BUILT from vendored ci/critest-skips.txt (self-contained;
+    #     no CI-time sibling dep),
     #     same strip-comments / join-by-'|' transform as critest-gate.sh.
     #
-    # GATE FOR REAL: critest's exit code is the gate (set +e ONLY to capture the
-    # code + print the summary; we then `exit 1` on any non-zero). We ALSO fail
+    # GATE FOR REAL: critest's exit code plus vendored GREENLIST are gates (set +e
+    # ONLY to capture code + print summary; we then `exit 1` on any non-zero). We ALSO fail
     # if zero specs passed (fail-closed: a dead runtime or a missing JSON report
     # is RED, never green) — same law as critest-gate.sh.
     #
@@ -1502,19 +1491,14 @@ jobs:
     # failing specs for the lead to triage (fix the backend, or add a justified
     # skip with a tracked reason). No false-green.
     #
-    # Same private-sibling auth + manifest-path build as cri-serve-smoke/cri-kpi3.
+    # Same manifest-path build as cri-serve-smoke/cri-kpi3.
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - name: Toolchain
         run: rustup toolchain install 1.96.0 --profile minimal --no-self-update && rustup default 1.96.0
-      - name: Auth git for the private sibling (cargo git-dep)
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.LIGHTR_CRI_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
-      - name: Build lightr-cri-serve (real backend + sibling shell, git-deps)
-        env:
-          CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+      - name: Build lightr-cri-serve (real backend + vendored shell)
         run: cargo build --release --manifest-path crates/lightr-cri-serve/Cargo.toml -j2
       - name: Build lightr (release) — for the pre-seed image fallback
         run: cargo build -p lightr-cli --release -j2
@@ -1526,8 +1510,8 @@ jobs:
       - name: Install crictl + critest (pinned cri-tools v1.33.0, sha256-verified)
         run: |
           set -euo pipefail
-          # Pinned to MATCH lightr-cri ci/critest-gate.sh (kubelet 1.33 matrix).
-          # sha256s are the upstream release checksums (same values the sibling pins).
+           # Pinned to match vendored lightr-cri's kubelet 1.33 matrix.
+           # sha256s are upstream release checksums.
           CRICTL_SHA256="8307399e714626e69d1213a4cd18c8dec3d0201ecdac009b1802115df8973f0f"
           CRITEST_SHA256="31baec20eda89276b3466ec24cfdfc54258baf27651997db7b5d4205f60ea61b"
           BASE="https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.33.0"
@@ -1607,14 +1591,16 @@ jobs:
           done
           CR images 2>/dev/null || true
 
-          # ── Build the ginkgo skip regex from the VENDORED skip-list — SAME transform
+           GREENLIST_FILE="crates/lightr-cri/tests/GREENLIST"
+
+           # ── Build the ginkgo skip regex from the VENDORED skip-list — SAME transform
           # as lightr-cri ci/critest-gate.sh: drop comment lines (^#), drop blanks,
           # take the part before the first '#', trim trailing ws, join non-empty by '|'.
           if [ ! -f "$SKIPS_FILE" ]; then echo "CRITEST=FAIL (skip-list $SKIPS_FILE missing)"; sudo pkill -f lightr-cri-serve; exit 1; fi
           SKIP_REGEX=$(grep -v '^\s*#' "$SKIPS_FILE" | grep -v '^\s*$' \
             | sed 's/#.*//' | sed 's/[[:space:]]*$//' | grep -v '^$' \
             | paste -sd '|' -)
-          echo "=== critest skip regex (from $SKIPS_FILE, synced from lightr-cri @ 219b686; + AppArmor pending #89) ==="
+           echo "=== critest skip regex (from vendored lightr-cri; + AppArmor pending #89) ==="
           echo "$SKIP_REGEX"
 
           # ── Run critest against OUR socket. Mirror critest-gate.sh flags exactly.
@@ -1633,7 +1619,7 @@ jobs:
           # ── Teardown the serve (the gate logic below uses only the captured report). ─
           sudo pkill -f lightr-cri-serve 2>/dev/null
 
-          # ── Summarize from the JSON report (passed/failed/skipped counts + the
+           # ── Summarize from the JSON report (passed/failed/skipped counts + the
           # failing-spec list). Same SpecReports[].State extraction style as
           # critest-gate.sh. ───────────────────────────────────────────────────────────
           PASSED=0; FAILED=0; SKIPPED=0
@@ -1645,7 +1631,42 @@ jobs:
           echo "=== CRITEST SUMMARY (real LightrBackend) ==="
           echo "CRITEST_PASSED=$PASSED"
           echo "CRITEST_FAILED=$FAILED"
-          echo "CRITEST_SKIPPED=$SKIPPED"
+           echo "CRITEST_SKIPPED=$SKIPPED"
+
+           # ── GREENLIST regression gate ─────────────────────────────────────────────
+           # Every conquered item must still pass. Missing/empty list is RED, never
+           # vacuous GREEN. Exact matching avoids prose/substring false positives.
+           PASSED_ITEMS_FILE="$REPORT_DIR/passed-items.txt"
+           if [ ! -f "$GREENLIST_FILE" ]; then
+             echo "CRITEST=FAIL (GREENLIST missing: $GREENLIST_FILE)"
+             exit 1
+           fi
+           jq -r '
+             .[] | .SpecReports[]?
+             | select(.State == "passed")
+             | ((.ContainerHierarchyTexts // []) | join(" ")) + " " + (.LeafNodeText // "")
+             | ltrimstr(" ") | rtrimstr(" ")
+           ' "$CRITEST_JSON" 2>/dev/null | sort -u >"$PASSED_ITEMS_FILE"
+           GREENLIST_COUNT=0
+           GREENLIST_MISSES=0
+           while IFS= read -r ITEM; do
+             ITEM="${ITEM%$'\r'}"
+             [[ -z "$ITEM" || "$ITEM" =~ ^[[:space:]]*# ]] && continue
+             GREENLIST_COUNT=$((GREENLIST_COUNT + 1))
+             if ! grep -F -x -- "$ITEM" "$PASSED_ITEMS_FILE" >/dev/null; then
+               echo "GREENLIST_REGRESSION: $ITEM"
+               GREENLIST_MISSES=$((GREENLIST_MISSES + 1))
+             fi
+           done <"$GREENLIST_FILE"
+           if [ "$GREENLIST_COUNT" -eq 0 ]; then
+             echo "CRITEST=FAIL (GREENLIST extracted zero items)"
+             exit 1
+           fi
+           if [ "$GREENLIST_MISSES" -ne 0 ]; then
+             echo "CRITEST=FAIL ($GREENLIST_MISSES GREENLIST regression(s) of $GREENLIST_COUNT)"
+             exit 1
+           fi
+           echo "GREENLIST=PASS ($GREENLIST_COUNT items)"
 
           if [ -f "$CRITEST_JSON" ]; then
             echo "=== FAILING SPECS (triage list — fix the backend or add a justified skip) ==="
@@ -1665,7 +1686,7 @@ jobs:
             echo "=== serve.log ==="; sudo cat /tmp/serve.log 2>/dev/null | tail -80
             exit 1
           fi
-          # 2) critest's own exit code is THE gate — any non-skipped spec failure ⇒ exit 1.
+           # 2) critest's own exit code is THE gate — any non-skipped spec failure ⇒ exit 1.
           if [ "$CRITEST_EXIT" -ne 0 ]; then
             echo "CRITEST=FAIL (critest exited $CRITEST_EXIT — $FAILED non-skipped spec(s) failed; see FAIL_SPEC list above)"
             echo "    NOTE: first full critest run on the REAL backend — surfaced gaps are expected."

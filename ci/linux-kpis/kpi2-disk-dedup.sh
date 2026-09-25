@@ -2,7 +2,7 @@
 # KPI 2 — Disk for N similar images (dedup ratio + containerd A/B).
 #
 # SOURCE OF TRUTH: lightr-cri handoff §2
-#   ../lightr-cri/docs/handoff/bench-cas-kpis-request.md
+#   crates/lightr-cri/docs/handoff/bench-cas-kpis-request.md
 #
 # CLAIM TO SIGN: on-disk bytes for N images that share a base scale with the
 # SHARED content, not with N × per-image layers.
@@ -35,7 +35,7 @@
 set -euo pipefail
 
 echo "KPI 2 — disk dedup ratio (N similar images) + containerd A/B"
-echo "spec: ../lightr-cri/docs/handoff/bench-cas-kpis-request.md §2"
+echo "spec: crates/lightr-cri/docs/handoff/bench-cas-kpis-request.md §2"
 
 if [ "${KPI_BACKEND_READY:-0}" != "1" ]; then
   echo "::error::KPI 2 not yet wired — set KPI_BACKEND_READY=1 on a Linux runner with"

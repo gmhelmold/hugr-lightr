@@ -59,10 +59,11 @@ mod util;
 // `pub mod` whose items the shell + later WPs consume must be re-exported, or
 // the items are pub-in-private dead code under `clippy -D warnings`).
 pub use vocab::{
-    AuthConfig, BackendError, ContainerConfig, ContainerFilter, ContainerId, ContainerState,
-    ContainerStatsRec, ContainerStatus, DnsConfig, ExecResult, ExitWaiter, FsInfo, ImageRecord,
-    Mount, PortMapping, Protocol, PulledImage, Result, SandboxConfig, SandboxFilter, SandboxId,
-    SandboxState, SandboxStatus, StreamSession,
+    AuthConfig, BackendError, Capabilities, ContainerConfig, ContainerFilter, ContainerId,
+    ContainerState, ContainerStatsRec, ContainerStatus, DnsConfig, ExecResult, ExitWaiter, FsInfo,
+    ImageRecord, Mount, PortMapping, ProfileType, Protocol, PulledImage, Result, SandboxConfig,
+    SandboxFilter, SandboxId, SandboxState, SandboxStatus, SecurityContext, SecurityProfile,
+    StreamSession,
 };
 
 use std::path::PathBuf;

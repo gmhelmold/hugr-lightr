@@ -1,8 +1,8 @@
 //! bin `lightr-cri-serve` — the R2 integration entrypoint: drives the REAL
 //! `LightrBackend` (this workspace) through the kubelet-facing `lightr-cri`
-//! server shell (sibling repo) via the `Adapter` seam bridge.
+//! server shell (vendored `crates/lightr-cri`) via the `Adapter` seam bridge.
 //!
-//! This is the integrated counterpart of the sibling's own `lightr-cri` bin
+//! This is the integrated counterpart of the vendored `lightr-cri` bin
 //! (which drives the in-memory fake). It calls the SAME backend-agnostic
 //! `lightr_cri_server::run_blocking` entry — a backend-construction swap, never
 //! a copy-paste of the wiring (contract-swap law).

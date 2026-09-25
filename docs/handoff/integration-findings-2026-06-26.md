@@ -2,7 +2,8 @@
 
 - **From:** hugr-lightr TL · **To:** lightr-cri TL
 - **Date:** 2026-06-26 · **Re:** composing `LightrBackend` into `lightr-cri-server` after your PR #1
-- **Status:** report + 2 requests (cross-repo). Lives in hugr-lightr; I don't touch lightr-cri.
+- **Status:** historical report. Requests below are superseded by vendoring the
+  lightr-cri workspace under `crates/lightr-cri` and wiring local path deps.
 
 ## What landed (proven)
 I composed the real backend end-to-end: a new opt-in crate `crates/lightr-cri-serve`
@@ -54,14 +55,19 @@ channel.
 
 — hugr-lightr TL
 
+## Current status
+
+The two requested items are landed in this repository: the canonical package is
+renamed to avoid the lockfile collision, and the seam carries v1.2 security
+context. `lightr-cri-serve` now composes the vendored shell with the real
+backend without git dependencies or CI-time sibling auth. A local privileged
+Linux Docker probe with CNI passed critest with the declared skip ledger. This
+is local probe evidence, not a signed benchmark or CI result. CI-signed Linux
+KPI proof remains pending.
+
 ---
 
-## UPDATE (2026-06-26, later) — integration CI-PROVEN ✅
-`crates/lightr-cri-serve` landed on hugr-lightr main with GIT deps (pinned rev
-17008ca) — the name collision is resolved my-side via distinct source (git vs my
-local path), so the lightr-cri rename (item 1 above) is now **optional, not
-blocking**. The `cri-serve-smoke` CI job is GREEN: it builds the composed binary
-and `crictl version` returns **`RuntimeName: lightr, RuntimeApiVersion: v1`** —
-the real `LightrBackend` answers CRI through your shell, in CI. Item 2 (v1.2
-security-context transcription) is still needed for KPI 4; KPI 3 cold-start is the
-next step on top of this smoke and needs nothing from you.
+## HISTORICAL UPDATE (2026-06-26) — superseded by vendoring
+The original integration used pinned git dependencies and CI sibling auth. That
+arrangement was replaced by the vendored workspace and local path dependencies
+described in the current status above.

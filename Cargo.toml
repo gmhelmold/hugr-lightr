@@ -15,9 +15,9 @@ members = [
     "crates/lightr-views",
 ]
 # OPT-IN, OUT-OF-DEFAULT-BUILD: the CRI composition root (`lightr cri serve`)
-# is the ONLY crate that depends on the sibling `lightr-cri` shell (tonic/gRPC).
-# Excluding it keeps `cargo build [--workspace]` decoupled from that sibling and
-# upholds the dependency firewall (ADR-0017 decision 5). Build it explicitly:
+# is the ONLY crate that depends on the vendored `lightr-cri` shell (tonic/gRPC).
+# Its nested workspace stays outside the default build and preserves the
+# dependency firewall (ADR-0017 decision 5). Build it explicitly:
 #   cargo build --manifest-path crates/lightr-cri-serve/Cargo.toml
 exclude = ["crates/lightr-cri-serve"]
 
