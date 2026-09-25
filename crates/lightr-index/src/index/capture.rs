@@ -1,4 +1,5 @@
 //! Inert, lease-bound source capture for SI-02.
+#![allow(dead_code)] // SI-03 intentionally owns production activation.
 
 use lightr_core::{Entry, LightrError, Manifest, Result};
 use lightr_store::store::foundation::{CaptureMode, PreparedObject, StoreLease, Wait};
@@ -19,14 +20,14 @@ enum CandidateKind {
 }
 
 /// Manifest plus preparation proofs. Proofs cannot outlive the caller lease.
-struct CapturedManifest<'lease> {
+pub(super) struct CapturedManifest<'lease> {
     manifest: Manifest,
     proofs: Vec<PreparedObject<'lease>>,
 }
 
 /// Capture selected source bytes without consulting the stat index or Store.
 /// This module is intentionally private until SI-03 wires a publisher to it.
-fn capture_verified<'lease>(
+pub(super) fn capture_verified<'lease>(
     source: &Path,
     lease: &'lease StoreLease,
     _policy: CaptureMode,
@@ -56,9 +57,7 @@ fn capture_verified<'lease>(
         .build();
 
     for result in walker {
-        let entry = result.map_err(|error| {
-            LightrError::Io(std::io::Error::new(std::io::ErrorKind::Other, error))
-        })?;
+        let entry = result.map_err(|error| LightrError::Io(std::io::Error::other(error)))?;
         let absolute = entry.path().to_path_buf();
         if absolute == root {
             continue;
@@ -77,11 +76,15 @@ fn capture_verified<'lease>(
             CandidateKind::Symlink(target.to_owned())
         } else if metadata.is_dir() {
             let mut entries = fs::read_dir(&absolute).map_err(LightrError::Io)?;
-            match entries.next() {
-                None => CandidateKind::Directory,
-                Some(Ok(_)) => continue,
-                Some(Err(error)) => return Err(LightrError::Io(error)),
+            let mut nonempty = false;
+            for entry in &mut entries {
+                entry.map_err(LightrError::Io)?;
+                nonempty = true;
             }
+            if nonempty {
+                continue;
+            }
+            CandidateKind::Directory
         } else if metadata.is_file() {
             CandidateKind::File
         } else {
