@@ -77,11 +77,10 @@ Linux/macOS methods are mandatory.
 
 Rust 1.96.0, source files below the repository 400-LOC production guard, formatter,
 denied-warning Clippy, full Store/doctests/support/CI and Windows-GNU compile.
-Exact-head native/full Actions remain mandatory. Preserve all 33 existing
-topology/listing/anchor/representation causal tuples. Add five compiling controls:
-file no-adoption, identity-checked cleanup, exact final namespace, leaf binding and
-final root binding. Every mutant must fail its exact assertion, then the restored
-15-method family must pass.
+Exact-head native/full Actions remain mandatory. Preserve all existing
+topology/listing/anchor/representation causal tuples. Destination preparation now
+has seven compiling controls, including final root binding before disarm. Every
+mutant must fail its exact assertion, then the restored 27-test family must pass.
 
 ### Invariants
 
