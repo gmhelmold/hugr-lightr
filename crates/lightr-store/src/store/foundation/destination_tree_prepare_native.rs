@@ -182,6 +182,10 @@ impl PreparedTree {
     pub(super) fn revalidate(&self, wait: Wait<'_>) -> io::Result<()> {
         wait.check()?;
         require_child_count(&self.root, self.root_expected_children)?;
+        self.revalidate_descendants(wait)
+    }
+
+    pub(super) fn revalidate_descendants(&self, wait: Wait<'_>) -> io::Result<()> {
         wait.check()?;
         for directory in &self.directories {
             directory.revalidate()?;
@@ -196,6 +200,11 @@ impl PreparedTree {
             wait.check()?;
         }
         Ok(())
+    }
+
+    pub(super) fn revalidate_root_namespace(&self, wait: Wait<'_>) -> io::Result<()> {
+        wait.check()?;
+        require_child_count(&self.root, self.root_expected_children)
     }
 
     pub(super) fn directory_count(&self) -> usize {
@@ -252,6 +261,23 @@ impl PreparedTree {
                 ));
             }
             file.revalidate_final_mode()?;
+            wait.check()?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn revalidate_final_descendants(&self, wait: Wait<'_>) -> io::Result<()> {
+        wait.check()?;
+        for directory in &self.directories {
+            directory.revalidate()?;
+            wait.check()?;
+        }
+        for file in &self.files {
+            file.revalidate_final_payload(wait)?;
+            wait.check()?;
+        }
+        for link in &self.links {
+            link.name.revalidate()?;
             wait.check()?;
         }
         Ok(())

@@ -163,9 +163,17 @@ DEST_PREPARE_CASES = [
     (
         'dest-prepare-complete-root-binding',
         'destination_tree_prepare.rs',
-        '                    if let Err(error) = this.anchor.revalidate(wait) {\n                        // Final root binding before disarm.',
-        '                    if let Err(error) = Ok::<(), io::Error>(()) {\n                        // Final root binding before disarm.',
+        '                    if let Err(error) = this.anchor.revalidate(wait) {',
+        '                    if let Err(error) = Ok::<(), io::Error>(()) {',
         'store::foundation::destination_tree_prepare::tests::races::prepared_tree_complete_rejects_root_replacement',
+        'called `Result::unwrap_err()` on an `Ok` value',
+    ),
+    (
+        'dest-prepare-complete-descendant-binding',
+        'destination_tree_prepare.rs',
+        '                    if let Err(error) = this.inner.revalidate_final_descendants(wait) {',
+        '                    if let Err(error) = Ok::<(), io::Error>(()) {',
+        'store::foundation::destination_tree_prepare::tests::races::prepared_tree_complete_rejects_leaf_replacement_after_inner_validation',
         'called `Result::unwrap_err()` on an `Ok` value',
     ),
 ]
@@ -219,7 +227,7 @@ def main():
     repr_suite = cargo + ["store::foundation::destination_name_probe::tests::", "--", "--nocapture"]
     repr_expected = r"test result: ok\. 14 passed; 0 failed; 0 ignored;"
     prepare_suite = cargo + ["store::foundation::destination_tree_prepare::tests::", "--", "--nocapture"]
-    prepare_expected = r"test result: ok\. 27 passed; 0 failed; 0 ignored;"
+    prepare_expected = r"test result: ok\. 30 passed; 0 failed; 0 ignored;"
     try:
         require(not git("status", "--porcelain", "--untracked-files=no"), "tracked source dirty")
         archive = subprocess.check_output(["git", "archive", "--format=zip", "HEAD"], cwd=ROOT)

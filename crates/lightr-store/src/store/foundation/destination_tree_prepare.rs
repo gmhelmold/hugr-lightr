@@ -208,11 +208,14 @@ impl PreparedDestinationTree<'_, '_> {
                     if let Err(error) = after_inner_complete() {
                         return Err(fail_and_cleanup(this.inner, error));
                     }
-                    if let Err(error) = this.anchor.revalidate(wait) {
+                    if let Err(error) = this.inner.revalidate_final_descendants(wait) {
                         return Err(fail_and_cleanup(this.inner, error));
                     }
-                    if let Err(error) = this.inner.revalidate(wait) {
-                        // Final descendant bindings before disarm.
+                    if let Err(error) = this.inner.revalidate_root_namespace(wait) {
+                        return Err(fail_and_cleanup(this.inner, error));
+                    }
+                    if let Err(error) = this.anchor.revalidate(wait) {
+                        // Final root binding after descendants, before disarm.
                         return Err(fail_and_cleanup(this.inner, error));
                     }
                     if let Err(error) = wait.check() {

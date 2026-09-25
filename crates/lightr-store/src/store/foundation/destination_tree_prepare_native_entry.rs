@@ -294,6 +294,18 @@ impl OwnedFile {
             .then_some(())
             .ok_or_else(|| invalid_payload("prepared file mode changed before completion"))
     }
+    pub(super) fn revalidate_final_payload(&self, wait: super::super::Wait<'_>) -> io::Result<()> {
+        self.revalidate_final_mode()?;
+        let mut reader = self.file.try_clone()?;
+        reader.seek(SeekFrom::Start(0))?;
+        let (digest, length) = Digest::of_reader_checked(&mut reader, || wait.check())?;
+        if length != self.size || digest != self.digest {
+            return Err(invalid_payload(
+                "prepared file payload changed before completion",
+            ));
+        }
+        wait.check()
+    }
     pub(super) fn write_payload(
         &mut self,
         source: &mut impl Read,

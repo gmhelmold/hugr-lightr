@@ -292,6 +292,90 @@ fn prepared_tree_complete_rejects_leaf_replacement_after_inner_validation() {
 }
 
 #[test]
+fn prepared_tree_complete_rejects_same_inode_payload_mutation() {
+    let f = Fixture::new();
+    let output = f.parent.join("output");
+    fs::create_dir(&output).unwrap();
+    let observed = f.inspect(&output);
+    let anchor = observed.anchor_empty(Wait::Try).unwrap();
+    let manifest = Manifest {
+        version: 1,
+        total_size: 0,
+        entries: vec![Entry::File {
+            path: "a".into(),
+            mode: 0o640,
+            size: 0,
+            digest: Digest::of_bytes(&[]),
+        }],
+    };
+    let mut prepared = anchor
+        .prepare_tree(&plan(&manifest), limits(), Wait::Try)
+        .unwrap();
+    let mut source = io::Cursor::new(&[] as &[u8]);
+    prepared
+        .write_file_payload("a", &mut source, Wait::Try)
+        .unwrap();
+
+    let failure = prepared
+        .complete_checked(
+            Wait::Try,
+            || Ok(()),
+            || {
+                fs::write(output.join("a"), b"replacement")?;
+                Ok(())
+            },
+        )
+        .unwrap_err();
+
+    assert_eq!(failure.primary.unwrap().kind(), io::ErrorKind::InvalidData);
+    assert!(failure.cleanup.is_empty());
+    assert!(failure.cleanup_complete);
+    assert!(!output.join("a").exists());
+}
+
+#[test]
+fn prepared_tree_complete_rejects_same_inode_mode_mutation() {
+    let f = Fixture::new();
+    let output = f.parent.join("output");
+    fs::create_dir(&output).unwrap();
+    let observed = f.inspect(&output);
+    let anchor = observed.anchor_empty(Wait::Try).unwrap();
+    let manifest = Manifest {
+        version: 1,
+        total_size: 0,
+        entries: vec![Entry::File {
+            path: "a".into(),
+            mode: 0o640,
+            size: 0,
+            digest: Digest::of_bytes(&[]),
+        }],
+    };
+    let mut prepared = anchor
+        .prepare_tree(&plan(&manifest), limits(), Wait::Try)
+        .unwrap();
+    let mut source = io::Cursor::new(&[] as &[u8]);
+    prepared
+        .write_file_payload("a", &mut source, Wait::Try)
+        .unwrap();
+
+    let failure = prepared
+        .complete_checked(
+            Wait::Try,
+            || Ok(()),
+            || {
+                fs::set_permissions(output.join("a"), fs::Permissions::from_mode(0o600))?;
+                Ok(())
+            },
+        )
+        .unwrap_err();
+
+    assert_eq!(failure.primary.unwrap().kind(), io::ErrorKind::InvalidData);
+    assert!(failure.cleanup.is_empty());
+    assert!(failure.cleanup_complete);
+    assert!(!output.join("a").exists());
+}
+
+#[test]
 fn prepared_tree_final_entry_revalidation_rejects_leaf_replacement() {
     let f = Fixture::new();
     let output = f.parent.join("output");
