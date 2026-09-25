@@ -88,7 +88,7 @@ class SourceListingPolicyTests(unittest.TestCase):
                      and any(isinstance(v, ast.Name) and v.id == 'label' for v in n.target.elts)]
             self.assertEqual(len(loops), 1)
             self.assertCountEqual([n.id for n in ast.walk(loops[0].iter) if isinstance(n, ast.Name)], FAMILIES)
-            self.assertIn(r'listing_expected = r"test result: ok\. 16 passed;', text)
+            self.assertIn('listing_expected = rf"test result: ok\\. {17 if linux else 16} passed;', text)
             for stage in ['pristine', 'restored']:
                 self.assertEqual(text.count(f'run(root, listing_suite, "listing-{stage}")'), 1)
         finally:
