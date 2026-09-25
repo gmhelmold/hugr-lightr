@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import signal
 import subprocess
+import sys
 import tempfile
 import zipfile
 
@@ -69,6 +70,10 @@ DESCENDANT_CASES = [('descendant-no-follow', 'topology_descendant.rs', '| libc::
 SCRATCH_CASES = [('scratch-exclusive-file', 'anchored_scratch_native.rs', 'flags | libc::O_EXCL', 'flags', 'store::foundation::anchored_scratch::tests::unix::scratch_existing_names_are_never_adopted_or_truncated', 'existing file was adopted'), ('scratch-cleanup-identity', 'anchored_scratch_native.rs', 'if identity(&self.parent, &self.name)? != self.identity {', 'if false && identity(&self.parent, &self.name)? != self.identity {', 'store::foundation::anchored_scratch::tests::unix::scratch_cleanup_preserves_replacement_entries', 'replacement was removed'), ('scratch-collision-budget', 'anchored_scratch_native.rs', 'for _ in 0..32 {', 'for _ in 0..33 {', 'store::foundation::anchored_scratch::native::tests::scratch_atomic_reservation_has_a_finite_collision_budget', 'assertion `left == right` failed')]
 
 LINK_CASES = [('link-leaf-identity', 'topology_link.rs', 'if key(&current)? != expected {', 'if false && key(&current)? != expected {', 'store::foundation::topology::topology_link::tests::source_link_detects_replacement_after_read', 'replaced source link accepted'), ('link-byte-bound', 'topology_link.rs', 'if used > limit {', 'if false && used > limit {', 'store::foundation::topology::topology_link::tests::source_link_exact_byte_budget_never_accepts_truncation', 'called `Result::unwrap_err()` on an `Ok` value'), ('link-final-cancellation', 'topology_link.rs', 'wait.check()?; // Source-link final checkpoint, including completed reads.', '// Deliberately omitted terminal checkpoint for causal control.', 'store::foundation::topology::topology_link::tests::source_link_cancellation_after_completed_validation_is_not_success', 'completed cancelled link read accepted'), ('link-pin-no-follow', 'topology_link.rs', 'libc::O_PATH | libc::O_NOFOLLOW | libc::O_CLOEXEC', 'libc::O_PATH | libc::O_CLOEXEC', 'store::foundation::topology::topology_link::tests::source_link_preserves_dangling_and_exact_target_text', 'dangling link text not preserved')]
+TARGET_ONLY_CONTROLS = {
+    'link-pin-no-follow': 'linux',
+    'listing-strict-utf8': 'linux',
+}
 
 LISTING_CASES = [('listing-independent-offset', 'topology_listing_native.rs', 'let scan = open_at(&directory, b".", true)?;', 'let _ = open_at; let scan = directory.try_clone()?;', 'store::foundation::topology::topology_listing::native::tests::listing_ignores_an_offset_previously_advanced_on_the_held_source', 'assertion `left == right` failed'), ('listing-strict-utf8', 'topology_listing_native.rs', 'let name =\n            std::str::from_utf8(name).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;', 'let lossy = String::from_utf8_lossy(name); let name = lossy.as_ref();', 'store::foundation::topology::topology_listing::native::tests::listing_non_utf8_native_name_is_an_error_not_an_omission', 'called `Result::unwrap_err()` on an `Ok` value'), ('listing-eof-cancellation', 'topology_listing_native.rs', 'wait.check()?; // EOF does not erase a cancellation/deadline.\n        let Some(name) = entry else { break };', 'let Some(name) = entry else { return Ok(names) };\n        wait.check()?;', 'store::foundation::topology::topology_listing::native::tests::collection::listing_cancellation_after_eof_rejects_the_result', 'called `Result::unwrap_err()` on an `Ok` value'), ('listing-nested-binding', 'topology_listing_native.rs', 'if key(&current)? != identity {', 'if false && key(&current)? != identity {', 'store::foundation::topology::topology_listing::native::tests::listing_revalidates_nested_binding_after_native_enumeration', 'called `Result::unwrap_err()` on an `Ok` value')]
 
@@ -154,11 +159,35 @@ DEST_PREPARE_CASES = [
     ),
     (
         'dest-prepare-root-binding',
-        'destination_tree_prepare.rs',
+        'destination_tree_prepare_builder.rs',
         '        if let Err(error) = anchor.revalidate(wait) {',
         '        if let Err(error) = Ok::<(), io::Error>(()) {',
         'store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_binding_rejects_root_replacement',
         'called `Option::unwrap()` on a `None` value',
+    ),
+    (
+        'dest-prepare-complete-root-binding',
+        'destination_tree_prepare.rs',
+        '                    if let Err(error) = this.anchor.revalidate(wait) {',
+        '                    if let Err(error) = Ok::<(), io::Error>(()) {',
+        'store::foundation::destination_tree_prepare::tests::races::prepared_tree_complete_rejects_root_replacement',
+        'called `Result::unwrap_err()` on an `Ok` value',
+    ),
+    (
+        'dest-prepare-complete-descendant-binding',
+        'destination_tree_prepare.rs',
+        '                    if let Err(error) = this.inner.revalidate_final_descendants(wait) {',
+        '                    if let Err(error) = Ok::<(), io::Error>(()) {',
+        'store::foundation::destination_tree_prepare::tests::races::prepared_tree_complete_rejects_leaf_replacement_after_inner_validation',
+        'called `Result::unwrap_err()` on an `Ok` value',
+    ),
+    (
+        'dest-prepare-complete-root-after-descendants',
+        'destination_tree_prepare.rs',
+        '                    if let Err(error) = this.inner.revalidate_final_descendants(wait) {\n                        return Err(prepare_builder::fail_and_cleanup(this.inner, error));\n                    }\n                    if let Err(error) = after_final_descendants() {\n                        return Err(prepare_builder::fail_and_cleanup(this.inner, error));\n                    }\n                    if let Err(error) = this.inner.revalidate_root_namespace(wait) {\n                        return Err(prepare_builder::fail_and_cleanup(this.inner, error));\n                    }\n                    if let Err(error) = this.anchor.revalidate(wait) {\n                        // Final root binding after descendants, before disarm.\n                        return Err(prepare_builder::fail_and_cleanup(this.inner, error));\n                    }',
+        '                    if let Err(error) = this.inner.revalidate_final_descendants(wait) {\n                        return Err(prepare_builder::fail_and_cleanup(this.inner, error));\n                    }\n                    if let Err(error) = this.anchor.revalidate(wait) {\n                        // Final root binding after descendants, before disarm.\n                        return Err(prepare_builder::fail_and_cleanup(this.inner, error));\n                    }\n                    if let Err(error) = after_final_descendants() {\n                        return Err(prepare_builder::fail_and_cleanup(this.inner, error));\n                    }\n                    if let Err(error) = this.inner.revalidate_root_namespace(wait) {\n                        return Err(prepare_builder::fail_and_cleanup(this.inner, error));\n                    }',
+        'store::foundation::destination_tree_prepare::tests::races::prepared_tree_complete_checks_root_after_descendants',
+        'called `Result::unwrap_err()` on an `Ok` value',
     ),
 ]
 
@@ -192,26 +221,27 @@ def main():
     cargo = ["cargo", "+1.96.0", "test", "--locked", "-p", "lightr-store", "--lib"]
     suite = cargo + [PREFIX + "tests::", "--", "--nocapture"]
     expected = r"test result: ok\. 20 passed; 0 failed; 0 ignored;"
+    linux = sys.platform.startswith("linux")
     destination_suite = cargo + ["store::foundation::destination_tests::", "--", "--nocapture"]
     destination_expected = r"test result: ok\. 11 passed; 0 failed; 0 ignored;"
     planned_suite = cargo + ["store::foundation::planned_roots_tests::", "--", "--nocapture"]
     planned_expected = r"test result: ok\. 17 passed; 0 failed; 0 ignored;"
     empty_suite = cargo + [PREFIX + "topology_empty::tests::", "--", "--nocapture"]
-    empty_expected = r"test result: ok\. 12 passed; 0 failed; 0 ignored;"
+    empty_expected = rf"test result: ok\. {12 if linux else 11} passed; 0 failed; 0 ignored;"
     descendant_suite = cargo + [PREFIX + "topology_descendant::tests::", "--", "--nocapture"]
-    descendant_expected = r"test result: ok\. 13 passed; 0 failed; 0 ignored;"
+    descendant_expected = rf"test result: ok\. {13 if linux else 12} passed; 0 failed; 0 ignored;"
     scratch_suite = cargo + ["store::foundation::anchored_scratch::", "--", "--nocapture"]
     scratch_expected = r"test result: ok\. 15 passed; 0 failed; 0 ignored;"
     link_suite = cargo + [PREFIX + "topology_link::tests::", "--", "--nocapture"]
-    link_expected = r"test result: ok\. 16 passed; 0 failed; 0 ignored;"
+    link_expected = rf"test result: ok\. {16 if linux else 14} passed; 0 failed; 0 ignored;"
     listing_suite = cargo + [PREFIX + "topology_listing::native::tests::", "--", "--nocapture"]
-    listing_expected = r"test result: ok\. 17 passed; 0 failed; 0 ignored;"
+    listing_expected = rf"test result: ok\. {17 if linux else 16} passed; 0 failed; 0 ignored;"
     anchor_suite = cargo + ["store::foundation::destination_anchor::tests::", "--", "--nocapture"]
     anchor_expected = r"test result: ok\. 11 passed; 0 failed; 0 ignored;"
     repr_suite = cargo + ["store::foundation::destination_name_probe::tests::", "--", "--nocapture"]
     repr_expected = r"test result: ok\. 14 passed; 0 failed; 0 ignored;"
     prepare_suite = cargo + ["store::foundation::destination_tree_prepare::tests::", "--", "--nocapture"]
-    prepare_expected = r"test result: ok\. 16 passed; 0 failed; 0 ignored;"
+    prepare_expected = r"test result: ok\. 31 passed; 0 failed; 0 ignored;"
     try:
         require(not git("status", "--porcelain", "--untracked-files=no"), "tracked source dirty")
         archive = subprocess.check_output(["git", "archive", "--format=zip", "HEAD"], cwd=ROOT)
@@ -245,6 +275,15 @@ def main():
             code, text = run(root, prepare_suite, "prepare-pristine")
             require(code == 0 and re.search(prepare_expected, text), "destination prepare pristine suite failed")
             for label, name, old, new, test, message in CASES + EMPTY_CASES + DESCENDANT_CASES + SCRATCH_CASES + LINK_CASES + LISTING_CASES + DEST_ANCHOR_CASES + DEST_REPR_CASES + DEST_PREPARE_CASES:
+                target = TARGET_ONLY_CONTROLS.get(label)
+                if target and not sys.platform.startswith(target):
+                    receipt["controls"].append(dict(
+                        name=label,
+                        status="SKIPPED",
+                        target=target,
+                        reason="mutant is cfg-active only on target platform",
+                    ))
+                    continue
                 path = root / BASE / name
                 original = path.read_text()
                 require(original.count(old) == 1, "mutation seam mismatch: " + label)

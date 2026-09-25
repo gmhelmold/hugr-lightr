@@ -1,12 +1,17 @@
 //! Native prepared-tree orchestration under one retained destination root.
 use super::{PrepareStep, TreePlan, Wait};
-use entry::{require_child_count, OwnedDirectory, OwnedFile, OwnedLink, OwnedName};
-use lightr_core::Entry;
+use crate::Store;
+use directory::require_child_count;
+use entry::{OwnedDirectory, OwnedFile, OwnedLink, OwnedName};
+use lightr_core::{Entry, LightrError};
 use std::fs::File;
 use std::io;
 
 #[path = "destination_tree_prepare_native_entry.rs"]
 mod entry;
+
+#[path = "destination_tree_prepare_native_directory.rs"]
+mod directory;
 
 pub(super) struct PreparedTree {
     root: File,
@@ -125,8 +130,13 @@ impl PreparedTree {
                 Err(error) => return Err(tree.fail(error)),
             };
             match entry {
-                Entry::File { .. } => {
-                    let file = match OwnedFile::create(parent, name) {
+                Entry::File {
+                    path,
+                    digest,
+                    size,
+                    mode,
+                } => {
+                    let file = match OwnedFile::create(parent, name, path, *digest, *size, *mode) {
                         Ok(file) => file,
                         Err(error) => return Err(tree.fail_create(error)),
                     };
@@ -176,6 +186,10 @@ impl PreparedTree {
     pub(super) fn revalidate(&self, wait: Wait<'_>) -> io::Result<()> {
         wait.check()?;
         require_child_count(&self.root, self.root_expected_children)?;
+        self.revalidate_descendants(wait)
+    }
+
+    pub(super) fn revalidate_descendants(&self, wait: Wait<'_>) -> io::Result<()> {
         wait.check()?;
         for directory in &self.directories {
             directory.revalidate()?;
@@ -192,12 +206,90 @@ impl PreparedTree {
         Ok(())
     }
 
+    pub(super) fn revalidate_root_namespace(&self, wait: Wait<'_>) -> io::Result<()> {
+        wait.check()?;
+        require_child_count(&self.root, self.root_expected_children)
+    }
+
     pub(super) fn directory_count(&self) -> usize {
         self.directories.len()
     }
 
     pub(super) fn file_count(&self) -> usize {
         self.files.len()
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn write_payload(
+        &mut self,
+        path: &str,
+        source: &mut impl std::io::Read,
+        wait: Wait<'_>,
+    ) -> io::Result<()> {
+        let file = self
+            .files
+            .iter_mut()
+            .find(|file| file.path() == path)
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::NotFound, "prepared file path not found")
+            })?;
+        file.write_payload(source, wait)
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn write_all_payloads_from_store(
+        &mut self,
+        store: &Store,
+        wait: Wait<'_>,
+    ) -> io::Result<()> {
+        for index in 0..self.files.len() {
+            wait.check()?;
+            let digest = self.files[index].digest();
+            let mut source = store
+                .open_verified_payload(&digest, || wait.check())
+                .map_err(cas_error)?;
+            self.files[index].write_payload(&mut source, wait)?;
+        }
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn complete(&mut self, wait: Wait<'_>) -> io::Result<()> {
+        wait.check()?;
+        self.revalidate(wait)?;
+        for file in &self.files {
+            if !file.is_written() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "prepared tree contains an unwritten file",
+                ));
+            }
+            file.revalidate_final_mode()?;
+            wait.check()?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn revalidate_final_descendants(&self, wait: Wait<'_>) -> io::Result<()> {
+        wait.check()?;
+        for directory in &self.directories {
+            directory.revalidate()?;
+            wait.check()?;
+        }
+        for file in &self.files {
+            file.revalidate_final_payload(wait)?;
+            wait.check()?;
+        }
+        for link in &self.links {
+            link.name.revalidate()?;
+            wait.check()?;
+        }
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn disarm(&mut self) {
+        self.armed = false;
     }
 
     pub(super) fn link_count(&self) -> usize {
@@ -267,6 +359,15 @@ impl Drop for PreparedTree {
             let _ = self.cleanup();
             self.armed = false;
         }
+    }
+}
+
+fn cas_error(error: LightrError) -> io::Error {
+    match error {
+        LightrError::Io(error) => error,
+        LightrError::NotFound(_) => io::Error::new(io::ErrorKind::NotFound, error),
+        LightrError::Integrity { .. } => io::Error::new(io::ErrorKind::InvalidData, error),
+        error => io::Error::other(error),
     }
 }
 

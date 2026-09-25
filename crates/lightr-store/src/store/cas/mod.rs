@@ -7,9 +7,15 @@ use super::cow::{cow_copy_file, try_cow_at_rung, CowRung};
 use super::lock::write_guard;
 use lightr_core::{Digest, LightrError, Result};
 #[cfg(unix)]
+use std::ffi::CString;
+#[cfg(unix)]
 use std::fs::Permissions;
-use std::fs::{self, File};
-use std::io::Write;
+use std::fs::{self, File, OpenOptions};
+use std::io::{Seek, SeekFrom, Write};
+#[cfg(unix)]
+use std::os::fd::{AsRawFd, FromRawFd};
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -224,6 +230,94 @@ pub fn get_bytes(root: &Path, d: &Digest) -> Result<Vec<u8>> {
         });
     }
     Ok(bytes)
+}
+
+/// Open and verify one immutable CAS object without buffering its bytes.
+#[allow(dead_code)]
+pub(crate) fn open_verified(
+    root: &Path,
+    d: &Digest,
+    mut checkpoint: impl FnMut() -> std::io::Result<()>,
+) -> Result<File> {
+    let mut file = match open_object_file(root, d) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(lightr_core::LightrError::NotFound(*d));
+        }
+        Err(error) => return Err(error.into()),
+    };
+    let (actual, _) = Digest::of_reader_checked(&mut file, &mut checkpoint)?;
+    if actual != *d {
+        return Err(lightr_core::LightrError::Integrity {
+            expected: *d,
+            actual,
+        });
+    }
+    file.seek(SeekFrom::Start(0))?;
+    Ok(file)
+}
+
+#[allow(dead_code)]
+fn open_object_file(root: &Path, d: &Digest) -> std::io::Result<File> {
+    #[cfg(unix)]
+    let file = {
+        let root = open_directory(root)?;
+        let objects = openat_directory(&root, "objects")?;
+        let hex = d.to_hex();
+        let (shard, object) = shard_parts(&hex);
+        let shard = openat_directory(&objects, shard)?;
+        openat_object(&shard, object)?
+    };
+    #[cfg(not(unix))]
+    let file = OpenOptions::new().read(true).open(object_path(root, d))?;
+    if !file.metadata()?.is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "CAS object is not a regular file",
+        ));
+    }
+    Ok(file)
+}
+
+#[cfg(unix)]
+fn open_directory(path: &Path) -> std::io::Result<File> {
+    OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)
+}
+
+#[cfg(unix)]
+fn openat_directory(parent: &File, name: &str) -> std::io::Result<File> {
+    openat_component(
+        parent,
+        name,
+        libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+    )
+}
+
+#[cfg(unix)]
+fn openat_object(parent: &File, name: &str) -> std::io::Result<File> {
+    openat_component(
+        parent,
+        name,
+        libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+    )
+}
+
+#[cfg(unix)]
+fn openat_component(parent: &File, name: &str, flags: libc::c_int) -> std::io::Result<File> {
+    let name = CString::new(name).map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "NUL in CAS object component",
+        )
+    })?;
+    let fd = unsafe { libc::openat(parent.as_raw_fd(), name.as_ptr(), libc::O_RDONLY | flags) };
+    if fd < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(unsafe { File::from_raw_fd(fd) })
 }
 
 /// Returns true iff the object file exists (no rehash).

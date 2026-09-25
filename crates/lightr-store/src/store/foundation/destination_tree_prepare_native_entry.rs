@@ -1,11 +1,13 @@
 //! Identity-checked native entries owned by one prepared output tree.
+use super::directory::require_child_count;
 use super::CreateFailure;
-use std::ffi::{CStr, CString};
+use lightr_core::Digest;
+use std::ffi::CString;
 use std::fs::File;
-use std::io;
-use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd};
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::os::fd::{AsRawFd, FromRawFd};
 use std::os::unix::fs::MetadataExt;
-use std::ptr::NonNull;
+use std::os::unix::fs::PermissionsExt;
 
 type Identity = (u64, u64, u32);
 
@@ -44,21 +46,21 @@ fn identity(parent: &File, name: &CString) -> io::Result<Identity> {
     let (device, mode) = (info.st_dev as u64, u32::from(info.st_mode));
     Ok((device, info.st_ino, mode & 0o170000))
 }
-
 fn changed() -> io::Error {
     io::Error::new(
         io::ErrorKind::InvalidData,
         "prepared destination entry changed identity or type",
     )
 }
-
+fn invalid_payload(message: &'static str) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message)
+}
 pub(super) struct OwnedName {
     parent: File,
     name: CString,
     identity: Identity,
     directory: bool,
 }
-
 impl OwnedName {
     pub(super) fn revalidate(&self) -> io::Result<()> {
         if identity(&self.parent, &self.name)? != self.identity {
@@ -82,7 +84,6 @@ impl OwnedName {
         Ok(())
     }
 }
-
 pub(super) struct OwnedDirectory {
     pub(super) file: File,
     pub(super) name: OwnedName,
@@ -154,85 +155,26 @@ impl OwnedDirectory {
     }
 }
 
-pub(super) fn require_child_count(directory: &File, expected: usize) -> io::Result<()> {
-    let dot = CString::new(".").expect("static directory component");
-    let flags = libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NONBLOCK;
-    // SAFETY: retained directory and static normal component. This creates a
-    // fresh open-file description so enumeration never inherits another offset.
-    let fd = unsafe { libc::openat(directory.as_raw_fd(), dot.as_ptr(), flags) };
-    if fd < 0 {
-        return Err(io::Error::last_os_error());
-    }
-    // SAFETY: successful openat returned one owned descriptor.
-    let file = unsafe { File::from_raw_fd(fd) };
-    // SAFETY: fdopendir acquires descriptor ownership on success only.
-    let raw = unsafe { libc::fdopendir(file.as_raw_fd()) };
-    let raw = NonNull::new(raw).ok_or_else(io::Error::last_os_error)?;
-    let _ = file.into_raw_fd();
-
-    let result = (|| {
-        let mut count = 0usize;
-        loop {
-            // SAFETY: locally-owned DIR stream; d_name is borrowed only until
-            // the next call. Thread-local errno distinguishes EOF from error.
-            unsafe {
-                *errno_address() = 0;
-                let entry = libc::readdir(raw.as_ptr());
-                if entry.is_null() {
-                    let code = *errno_address();
-                    if code == 0 {
-                        break;
-                    }
-                    return Err(io::Error::from_raw_os_error(code));
-                }
-                let name = CStr::from_ptr((*entry).d_name.as_ptr()).to_bytes();
-                if name != b"." && name != b".." {
-                    count = count.checked_add(1).ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::InvalidData, "directory entry count overflow")
-                    })?;
-                    if count > expected {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "prepared directory contains an unowned entry",
-                        ));
-                    }
-                }
-            }
-        }
-        if count != expected {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "prepared directory child count changed",
-            ));
-        }
-        Ok(())
-    })();
-
-    // SAFETY: sole stream owner, consumed exactly once. Never retry close.
-    let closed = if unsafe { libc::closedir(raw.as_ptr()) } == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    };
-    result.and(closed)
-}
-
-#[cfg(target_os = "linux")]
-unsafe fn errno_address() -> *mut libc::c_int {
-    unsafe { libc::__errno_location() }
-}
-#[cfg(target_os = "macos")]
-unsafe fn errno_address() -> *mut libc::c_int {
-    unsafe { libc::__error() }
-}
-
+#[allow(dead_code)]
 pub(super) struct OwnedFile {
     pub(super) file: File,
     pub(super) name: OwnedName,
+    path: String,
+    digest: Digest,
+    size: u64,
+    mode: u32,
+    written: bool,
 }
-
+#[allow(dead_code)]
 impl OwnedFile {
-    pub(super) fn create(parent: &File, raw: &str) -> Result<Self, CreateFailure> {
+    pub(super) fn create(
+        parent: &File,
+        raw: &str,
+        path: &str,
+        digest: Digest,
+        size: u64,
+        mode: u32,
+    ) -> Result<Self, CreateFailure> {
         let name = component(raw).map_err(CreateFailure::before)?;
         let parent = parent.try_clone().map_err(CreateFailure::before)?;
         let flags =
@@ -260,9 +202,107 @@ impl OwnedFile {
                 identity: id,
                 directory: false,
             },
+            path: path.to_owned(),
+            digest,
+            size,
+            mode,
+            written: false,
         })
     }
-
+    pub(super) fn path(&self) -> &str {
+        &self.path
+    }
+    pub(super) fn digest(&self) -> Digest {
+        self.digest
+    }
+    pub(super) fn is_written(&self) -> bool {
+        self.written
+    }
+    pub(super) fn revalidate_final_mode(&self) -> io::Result<()> {
+        self.revalidate()?;
+        (self.file.metadata()?.mode() & 0o7777 == self.mode)
+            .then_some(())
+            .ok_or_else(|| invalid_payload("prepared file mode changed before completion"))
+    }
+    pub(super) fn revalidate_final_payload(&self, wait: super::super::Wait<'_>) -> io::Result<()> {
+        self.revalidate_final_mode()?;
+        let mut reader = self.file.try_clone()?;
+        reader.seek(SeekFrom::Start(0))?;
+        let (digest, length) = Digest::of_reader_checked(&mut reader, || wait.check())?;
+        if length != self.size || digest != self.digest {
+            return Err(invalid_payload(
+                "prepared file payload changed before completion",
+            ));
+        }
+        wait.check()
+    }
+    pub(super) fn write_payload(
+        &mut self,
+        source: &mut impl Read,
+        wait: super::super::Wait<'_>,
+    ) -> io::Result<()> {
+        if self.written {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "prepared file payload already written",
+            ));
+        }
+        self.revalidate()?;
+        wait.check()?;
+        self.file.set_len(0)?;
+        self.file.seek(SeekFrom::Start(0))?;
+        self.file
+            .set_permissions(std::fs::Permissions::from_mode(0o600))?;
+        let mut length = 0u64;
+        let mut buffer = [0u8; 64 * 1024];
+        loop {
+            wait.check()?;
+            let count = loop {
+                match source.read(&mut buffer) {
+                    Ok(count) => break count,
+                    Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(error) => return Err(error),
+                }
+            };
+            wait.check()?;
+            if count == 0 {
+                break;
+            }
+            if count > buffer.len() {
+                return Err(invalid_payload("payload reader exceeded supplied buffer"));
+            }
+            let next = length
+                .checked_add(count as u64)
+                .ok_or_else(|| invalid_payload("payload length overflow"))?;
+            if next > self.size {
+                return Err(invalid_payload("payload exceeds declared file length"));
+            }
+            self.file.write_all(&buffer[..count])?;
+            length = next;
+        }
+        if length != self.size {
+            return Err(invalid_payload(
+                "payload length differs from declared file length",
+            ));
+        }
+        self.file.seek(SeekFrom::Start(0))?;
+        let (digest, hashed_length) = Digest::of_reader_checked(&mut self.file, || wait.check())?;
+        if hashed_length != self.size || digest != self.digest {
+            return Err(invalid_payload(
+                "written payload does not match declared file",
+            ));
+        }
+        wait.check()?;
+        self.revalidate()?;
+        self.file
+            .set_permissions(std::fs::Permissions::from_mode(self.mode))?;
+        self.file.sync_data()?;
+        wait.check()?;
+        self.revalidate()?;
+        wait.check()?;
+        self.written = true;
+        Ok(())
+    }
     pub(super) fn revalidate(&self) -> io::Result<()> {
         self.name.revalidate()?;
         let metadata = self.file.metadata()?;
@@ -272,11 +312,9 @@ impl OwnedFile {
         Ok(())
     }
 }
-
 pub(super) struct OwnedLink {
     pub(super) name: OwnedName,
 }
-
 impl OwnedLink {
     pub(super) fn create(parent: &File, raw: &str, target: &str) -> Result<Self, CreateFailure> {
         let name = component(raw).map_err(CreateFailure::before)?;
