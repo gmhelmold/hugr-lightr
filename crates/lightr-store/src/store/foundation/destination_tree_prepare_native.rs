@@ -1,5 +1,6 @@
 //! Native prepared-tree orchestration under one retained destination root.
 use super::{PrepareStep, TreePlan, Wait};
+use crate::Store;
 use entry::{require_child_count, OwnedDirectory, OwnedFile, OwnedLink, OwnedName};
 use lightr_core::Entry;
 use std::fs::File;
@@ -125,8 +126,13 @@ impl PreparedTree {
                 Err(error) => return Err(tree.fail(error)),
             };
             match entry {
-                Entry::File { .. } => {
-                    let file = match OwnedFile::create(parent, name) {
+                Entry::File {
+                    path,
+                    digest,
+                    size,
+                    mode,
+                } => {
+                    let file = match OwnedFile::create(parent, name, path, *digest, *size, *mode) {
                         Ok(file) => file,
                         Err(error) => return Err(tree.fail_create(error)),
                     };
@@ -198,6 +204,54 @@ impl PreparedTree {
 
     pub(super) fn file_count(&self) -> usize {
         self.files.len()
+    }
+
+    pub(super) fn write_payload(
+        &mut self,
+        path: &str,
+        source: &mut impl std::io::Read,
+        wait: Wait<'_>,
+    ) -> io::Result<()> {
+        let file = self
+            .files
+            .iter_mut()
+            .find(|file| file.path() == path)
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::NotFound, "prepared file path not found")
+            })?;
+        file.write_payload(source, wait)
+    }
+
+    pub(super) fn write_all_payloads_from_store(
+        &mut self,
+        store: &Store,
+        wait: Wait<'_>,
+    ) -> io::Result<()> {
+        for index in 0..self.files.len() {
+            wait.check()?;
+            let digest = self.files[index].digest();
+            let mut source = store
+                .open_verified_payload(&digest, || wait.check())
+                .map_err(io::Error::other)?;
+            self.files[index].write_payload(&mut source, wait)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn complete(&mut self, wait: Wait<'_>) -> io::Result<()> {
+        wait.check()?;
+        self.revalidate(wait)?;
+        for file in &self.files {
+            if !file.is_written() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "prepared tree contains an unwritten file",
+                ));
+            }
+            wait.check()?;
+        }
+        self.armed = false;
+        Ok(())
     }
 
     pub(super) fn link_count(&self) -> usize {

@@ -1,10 +1,12 @@
 //! Identity-checked native entries owned by one prepared output tree.
 use super::CreateFailure;
+use lightr_core::Digest;
 use std::ffi::{CStr, CString};
 use std::fs::File;
-use std::io;
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd};
 use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::PermissionsExt;
 use std::ptr::NonNull;
 
 type Identity = (u64, u64, u32);
@@ -52,6 +54,9 @@ fn changed() -> io::Error {
     )
 }
 
+fn invalid_payload(message: &'static str) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message)
+}
 pub(super) struct OwnedName {
     parent: File,
     name: CString,
@@ -216,7 +221,6 @@ pub(super) fn require_child_count(directory: &File, expected: usize) -> io::Resu
     };
     result.and(closed)
 }
-
 #[cfg(target_os = "linux")]
 unsafe fn errno_address() -> *mut libc::c_int {
     unsafe { libc::__errno_location() }
@@ -225,14 +229,24 @@ unsafe fn errno_address() -> *mut libc::c_int {
 unsafe fn errno_address() -> *mut libc::c_int {
     unsafe { libc::__error() }
 }
-
 pub(super) struct OwnedFile {
     pub(super) file: File,
     pub(super) name: OwnedName,
+    path: String,
+    digest: Digest,
+    size: u64,
+    mode: u32,
+    written: bool,
 }
-
 impl OwnedFile {
-    pub(super) fn create(parent: &File, raw: &str) -> Result<Self, CreateFailure> {
+    pub(super) fn create(
+        parent: &File,
+        raw: &str,
+        path: &str,
+        digest: Digest,
+        size: u64,
+        mode: u32,
+    ) -> Result<Self, CreateFailure> {
         let name = component(raw).map_err(CreateFailure::before)?;
         let parent = parent.try_clone().map_err(CreateFailure::before)?;
         let flags =
@@ -260,7 +274,91 @@ impl OwnedFile {
                 identity: id,
                 directory: false,
             },
+            path: path.to_owned(),
+            digest,
+            size,
+            mode,
+            written: false,
         })
+    }
+
+    pub(super) fn path(&self) -> &str {
+        &self.path
+    }
+
+    pub(super) fn digest(&self) -> Digest {
+        self.digest
+    }
+
+    pub(super) fn is_written(&self) -> bool {
+        self.written
+    }
+
+    pub(super) fn write_payload(
+        &mut self,
+        source: &mut impl Read,
+        wait: super::super::Wait<'_>,
+    ) -> io::Result<()> {
+        if self.written {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "prepared file payload already written",
+            ));
+        }
+        self.revalidate()?;
+        wait.check()?;
+        self.file.set_len(0)?;
+        self.file.seek(SeekFrom::Start(0))?;
+        self.file
+            .set_permissions(std::fs::Permissions::from_mode(0o600))?;
+        let mut length = 0u64;
+        let mut buffer = [0u8; 64 * 1024];
+        loop {
+            wait.check()?;
+            let count = loop {
+                match source.read(&mut buffer) {
+                    Ok(count) => break count,
+                    Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(error) => return Err(error),
+                }
+            };
+            wait.check()?;
+            if count == 0 {
+                break;
+            }
+            if count > buffer.len() {
+                return Err(invalid_payload("payload reader exceeded supplied buffer"));
+            }
+            let next = length
+                .checked_add(count as u64)
+                .ok_or_else(|| invalid_payload("payload length overflow"))?;
+            if next > self.size {
+                return Err(invalid_payload("payload exceeds declared file length"));
+            }
+            self.file.write_all(&buffer[..count])?;
+            length = next;
+        }
+        if length != self.size {
+            return Err(invalid_payload(
+                "payload length differs from declared file length",
+            ));
+        }
+        self.file.seek(SeekFrom::Start(0))?;
+        let (digest, hashed_length) = Digest::of_reader_checked(&mut self.file, || wait.check())?;
+        if hashed_length != self.size || digest != self.digest {
+            return Err(invalid_payload(
+                "written payload does not match declared file",
+            ));
+        }
+        wait.check()?;
+        self.revalidate()?;
+        self.file
+            .set_permissions(std::fs::Permissions::from_mode(self.mode))?;
+        self.file.sync_data()?;
+        wait.check()?;
+        self.revalidate()?;
+        self.written = true;
+        Ok(())
     }
 
     pub(super) fn revalidate(&self) -> io::Result<()> {
@@ -272,11 +370,9 @@ impl OwnedFile {
         Ok(())
     }
 }
-
 pub(super) struct OwnedLink {
     pub(super) name: OwnedName,
 }
-
 impl OwnedLink {
     pub(super) fn create(parent: &File, raw: &str, target: &str) -> Result<Self, CreateFailure> {
         let name = component(raw).map_err(CreateFailure::before)?;

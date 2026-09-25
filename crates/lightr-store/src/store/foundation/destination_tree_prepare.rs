@@ -2,8 +2,8 @@
 //!
 //! This is the transition from representability-only probing to operation-owned
 //! output entries. It prepares directories, empty regular files and exact POSIX
-//! symlinks through retained handles. It does not read CAS payloads, apply final
-//! modes, publish a snapshot, activate hydrate or qualify Windows topology.
+//! symlinks through retained handles. It does not publish a snapshot, activate
+//! hydrate or qualify Windows topology.
 use super::destination_anchor::DestinationAnchor;
 use super::destination_name_probe::DestinationNameProbeFailure;
 use super::scratch_name_probe::NameProbeLimits;
@@ -11,6 +11,7 @@ use super::scratch_name_probe::NameProbeLimits;
 use super::topology;
 use super::tree_plan::TreePlan;
 use super::Wait;
+use crate::Store;
 use std::{fmt, io};
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -127,6 +128,80 @@ impl PreparedDestinationTree<'_, '_> {
         }
     }
 
+    /// Stream and verify one manifest file into its retained destination handle.
+    /// Final mode is applied only after exact size and digest verification.
+    pub fn write_file_payload(
+        &mut self,
+        path: &str,
+        source: &mut impl std::io::Read,
+        wait: Wait<'_>,
+    ) -> io::Result<()> {
+        self.revalidate(wait)?;
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            self.inner.write_payload(path, source, wait)
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = (path, source, wait);
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "prepared destination tree requires qualified native topology",
+            ))
+        }
+    }
+
+    /// Fill every prepared regular file from verified CAS objects.
+    /// Any failure rolls back all operation-owned output entries.
+    pub fn write_all_payloads_from_store(
+        &mut self,
+        store: &Store,
+        wait: Wait<'_>,
+    ) -> Result<(), DestinationTreePrepareFailure> {
+        if let Err(error) = self.revalidate(wait) {
+            return Err(self.fail_payload(error));
+        }
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            match self.inner.write_all_payloads_from_store(store, wait) {
+                Ok(()) => Ok(()),
+                Err(error) => Err(self.fail_payload(error)),
+            }
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = (store, wait);
+            Err(self.fail_payload(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "prepared destination tree requires qualified native topology",
+            )))
+        }
+    }
+
+    /// Complete a fully materialized tree without publishing a ref or snapshot.
+    /// An incomplete or invalid tree is rolled back instead.
+    pub fn complete(self, wait: Wait<'_>) -> Result<(), DestinationTreePrepareFailure> {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            let mut this = self;
+            if let Err(error) = this.anchor.revalidate(wait) {
+                return Err(fail_and_cleanup(this.inner, error));
+            }
+            match this.inner.complete(wait) {
+                Ok(()) => Ok(()),
+                Err(error) => Err(fail_and_cleanup(this.inner, error)),
+            }
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = (self, wait);
+            Err(DestinationTreePrepareFailure::primary(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "prepared destination tree requires qualified native topology",
+            )))
+        }
+    }
+
     /// Check the public root binding and every operation-owned descendant.
     pub fn revalidate(&self, wait: Wait<'_>) -> io::Result<()> {
         self.anchor.revalidate(wait)?;
@@ -166,6 +241,22 @@ impl PreparedDestinationTree<'_, '_> {
                 "prepared destination tree requires qualified native topology",
             )))
         }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn fail_payload(&mut self, primary: io::Error) -> DestinationTreePrepareFailure {
+        let cleanup = self.inner.rollback();
+        DestinationTreePrepareFailure {
+            primary: Some(primary),
+            cleanup: cleanup.errors,
+            cleanup_complete: cleanup.complete,
+        }
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    fn fail_payload(&mut self, primary: io::Error) -> DestinationTreePrepareFailure {
+        let _ = self;
+        DestinationTreePrepareFailure::primary(primary)
     }
 
     #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]

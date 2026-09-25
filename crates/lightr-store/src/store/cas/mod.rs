@@ -9,7 +9,7 @@ use lightr_core::{Digest, LightrError, Result};
 #[cfg(unix)]
 use std::fs::Permissions;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Seek, SeekFrom, Write};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -224,6 +224,31 @@ pub fn get_bytes(root: &Path, d: &Digest) -> Result<Vec<u8>> {
         });
     }
     Ok(bytes)
+}
+
+/// Open and verify one immutable CAS object without buffering its bytes.
+pub(crate) fn open_verified(
+    root: &Path,
+    d: &Digest,
+    mut checkpoint: impl FnMut() -> std::io::Result<()>,
+) -> Result<File> {
+    let path = object_path(root, d);
+    let mut file = match File::open(&path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(lightr_core::LightrError::NotFound(*d));
+        }
+        Err(error) => return Err(error.into()),
+    };
+    let (actual, _) = Digest::of_reader_checked(&mut file, &mut checkpoint)?;
+    if actual != *d {
+        return Err(lightr_core::LightrError::Integrity {
+            expected: *d,
+            actual,
+        });
+    }
+    file.seek(SeekFrom::Start(0))?;
+    Ok(file)
 }
 
 /// Returns true iff the object file exists (no rehash).

@@ -4,6 +4,7 @@
 
 use lightr_core::{Digest, RefRecord, Result};
 use std::fs;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 
 pub mod store;
@@ -95,6 +96,14 @@ impl Store {
     /// (evidence file kept, never deleted).
     pub fn get_bytes(&self, d: &Digest) -> Result<Vec<u8>> {
         store::cas::get_bytes(&self.root, d)
+    }
+
+    pub(crate) fn open_verified_payload(
+        &self,
+        d: &Digest,
+        checkpoint: impl FnMut() -> std::io::Result<()>,
+    ) -> Result<File> {
+        store::cas::open_verified(&self.root, d, checkpoint)
     }
 
     /// Returns true iff the object file exists (no rehash).

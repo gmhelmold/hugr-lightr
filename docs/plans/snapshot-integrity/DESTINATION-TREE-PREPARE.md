@@ -12,14 +12,16 @@ the accepted actual-destination NAME probe, which must clean the root completely
 Only then does it prepare the real namespace through the retained destination
 handle. Explicit/implied directories use descriptor-relative create-only
 `mkdirat`; regular files use `openat(O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC)` and
-remain held internally by the prepared object. This slice deliberately exports no
-production payload-handle accessor yet. POSIX links use `symlinkat` with the exact
-stored UTF-8 target text. No descendant pathname is reopened globally.
+remain held internally by the prepared object. `PreparedDestinationTree::write_file_payload`
+streams one caller-supplied payload through its retained handle, checks exact size
+and digest, then applies the manifest mode and syncs. POSIX links use `symlinkat`
+with the exact stored UTF-8 target text. No descendant pathname is reopened globally.
 
 Directories and files start private (0700/0600 subject to umask); final manifest
-modes are not applied here. File payloads are not read from CAS or written by this
-public preparation API. The retained file-handle seam is crate-internal. Link
-creation is exact text only; it does not follow targets. Windows remains
+modes are not applied during preparation. `write_all_payloads_from_store` opens and
+revalidates each CAS object without buffering it, then fills every prepared file;
+any failure rolls back all operation-owned output. Link creation is exact text only;
+it does not follow targets. Windows remains
 Unsupported because native destination topology is still unqualified there.
 
 The whole-tree representability probe is a mandatory predecessor, not a
@@ -57,7 +59,7 @@ Run actual-destination representation preflight first, then create exactly the
 planned directory/file/link namespace from retained handles. Never adopt an
 existing name, follow a destination alias while descending, or return success
 with an unplanned child. Preserve exact POSIX link target text and retain regular-
-file handles internally without exposing a premature payload-writing API.
+file handles internally. Payload writing verifies bytes before applying final mode.
 
 ### Completeness criteria
 
@@ -66,7 +68,8 @@ private temporary modes; CLOEXEC retained file handles; representation-before-
 persistent-create ordering; late native errors; operation-created destination
 roots; concurrent planned-name appearance; cancellation after creation;
 replacement identity; unknown children; root replacement; leaf replacement;
-foreign root occupancy; explicit rollback and best-effort Drop. Fifteen
+foreign root occupancy; explicit rollback and best-effort Drop; CAS success,
+missing-object rollback and payload cancellation. Fifteen original plus coordinator
 Linux/macOS methods are mandatory.
 
 ### Quality standards
@@ -81,8 +84,8 @@ final root binding. Every mutant must fail its exact assertion, then the restore
 
 ### Invariants
 
-No public hydrate/index activation, CAS payload read/write, final file-mode
-publication, recursive foreign cleanup, pathname-based descendant creation,
+No public hydrate/index activation, snapshot publication, CAS mutation, recursive
+foreign cleanup, pathname-based descendant creation,
 pre-existing name adoption, Store mutation, dependency/codec/workflow/protection
 weakening, retry-until-green, main merge or protocol activation. Existing
 destination roots remain user-owned; rollback never removes the root itself.
@@ -97,8 +100,8 @@ G-ACTIVATION remain separate.
 
 ## Boundaries for the next slice
 
-A later payload writer may consume the retained file handles, verify exact bytes
-and apply supported final modes before any success/publication transition. This
-prepared object has no commit/publish method; dropping it cleans best-effort and
-explicit rollback remains the evidence-bearing exit. Windows native link/output
-support, resource/E18 qualification and public orchestration remain separate.
+Payload coordination now consumes retained file handles, verifies exact CAS bytes
+and applies supported final modes before `complete` disarms cleanup. `complete`
+does not publish a ref or snapshot; failed completion rolls back. Windows native
+link/output support, resource/E18 qualification and public commit orchestration
+remain separate.
