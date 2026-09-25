@@ -2,7 +2,7 @@
 use super::{PrepareStep, TreePlan, Wait};
 use crate::Store;
 use entry::{require_child_count, OwnedDirectory, OwnedFile, OwnedLink, OwnedName};
-use lightr_core::Entry;
+use lightr_core::{Entry, LightrError};
 use std::fs::File;
 use std::io;
 
@@ -234,7 +234,7 @@ impl PreparedTree {
             let digest = self.files[index].digest();
             let mut source = store
                 .open_verified_payload(&digest, || wait.check())
-                .map_err(io::Error::other)?;
+                .map_err(cas_error)?;
             self.files[index].write_payload(&mut source, wait)?;
         }
         Ok(())
@@ -254,8 +254,12 @@ impl PreparedTree {
             file.revalidate_final_mode()?;
             wait.check()?;
         }
-        self.armed = false;
         Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn disarm(&mut self) {
+        self.armed = false;
     }
 
     pub(super) fn link_count(&self) -> usize {
@@ -325,6 +329,13 @@ impl Drop for PreparedTree {
             let _ = self.cleanup();
             self.armed = false;
         }
+    }
+}
+
+fn cas_error(error: LightrError) -> io::Error {
+    match error {
+        LightrError::Io(error) => error,
+        error => io::Error::other(error),
     }
 }
 

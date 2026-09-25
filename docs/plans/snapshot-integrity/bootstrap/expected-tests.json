@@ -170,6 +170,7 @@
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_unknown_child_prevents_recursive_directory_cleanup",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_directory_symlink_swap_before_open_is_refused",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_binding_rejects_root_replacement",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_complete_rejects_root_replacement",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_entry_revalidation_rejects_leaf_replacement",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_drop_best_effort_removes_uncommitted_entries",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_validation_rejects_unplanned_root_entry"
@@ -342,6 +343,7 @@
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_unknown_child_prevents_recursive_directory_cleanup",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_directory_symlink_swap_before_open_is_refused",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_binding_rejects_root_replacement",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_complete_rejects_root_replacement",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_entry_revalidation_rejects_leaf_replacement",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_drop_best_effort_removes_uncommitted_entries",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_validation_rejects_unplanned_root_entry"
@@ -508,6 +510,7 @@
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_unknown_child_prevents_recursive_directory_cleanup",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_directory_symlink_swap_before_open_is_refused",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_binding_rejects_root_replacement",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_complete_rejects_root_replacement",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_entry_revalidation_rejects_leaf_replacement",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_drop_best_effort_removes_uncommitted_entries",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_validation_rejects_unplanned_root_entry"
@@ -675,6 +678,7 @@
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_unknown_child_prevents_recursive_directory_cleanup",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_directory_symlink_swap_before_open_is_refused",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_binding_rejects_root_replacement",
+          "store::foundation::destination_tree_prepare::tests::races::prepared_tree_complete_rejects_root_replacement",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_entry_revalidation_rejects_leaf_replacement",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_drop_best_effort_removes_uncommitted_entries",
           "store::foundation::destination_tree_prepare::tests::races::prepared_tree_final_validation_rejects_unplanned_root_entry"

@@ -52,7 +52,6 @@ fn changed() -> io::Error {
         "prepared destination entry changed identity or type",
     )
 }
-
 fn invalid_payload(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
@@ -358,6 +357,7 @@ impl OwnedFile {
         self.file.sync_data()?;
         wait.check()?;
         self.revalidate()?;
+        wait.check()?;
         self.written = true;
         Ok(())
     }

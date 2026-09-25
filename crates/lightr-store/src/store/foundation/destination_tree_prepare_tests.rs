@@ -557,6 +557,43 @@ fn cas_coordinator_rejects_object_symlink_without_touching_target() {
     assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
 }
 
+#[test]
+fn cas_coordinator_rejects_shard_symlink_without_touching_target() {
+    let f = Fixture::new();
+    let output = f.parent.join("output");
+    let external = f.parent.join("external-shard");
+    fs::create_dir(&output).unwrap();
+    let store = Store::open(&f.store).unwrap();
+    let digest = store.put_bytes(b"payload").unwrap();
+    let shard = crate::store::cas::object_path(&f.store, &digest)
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    fs::rename(&shard, &external).unwrap();
+    std::os::unix::fs::symlink(&external, &shard).unwrap();
+    let manifest = Manifest {
+        version: 1,
+        total_size: 7,
+        entries: vec![Entry::File {
+            path: "data".into(),
+            mode: 0o640,
+            size: 7,
+            digest,
+        }],
+    };
+    let observed = f.inspect(&output);
+    let anchor = observed.anchor_empty(Wait::Try).unwrap();
+    let mut prepared = anchor
+        .prepare_tree(&plan(&manifest), limits(), Wait::Try)
+        .unwrap();
+
+    let failure = prepared
+        .write_all_payloads_from_store(&store, Wait::Try)
+        .unwrap_err();
+    assert!(failure.primary.is_some());
+    assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
+}
+
 fn mode(path: &Path) -> u32 {
     fs::metadata(path).unwrap().permissions().mode() & 0o7777
 }
