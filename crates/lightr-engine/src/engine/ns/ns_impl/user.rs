@@ -5,7 +5,7 @@
 use super::signal::signal_setup_failed;
 
 /// `--user`: drop the EXECing process to the requested uid/gid. Called post-fork,
-/// AFTER caps/apparmor and BEFORE seccomp — at this point we are post-pivot (so
+/// AFTER apparmor and BEFORE capability enforcement/seccomp — at this point we are post-pivot (so
 /// `/etc/passwd`/`/etc/group` are the CONTAINER files) and still hold
 /// CAP_SETUID/CAP_SETGID from the userns baseline. `None` ⇒ no-op (byte-identical
 /// to the pre-feature path). Like the other PID-1 setup steps this is FAIL-CLOSED:
@@ -14,13 +14,15 @@ use super::signal::signal_setup_failed;
 /// EOF ⇒ a false `Running`) and `_exit(1)`s rather than exec with the WRONG identity
 /// (running the workload as root when a non-root user was requested is a SECURITY
 /// bug, worse than an error).
+/// Returns `true` when a real non-root range switch retained permitted caps and
+/// needs the internal permitted→effective transition before final enforcement.
 pub(super) fn apply_user_if_any(
     user: Option<&str>,
     exec_ready_fd: Option<libc::c_int>,
     use_range: bool,
-) {
+) -> bool {
     let spec = match user {
-        None => return,
+        None => return false,
         Some(s) => s,
     };
     let (uid, gid) = match resolve_user(spec) {
@@ -40,6 +42,24 @@ pub(super) fn apply_user_if_any(
     // path never wrote setgroups=deny (newgidmap wrote gid_map with privilege).
     // This also covers a root target on the range path (the calls are no-ops).
     if use_range {
+        // setuid clears effective caps. Keep the permitted set across a real
+        // non-root switch so final capability enforcement can run afterwards.
+        if uid != 0
+            && unsafe {
+                libc::prctl(
+                    libc::PR_SET_KEEPCAPS,
+                    1 as libc::c_ulong,
+                    0 as libc::c_ulong,
+                    0 as libc::c_ulong,
+                    0 as libc::c_ulong,
+                )
+            } != 0
+        {
+            let e = std::io::Error::last_os_error();
+            eprintln!("lightr-engine ns: --user: PR_SET_KEEPCAPS failed: {e}");
+            signal_setup_failed(exec_ready_fd, "--user: PR_SET_KEEPCAPS failed");
+            unsafe { libc::_exit(1) };
+        }
         let groups = [gid as libc::gid_t];
         if unsafe { libc::setgroups(1, groups.as_ptr()) } != 0 {
             let e = std::io::Error::last_os_error();
@@ -59,7 +79,7 @@ pub(super) fn apply_user_if_any(
             signal_setup_failed(exec_ready_fd, "--user: setuid failed");
             unsafe { libc::_exit(1) };
         }
-        return;
+        return uid != 0;
     }
     // v1 SCOPE (honest boundary): the ns userns uses a SINGLE-uid map
     // (`"0 <outer> 1"`) with `setgroups=deny` (see the uid_map/gid_map writes
@@ -74,7 +94,7 @@ pub(super) fn apply_user_if_any(
     //     subuid RANGE mapping (newuidmap + /etc/subuid) so the target uid exists
     //     inside the userns — tracked as #115.
     if (uid, gid) == (0, 0) {
-        return;
+        return false;
     }
     eprintln!(
         "lightr-engine ns: --user {spec:?} (uid={uid} gid={gid}): running as a \

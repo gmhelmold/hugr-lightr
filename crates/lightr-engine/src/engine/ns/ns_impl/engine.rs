@@ -61,8 +61,8 @@ impl Engine for NsEngine {
         // WP-#106: the AppArmor profile NAME to exec the workload under (a loaded
         // profile for CRI `Localhost`, or "unconfined" to explicitly run
         // unconfined; `None` ⇒ no change / inherit). Captured (owned) pre-fork like
-        // `command`/`cap_*` so PID 1 owns its copy; applied as the LAST pre-execv
-        // step (after caps), fail-closed. `None` ⇒ byte-identical to the pre-#106
+        // `command`/`cap_*` so PID 1 owns its copy; applied before the
+        // identity/capability transition, fail-closed. `None` ⇒ byte-identical to the pre-#106
         // path (no attr write).
         let apparmor: Option<String> = spec.apparmor.map(|s| s.to_owned());
         // WP-#108 (seccomp): the PATH to an OCI seccomp JSON profile (or

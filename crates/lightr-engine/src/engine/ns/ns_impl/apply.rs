@@ -12,7 +12,8 @@ use crate::engine::spec::Ulimit;
 /// `_exit` (fail-closed) rather than return — exec'ing with the WRONG capability
 /// set would be false security (worse than an error).
 ///
-/// WP-#104: caps are the LAST pre-execv step, so a capset failure here must ALSO
+/// WP-#104: capability enforcement is the final capability step before seccomp,
+/// so a capset failure here must ALSO
 /// signal the exec-readiness pipe (`exec_ready_fd`) with bytes before `_exit(1)`
 /// — otherwise the kernel-closed fd reads as EOF ⇒ a false `Running`. The fd is
 /// threaded in from the (only) two call sites, both in the PID-1 branch. `None`
@@ -105,7 +106,7 @@ pub(super) fn apply_caps_if_any(desired: Option<&[u32]>, exec_ready_fd: Option<l
 /// `aa_change_onexec` mechanism — write `exec <profile>` to the apparmor exec
 /// attr right before `execv`, so the kernel transitions the new image into the
 /// profile on the exec (the standard runc/crun method). `None` ⇒ no change
-/// (inherit). Called post-fork/pre-exec, AFTER caps, so a failure must `_exit`
+/// (inherit). Called post-fork/pre-exec, BEFORE identity/capability changes, so a failure must `_exit`
 /// (fail-closed) — exec'ing UNCONFINED when a profile was requested would be
 /// false security (worse than an error), and it is what makes the critest
 /// "should error on unloadable profile" pass.
@@ -175,6 +176,58 @@ fn apply_apparmor(profile: &str) -> std::io::Result<()> {
     Ok(())
 }
 
+#[repr(C)]
+struct CapUserHeader {
+    version: u32,
+    pid: i32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct CapUserData {
+    effective: u32,
+    permitted: u32,
+    inheritable: u32,
+}
+
+// _LINUX_CAPABILITY_VERSION_3 — the only ABI that addresses caps 32..63.
+const CAP_VERSION_3: u32 = 0x2008_0522;
+
+/// Restore effective bits from the still-permitted set after a real non-root
+/// uid switch. This is an internal transition only; final requested caps are
+/// applied immediately afterwards, before exec.
+fn restore_effective_from_permitted_if_needed(needed: bool, exec_ready_fd: Option<libc::c_int>) {
+    if !needed {
+        return;
+    }
+    let hdr = CapUserHeader {
+        version: CAP_VERSION_3,
+        pid: 0,
+    };
+    let mut data = [CapUserData {
+        effective: 0,
+        permitted: 0,
+        inheritable: 0,
+    }; 2];
+    let r = unsafe { libc::syscall(libc::SYS_capget, &hdr, data.as_mut_ptr()) };
+    if r != 0 {
+        let e = std::io::Error::last_os_error();
+        eprintln!("lightr-engine ns: capability restore capget failed: {e}");
+        signal_setup_failed(exec_ready_fd, "capability restore capget failed");
+        unsafe { libc::_exit(1) };
+    }
+    for word in &mut data {
+        word.effective = word.permitted;
+    }
+    let r = unsafe { libc::syscall(libc::SYS_capset, &hdr, data.as_ptr()) };
+    if r != 0 {
+        let e = std::io::Error::last_os_error();
+        eprintln!("lightr-engine ns: capability restore capset failed: {e}");
+        signal_setup_failed(exec_ready_fd, "capability restore capset failed");
+        unsafe { libc::_exit(1) };
+    }
+}
+
 /// WP-#94: enforce the `desired` capability set (numbers, sorted) via raw libc.
 ///
 /// Two complementary steps, in this order:
@@ -186,8 +239,8 @@ fn apply_apparmor(profile: &str) -> std::io::Result<()> {
 ///   2. **capset (v3 ABI)** — set permitted = effective = inheritable = the
 ///      desired set. Dropping a cap from `permitted` also strips it from
 ///      `effective`, so together with the bounding-set drop the cap is gone for
-///      good. We do NOT change uids here, so no `PR_SET_KEEPCAPS` is needed; the
-///      mapped-root process keeps its caps through `execv` via permitted/effective.
+///      good. For a real non-root `--user`, the caller has already switched
+///      identity and restored effective bits from the retained permitted set.
 ///      (Ambient caps are NOT set — a `--cap-add` for a non-root `--user` would
 ///      additionally need ambient caps; documented refinement, out of scope.)
 ///
@@ -223,20 +276,6 @@ fn apply_caps(desired: &[u32]) -> std::io::Result<()> {
     }
 
     // 2. capset (version 3): permitted = effective = inheritable = desired.
-    #[repr(C)]
-    struct CapUserHeader {
-        version: u32,
-        pid: i32,
-    }
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct CapUserData {
-        effective: u32,
-        permitted: u32,
-        inheritable: u32,
-    }
-    // _LINUX_CAPABILITY_VERSION_3 — the only ABI that addresses caps 32..63.
-    const CAP_VERSION_3: u32 = 0x2008_0522;
     let hdr = CapUserHeader {
         version: CAP_VERSION_3,
         pid: 0, // 0 = the calling thread (self).
@@ -311,9 +350,9 @@ pub(super) fn chdir_and_resolve(
 
 /// The shared PID-1 apply-and-exec tail, extracted verbatim from the two
 /// (byte-identical) arms of `run_in_namespaces`'s `if init { … } else { … }`
-/// block. Runs the EARLY ulimits/oom-score steps, then caps → apparmor → user →
-/// seccomp (the fixed order — caps/apparmor need privilege; the `--user` drop
-/// must precede any seccomp filter; seccomp is armed last), arms the exec-ready
+/// block. Runs the EARLY ulimits/oom-score steps, then apparmor → user → caps →
+/// seccomp (the fixed order — the `--user` drop must precede capability
+/// enforcement and any seccomp filter; seccomp is armed last), arms the exec-ready
 /// pipe (CLOEXEC), then `execv`s the PATH-resolved program. Every step is
 /// fail-closed via `_exit` inside its `apply_*` helper; if `execv` itself returns
 /// it FAILED, so we signal the pipe and `_exit(127)`. Never returns (`-> !`).
@@ -340,19 +379,14 @@ pub(super) fn apply_and_exec(
     // always works; a LOWERING below the parent EPERMs ⇒ fail-closed). `None` ⇒
     // no-op.
     apply_oom_score_adj_if_any(oom_score_adj, exec_ready_fd);
-    // Caps applied LAST, in the execing process (fail-closed: a capset failure
-    // `_exit`s rather than exec with the WRONG set).
-    apply_caps_if_any(desired_caps, exec_ready_fd);
-    // WP-#106: apply the AppArmor profile LAST (after caps), right before execv
-    // (aa_change_onexec). Fail-closed: a profile that can't be applied `_exit`s
-    // rather than exec unconfined.
+    // WP-#106: apply AppArmor before the identity switch. Fail-closed: a profile
+    // that can't be applied `_exit`s rather than exec unconfined.
     apply_apparmor_if_any(apparmor, exec_ready_fd);
-    // `--user`: drop to the target uid/gid AFTER caps/apparmor (which need
-    // privilege) but BEFORE seccomp — the switch must run while we still hold
-    // CAP_SETUID/SETGID and before any filter could block the setuid syscalls.
-    // `execve` then naturally clears caps for the now non-root process.
-    // Fail-closed. `None` ⇒ no-op.
-    super::user::apply_user_if_any(user, exec_ready_fd, use_range);
+    // `--user` runs before capability enforcement while CAP_SETUID/SETGID are
+    // still held. A real range switch retains permitted caps for final apply.
+    let user_needs_cap_restore = super::user::apply_user_if_any(user, exec_ready_fd, use_range);
+    restore_effective_from_permitted_if_needed(user_needs_cap_restore, exec_ready_fd);
+    apply_caps_if_any(desired_caps, exec_ready_fd);
     // WP-#108: install the (pre-compiled) seccomp filter LAST — after apparmor,
     // right before execv. Fail-closed: an install failure `_exit`s rather than
     // exec unfiltered. `None` (no profile / "unconfined") ⇒ no-op.
