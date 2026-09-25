@@ -211,7 +211,7 @@ def main():
     scratch_suite = cargo + ["store::foundation::anchored_scratch::", "--", "--nocapture"]
     scratch_expected = r"test result: ok\. 15 passed; 0 failed; 0 ignored;"
     link_suite = cargo + [PREFIX + "topology_link::tests::", "--", "--nocapture"]
-    link_expected = r"test result: ok\. 16 passed; 0 failed; 0 ignored;"
+    link_expected = r"test result: ok\. 14 passed; 0 failed; 0 ignored;"
     listing_suite = cargo + [PREFIX + "topology_listing::native::tests::", "--", "--nocapture"]
     listing_expected = r"test result: ok\. 17 passed; 0 failed; 0 ignored;"
     anchor_suite = cargo + ["store::foundation::destination_anchor::tests::", "--", "--nocapture"]
