@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import signal
 import subprocess
+import sys
 import tempfile
 import zipfile
 
@@ -69,6 +70,9 @@ DESCENDANT_CASES = [('descendant-no-follow', 'topology_descendant.rs', '| libc::
 SCRATCH_CASES = [('scratch-exclusive-file', 'anchored_scratch_native.rs', 'flags | libc::O_EXCL', 'flags', 'store::foundation::anchored_scratch::tests::unix::scratch_existing_names_are_never_adopted_or_truncated', 'existing file was adopted'), ('scratch-cleanup-identity', 'anchored_scratch_native.rs', 'if identity(&self.parent, &self.name)? != self.identity {', 'if false && identity(&self.parent, &self.name)? != self.identity {', 'store::foundation::anchored_scratch::tests::unix::scratch_cleanup_preserves_replacement_entries', 'replacement was removed'), ('scratch-collision-budget', 'anchored_scratch_native.rs', 'for _ in 0..32 {', 'for _ in 0..33 {', 'store::foundation::anchored_scratch::native::tests::scratch_atomic_reservation_has_a_finite_collision_budget', 'assertion `left == right` failed')]
 
 LINK_CASES = [('link-leaf-identity', 'topology_link.rs', 'if key(&current)? != expected {', 'if false && key(&current)? != expected {', 'store::foundation::topology::topology_link::tests::source_link_detects_replacement_after_read', 'replaced source link accepted'), ('link-byte-bound', 'topology_link.rs', 'if used > limit {', 'if false && used > limit {', 'store::foundation::topology::topology_link::tests::source_link_exact_byte_budget_never_accepts_truncation', 'called `Result::unwrap_err()` on an `Ok` value'), ('link-final-cancellation', 'topology_link.rs', 'wait.check()?; // Source-link final checkpoint, including completed reads.', '// Deliberately omitted terminal checkpoint for causal control.', 'store::foundation::topology::topology_link::tests::source_link_cancellation_after_completed_validation_is_not_success', 'completed cancelled link read accepted'), ('link-pin-no-follow', 'topology_link.rs', 'libc::O_PATH | libc::O_NOFOLLOW | libc::O_CLOEXEC', 'libc::O_PATH | libc::O_CLOEXEC', 'store::foundation::topology::topology_link::tests::source_link_preserves_dangling_and_exact_target_text', 'dangling link text not preserved')]
+TARGET_ONLY_CONTROLS = {
+    'link-pin-no-follow': 'linux',
+}
 
 LISTING_CASES = [('listing-independent-offset', 'topology_listing_native.rs', 'let scan = open_at(&directory, b".", true)?;', 'let _ = open_at; let scan = directory.try_clone()?;', 'store::foundation::topology::topology_listing::native::tests::listing_ignores_an_offset_previously_advanced_on_the_held_source', 'assertion `left == right` failed'), ('listing-strict-utf8', 'topology_listing_native.rs', 'let name =\n            std::str::from_utf8(name).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;', 'let lossy = String::from_utf8_lossy(name); let name = lossy.as_ref();', 'store::foundation::topology::topology_listing::native::tests::listing_non_utf8_native_name_is_an_error_not_an_omission', 'called `Result::unwrap_err()` on an `Ok` value'), ('listing-eof-cancellation', 'topology_listing_native.rs', 'wait.check()?; // EOF does not erase a cancellation/deadline.\n        let Some(name) = entry else { break };', 'let Some(name) = entry else { return Ok(names) };\n        wait.check()?;', 'store::foundation::topology::topology_listing::native::tests::collection::listing_cancellation_after_eof_rejects_the_result', 'called `Result::unwrap_err()` on an `Ok` value'), ('listing-nested-binding', 'topology_listing_native.rs', 'if key(&current)? != identity {', 'if false && key(&current)? != identity {', 'store::foundation::topology::topology_listing::native::tests::listing_revalidates_nested_binding_after_native_enumeration', 'called `Result::unwrap_err()` on an `Ok` value')]
 
@@ -269,6 +273,15 @@ def main():
             code, text = run(root, prepare_suite, "prepare-pristine")
             require(code == 0 and re.search(prepare_expected, text), "destination prepare pristine suite failed")
             for label, name, old, new, test, message in CASES + EMPTY_CASES + DESCENDANT_CASES + SCRATCH_CASES + LINK_CASES + LISTING_CASES + DEST_ANCHOR_CASES + DEST_REPR_CASES + DEST_PREPARE_CASES:
+                target = TARGET_ONLY_CONTROLS.get(label)
+                if target and not sys.platform.startswith(target):
+                    receipt["controls"].append(dict(
+                        name=label,
+                        status="SKIPPED",
+                        target=target,
+                        reason="mutant is cfg-active only on target platform",
+                    ))
+                    continue
                 path = root / BASE / name
                 original = path.read_text()
                 require(original.count(old) == 1, "mutation seam mismatch: " + label)
