@@ -56,6 +56,7 @@
 # separate runtime proofs. SeccompProfilePath is now wired through seam v1.2,
 # but stays in this aggregate skip until a real Linux critest run witnesses the
 # exact family. Remove only after that gate is green.
+Security Context  # reason → R2
 
 # AppArmor — needs a real LSM/AppArmor enforcement engine (load + verify + reject
 # unloadable profiles); the fake has none, so the "should error on unloadable

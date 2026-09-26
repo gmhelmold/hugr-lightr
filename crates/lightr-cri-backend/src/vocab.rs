@@ -230,10 +230,10 @@ pub struct SecurityContext {
     pub capabilities: Option<Capabilities>,
     /// v1.3: numeric UID. `None` preserves image/runtime default.
     #[serde(default)]
-    pub run_as_user: Option<u32>,
+    pub run_as_user: Option<u64>,
     /// v1.3: numeric GID; valid only when `run_as_user` is set.
     #[serde(default)]
-    pub run_as_group: Option<u32>,
+    pub run_as_group: Option<u64>,
 }
 
 impl SecurityContext {
@@ -258,9 +258,9 @@ impl<'de> serde::Deserialize<'de> for SecurityContext {
             #[serde(default)]
             capabilities: Option<Capabilities>,
             #[serde(default)]
-            run_as_user: Option<u32>,
+            run_as_user: Option<u64>,
             #[serde(default)]
-            run_as_group: Option<u32>,
+            run_as_group: Option<u64>,
         }
 
         let raw = RawSecurityContext::deserialize(deserializer)?;

@@ -214,6 +214,9 @@ fn decode_security_profile(
 fn decode_security_context(
     context: &proto::LinuxContainerSecurityContext,
 ) -> Result<SecurityContext, &'static str> {
+    if !context.run_as_username.is_empty() {
+        return Err("run_as_username is unsupported");
+    }
     let run_as_user = decode_identity(context.run_as_user.as_ref(), "run_as_user")?;
     let run_as_group = decode_identity(context.run_as_group.as_ref(), "run_as_group")?;
     if run_as_group.is_some() && run_as_user.is_none() {
@@ -234,8 +237,8 @@ fn decode_security_context(
             add: caps.add_capabilities.clone(),
             drop: caps.drop_capabilities.clone(),
         }),
-        run_as_user,
-        run_as_group,
+        run_as_user: run_as_user.map(u64::from),
+        run_as_group: run_as_group.map(u64::from),
     })
 }
 
@@ -1343,6 +1346,39 @@ mod tests {
                 ..Default::default()
             };
             assert!(decode_security_context(&ctx).is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn create_container_rejects_run_as_username() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let backend = Arc::new(lightr_cri_fake::FakeBackend::open(dir.path()).expect("fake backend"));
+        let shell = RuntimeShell::new(backend);
+
+        for (run_as_username, run_as_user) in [("alice", None), ("alice", Some(1001))] {
+            let request = proto::CreateContainerRequest {
+                config: Some(proto::ContainerConfig {
+                    metadata: Some(proto::ContainerMetadata {
+                        name: "ctr".to_string(),
+                        attempt: 0,
+                    }),
+                    linux: Some(proto::LinuxContainerConfig {
+                        security_context: Some(proto::LinuxContainerSecurityContext {
+                            run_as_username: run_as_username.to_string(),
+                            run_as_user: run_as_user.map(|value| proto::Int64Value { value }),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+            let error = shell
+                .create_container(Request::new(request))
+                .await
+                .expect_err("username must be rejected");
+            assert_eq!(error.code(), tonic::Code::InvalidArgument);
         }
     }
 
