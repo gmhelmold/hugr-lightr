@@ -136,10 +136,10 @@ pub(super) fn apply_seccomp_if_any(
     compiled: Option<&super::SeccompFilter>,
     exec_ready_fd: Option<libc::c_int>,
 ) {
-    // seccomp install is x86_64-linux-only. On other arches `SeccompFilter` is
+    // seccomp install supports x86_64 and aarch64. On other arches `SeccompFilter` is
     // uninhabited so `compiled` is always None (the compile path fails closed and
     // the CLI already rejected `--seccomp` with exit 2) — nothing to install.
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     if let Some(c) = compiled {
         if let Err(e) = c.apply() {
             eprintln!("lightr-engine ns: seccomp: {e}");
@@ -147,7 +147,7 @@ pub(super) fn apply_seccomp_if_any(
             unsafe { libc::_exit(1) };
         }
     }
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     let _ = (compiled, exec_ready_fd);
 }
 

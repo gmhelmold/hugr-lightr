@@ -155,14 +155,12 @@ mod ns_impl {
     pub(super) use engine::NsEngine;
 
     // The compiled seccomp filter carried from the pre-pivot COMPILE to the
-    // pre-execv INSTALL. seccomp is x86_64-linux-only (AUDIT_ARCH_X86_64 by design;
-    // the `syscall_nr` table uses x86_64 `libc::SYS_*`), so on other linux arches
-    // the compiler module is absent and this type is UNINHABITED: a filter is never
-    // constructed (`setup_rootfs_and_pivot` fails closed if one is requested) and the
-    // install is a no-op. The `Option<SeccompFilter>` plumbing compiles on every arch.
-    #[cfg(target_arch = "x86_64")]
+    // pre-execv INSTALL. x86_64 and aarch64 select their own audit/syscall tables.
+    // Other Linux architectures keep this type uninhabited, and requested filters
+    // fail closed in PID 1. The `Option<SeccompFilter>` plumbing compiles everywhere.
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     type SeccompFilter = crate::engine::seccomp::CompiledSeccomp;
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     enum SeccompFilter {}
 }
 
