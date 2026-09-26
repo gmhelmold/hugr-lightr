@@ -66,6 +66,7 @@ fn ready_sandbox(b: &LightrBackend) -> SandboxId {
         host_network: true,
         dns: None,
         port_mappings: Vec::new(),
+        host_aliases: Vec::new(),
     })
     .unwrap()
 }

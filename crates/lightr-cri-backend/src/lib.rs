@@ -61,9 +61,9 @@ mod util;
 pub use vocab::{
     AuthConfig, BackendError, Capabilities, ContainerConfig, ContainerFilter, ContainerId,
     ContainerState, ContainerStatsRec, ContainerStatus, DnsConfig, ExecResult, ExitWaiter, FsInfo,
-    ImageRecord, Mount, PortMapping, ProfileType, Protocol, PulledImage, Result, SandboxConfig,
-    SandboxFilter, SandboxId, SandboxState, SandboxStatus, SecurityContext, SecurityProfile,
-    StreamSession,
+    HostAlias, ImageRecord, Mount, PortMapping, ProfileType, Protocol, PulledImage, Result,
+    SandboxConfig, SandboxFilter, SandboxId, SandboxState, SandboxStatus, SecurityContext,
+    SecurityProfile, StreamSession,
 };
 
 use std::path::PathBuf;

@@ -1,7 +1,7 @@
 //! The seam crate: vocabulary types + the `CriBackend` trait.
 //! FROZEN per docs/spec/build-spec-r0.md §3 and docs/contract/seam-contract-v1.md.
 //! v1.1 additions per docs/contract/seam-contract-v1.1.md (FROZEN 2026-06-12)
-//! plus the additive v1.2 security-context seam.
+//! plus the additive v1.2 security-context and v1.3 identity/host-alias seams.
 
 pub mod vocab;
 
@@ -30,6 +30,60 @@ pub struct PortMapping {
     pub host_port: i32,
     #[serde(default)]
     pub host_ip: String,
+}
+
+/// One `/etc/hosts` entry requested for every container in a sandbox.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct HostAlias {
+    pub ip: String,
+    pub hostnames: Vec<String>,
+}
+
+impl HostAlias {
+    fn validate(&self) -> std::result::Result<(), &'static str> {
+        if self.ip.parse::<std::net::IpAddr>().is_err() {
+            return Err("host alias IP must be a valid IPv4 or IPv6 address");
+        }
+        if self.hostnames.is_empty() || self.hostnames.iter().any(|name| !valid_hostname(name)) {
+            return Err("host alias must contain valid hostnames");
+        }
+        Ok(())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for HostAlias {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct RawHostAlias {
+            ip: String,
+            #[serde(default)]
+            hostnames: Vec<String>,
+        }
+
+        let raw = RawHostAlias::deserialize(deserializer)?;
+        let alias = Self {
+            ip: raw.ip,
+            hostnames: raw.hostnames,
+        };
+        alias.validate().map_err(serde::de::Error::custom)?;
+        Ok(alias)
+    }
+}
+
+fn valid_hostname(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 253
+        && name.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        })
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -89,6 +143,9 @@ pub struct SandboxConfig {
     pub dns: Option<DnsConfig>,
     #[serde(default)]
     pub port_mappings: Vec<PortMapping>,
+    /// v1.3: `/etc/hosts` aliases, applied by a future descriptor planner.
+    #[serde(default)]
+    pub host_aliases: Vec<HostAlias>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -148,7 +205,7 @@ pub struct ContainerConfig {
     pub security: Option<SecurityContext>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
 pub struct SecurityContext {
     #[serde(default)]
     pub apparmor: Option<SecurityProfile>,
@@ -156,6 +213,52 @@ pub struct SecurityContext {
     pub seccomp: Option<SecurityProfile>,
     #[serde(default)]
     pub capabilities: Option<Capabilities>,
+    /// v1.3: numeric UID. `None` preserves image/runtime default.
+    #[serde(default)]
+    pub run_as_user: Option<u64>,
+    /// v1.3: numeric GID; valid only when `run_as_user` is set.
+    #[serde(default)]
+    pub run_as_group: Option<u64>,
+}
+
+impl SecurityContext {
+    fn validate(&self) -> std::result::Result<(), &'static str> {
+        if self.run_as_group.is_some() && self.run_as_user.is_none() {
+            return Err("run_as_group requires run_as_user");
+        }
+        Ok(())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for SecurityContext {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct RawSecurityContext {
+            #[serde(default)]
+            apparmor: Option<SecurityProfile>,
+            #[serde(default)]
+            seccomp: Option<SecurityProfile>,
+            #[serde(default)]
+            capabilities: Option<Capabilities>,
+            #[serde(default)]
+            run_as_user: Option<u64>,
+            #[serde(default)]
+            run_as_group: Option<u64>,
+        }
+
+        let raw = RawSecurityContext::deserialize(deserializer)?;
+        let context = Self {
+            apparmor: raw.apparmor,
+            seccomp: raw.seccomp,
+            capabilities: raw.capabilities,
+            run_as_user: raw.run_as_user,
+            run_as_group: raw.run_as_group,
+        };
+        context.validate().map_err(serde::de::Error::custom)?;
+        Ok(context)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

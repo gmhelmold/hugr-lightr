@@ -229,6 +229,9 @@ fn decode_security_context(
             add: caps.add_capabilities.clone(),
             drop: caps.drop_capabilities.clone(),
         }),
+        // v1.3 seam retains identity; CRI decoding lands with descriptor planning.
+        run_as_user: None,
+        run_as_group: None,
     })
 }
 
@@ -556,6 +559,7 @@ impl<B: CriBackend> RuntimeService for RuntimeShell<B> {
             host_network,
             dns,
             port_mappings,
+            host_aliases: vec![],
         };
         let backend = Arc::clone(&self.backend);
         let id = tokio::task::spawn_blocking(move || backend.run_sandbox(cfg))
@@ -1320,6 +1324,7 @@ mod tests {
                 host_network: false,
                 dns: None,
                 port_mappings: vec![],
+                host_aliases: vec![],
             },
             state: SandboxState::Ready,
             created_at_nanos: 0,
@@ -1347,6 +1352,7 @@ mod tests {
                 host_network: true,
                 dns: None,
                 port_mappings: vec![],
+                host_aliases: vec![],
             },
             state: SandboxState::Ready,
             created_at_nanos: 0,

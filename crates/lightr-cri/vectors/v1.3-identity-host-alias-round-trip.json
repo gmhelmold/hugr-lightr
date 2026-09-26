@@ -1,0 +1,33 @@
+{
+  "name": "v1.3-identity-host-alias-round-trip",
+  "steps": [
+    {
+      "op": "run_sandbox",
+      "cfg": {
+        "name": "v13-sandbox",
+        "uid": "v13-uid",
+        "namespace": "default",
+        "attempt": 0,
+        "host_aliases": [
+          { "ip": "10.0.0.10", "hostnames": ["cache.internal", "cache"] },
+          { "ip": "2001:db8::10", "hostnames": ["v6.internal"] }
+        ]
+      }
+    },
+    {
+      "op": "create_container",
+      "sandbox": "$0",
+      "cfg": {
+        "name": "v13-container",
+        "attempt": 0,
+        "image_ref": "example:v13",
+        "command": ["/bin/true"],
+        "security": {
+          "run_as_user": 1000,
+          "run_as_group": 1000
+        }
+      }
+    },
+    { "op": "remove_sandbox", "id": "$0" }
+  ]
+}
