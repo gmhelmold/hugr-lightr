@@ -1,4 +1,4 @@
-//! Networking Phase 1 acceptance — `lightr run -d -p HOST:CONTAINER`.
+//! Networking Phase 1 acceptance — `lightr run [-d] -p HOST:CONTAINER`.
 //!
 //! Proves the daemonless userspace forward-proxy: a detached published run is
 //! reachable on the host port (forwarded to 127.0.0.1:CONTAINER where the
@@ -20,6 +20,7 @@ use std::net::TcpStream;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use assert_cmd::cargo::cargo_bin;
 use common::lightr_cmd;
 use tempfile::TempDir;
 
@@ -213,25 +214,105 @@ fn net_published_run_is_reachable_then_torn_down() {
 }
 
 // ---------------------------------------------------------------------------
-// Fast negative: -p without -d exits 2 (no server needed).
+// Foreground run: HTTP reaches host port while workload lives, then the port closes.
 // ---------------------------------------------------------------------------
 #[test]
-fn net_publish_without_detach_exits_2() {
+fn net_foreground_published_run_is_reachable_then_torn_down() {
+    if !python3_available() {
+        eprintln!(
+            "SKIP net_foreground_published_run_is_reachable_then_torn_down: python3 not on PATH"
+        );
+        return;
+    }
+
     let home = TempDir::new().unwrap();
-    let publish = format!("{}:{}", free_port().max(39000), free_port().max(39001));
-    let out = lightr_cmd(home.path())
+    let ws = TempDir::new().unwrap();
+    let host_port = free_port();
+    let container_port = free_port();
+    let publish = format!("127.0.0.1:{host_port}:{container_port}");
+    let cp = container_port.to_string();
+    // Serve exactly one request, then exit normally. This proves normal workload
+    // exit drops the foreground-owned forwarder without leaving a child behind.
+    let server = format!(
+        "from http.server import SimpleHTTPRequestHandler; from socketserver import TCPServer; \
+         server = TCPServer(('127.0.0.1', {container_port}), SimpleHTTPRequestHandler); \
+         server.timeout = 5; server.handle_request()"
+    );
+    let mut child = std::process::Command::new(cargo_bin("lightr"))
+        .env("LIGHTR_HOME", home.path())
+        .env_remove("HTTP_PROXY")
+        .env_remove("HTTPS_PROXY")
+        .env_remove("ALL_PROXY")
+        .env_remove("http_proxy")
+        .env_remove("https_proxy")
+        .env_remove("all_proxy")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .args([
+            "run",
+            "-p",
+            &publish,
+            "--dir",
+            ws.path().to_str().unwrap(),
+            "--",
+            "python3",
+            "-c",
+            &server,
+            &cp,
+        ])
+        .spawn()
+        .expect("foreground run -p must launch");
+
+    let response = poll_http(host_port, Duration::from_secs(8));
+    let failure = if response.is_none() {
+        child
+            .try_wait()
+            .expect("foreground run status must be readable")
+            .map(|status| format!("exited {status}"))
+            .unwrap_or_else(|| "still running".to_string())
+    } else {
+        String::new()
+    };
+    assert_eq!(
+        response.as_deref().map(|body| body.starts_with(b"HTTP/")),
+        Some(true),
+        "foreground host port {host_port} must serve HTTP through forwarder ({failure})"
+    );
+
+    let status = child.wait().expect("foreground run must exit");
+    assert!(
+        status.success(),
+        "one-request foreground workload must exit successfully"
+    );
+    assert!(
+        port_closed(host_port, Duration::from_secs(5)),
+        "foreground host port {host_port} must close when workload exits"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Negative: malformed and unavailable foreground publishes fail closed.
+// ---------------------------------------------------------------------------
+#[test]
+fn net_foreground_publish_invalid_or_unavailable_target_fails_closed() {
+    let home = TempDir::new().unwrap();
+    let malformed = lightr_cmd(home.path())
+        .args(["run", "-p", "bad", "--", "true"])
+        .output()
+        .expect("malformed foreground publish must launch");
+    assert_eq!(malformed.status.code(), Some(2));
+
+    let held = std::net::TcpListener::bind("127.0.0.1:0").expect("hold host port");
+    let host_port = held.local_addr().unwrap().port().to_string();
+    let publish = format!("127.0.0.1:{host_port}:12345");
+    let unavailable = lightr_cmd(home.path())
         .args(["run", "-p", &publish, "--", "true"])
         .output()
-        .expect("run -p (no -d) must launch");
-    assert_eq!(
-        out.status.code().unwrap_or(-1),
-        2,
-        "-p without -d must exit 2; stderr: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let stderr = String::from_utf8_lossy(&out.stderr);
+        .expect("unavailable foreground publish must launch");
+    assert_ne!(unavailable.status.code(), Some(0));
     assert!(
-        stderr.contains("requires -d"),
-        "error must explain -p requires -d, got: {stderr}"
+        String::from_utf8_lossy(&unavailable.stderr).contains("Address already in use"),
+        "occupied host target must report bind failure: {}",
+        String::from_utf8_lossy(&unavailable.stderr)
     );
 }
