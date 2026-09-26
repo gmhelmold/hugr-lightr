@@ -128,6 +128,11 @@ impl ExclusiveStoreLease {
     pub fn belongs_to(&self, domain: &StoreLocks) -> bool {
         self.domain.same_store(domain)
     }
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[allow(dead_code)] // Reaper is internal until recovery routing activates.
+    pub(super) fn staging(&self) -> io::Result<Directory> {
+        self.domain.0.child(".si01-staging")
+    }
 }
 
 /// A worker obtains key locks in one sorted set, or one cache leaf section.

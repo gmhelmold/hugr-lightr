@@ -2,6 +2,9 @@
 use super::{StoreLease, Wait};
 use std::io::{self, Read, Write};
 
+#[path = "reaper.rs"]
+mod reaper;
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[path = "anchored_scratch_native.rs"]
 mod native;
@@ -45,6 +48,7 @@ impl<'a> ScratchDirectory<'a> {
             let parent = lease.staging()?;
             parent.verify()?;
             let inner = native::Directory::reserve(parent.anchored_handle(), wait)?;
+            inner.mark_owned_scratch()?;
             parent.verify()?;
             wait.check()?;
             Ok(Self {
@@ -206,3 +210,7 @@ fn unsupported() -> io::Error {
 #[cfg(test)]
 #[path = "anchored_scratch_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "reaper_tests.rs"]
+mod reaper_tests;
