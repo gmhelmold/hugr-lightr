@@ -22,7 +22,6 @@ use std::fs;
 #[cfg(target_os = "linux")]
 use crate::container_wait::pid_is_container_init;
 use crate::util::{atomic_write_json, now_nanos, pid_alive, ContainerRecord};
-#[cfg(target_os = "linux")]
 use crate::vocab::BackendError;
 use crate::vocab::{ContainerConfig, ContainerId, ContainerState, Result, SandboxId};
 use crate::LightrBackend;
@@ -101,6 +100,8 @@ impl LightrBackend {
         sandbox: &SandboxId,
         cfg: ContainerConfig,
     ) -> Result<ContainerId> {
+        cfg.validate_for_ingress()
+            .map_err(|msg| BackendError::InvalidArgument(msg.into()))?;
         // Sandbox gate (state law): exist+Ready else NotFound/FailedPrecondition.
         self.ensure_sandbox_ready(sandbox)?;
         let id = ContainerId(crate::util::new_id("ct-"));

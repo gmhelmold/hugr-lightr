@@ -123,6 +123,8 @@ impl LightrBackend {
     // ── run ────────────────────────────────────────────────────────────────
 
     pub(crate) fn run_sandbox_impl(&self, cfg: SandboxConfig) -> Result<SandboxId> {
+        cfg.validate_for_ingress()
+            .map_err(|msg| BackendError::InvalidArgument(msg.into()))?;
         let id = SandboxId(new_id("sb-"));
 
         // §D: not host_network + CNI available → create+pin netns + CNI ADD.

@@ -5,7 +5,8 @@
 //! tempdir home (atomic counter + nanos, no process-global mutation).
 
 use crate::vocab::{
-    ContainerConfig, ContainerState, SandboxConfig, SandboxFilter, SandboxId, SandboxState,
+    BackendError, ContainerConfig, ContainerState, HostAlias, SandboxConfig, SandboxFilter,
+    SandboxId, SandboxState, SecurityContext,
 };
 use crate::{CriBackend, LightrBackend};
 use std::collections::BTreeMap;
@@ -57,6 +58,42 @@ fn ct_cfg(name: &str) -> ContainerConfig {
         stdin: false,
         security: None,
     }
+}
+
+#[test]
+fn malformed_v13_ingress_is_rejected_before_persistence() {
+    let b = LightrBackend::new(temp_home());
+    let mut sandbox = sb_cfg("pod");
+    sandbox.host_aliases = vec![HostAlias {
+        ip: "not-an-ip".into(),
+        hostnames: vec!["cache".into()],
+    }];
+    assert!(matches!(
+        b.run_sandbox(sandbox),
+        Err(BackendError::InvalidArgument(_))
+    ));
+    assert!(std::fs::read_dir(b.sandboxes_dir())
+        .unwrap()
+        .next()
+        .is_none());
+
+    let sandbox = b.run_sandbox(sb_cfg("ready-pod")).unwrap();
+    let mut container = ct_cfg("ctr");
+    container.security = Some(SecurityContext {
+        apparmor: None,
+        seccomp: None,
+        capabilities: None,
+        run_as_user: None,
+        run_as_group: Some(1000),
+    });
+    assert!(matches!(
+        b.create_container(&sandbox, container),
+        Err(BackendError::InvalidArgument(_))
+    ));
+    assert!(std::fs::read_dir(b.containers_dir())
+        .unwrap()
+        .next()
+        .is_none());
 }
 
 // ── lifecycle: run → Ready → stop → NotReady → remove → gone ──────────────────

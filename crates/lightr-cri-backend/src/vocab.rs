@@ -67,7 +67,7 @@ pub struct HostAlias {
 }
 
 impl HostAlias {
-    fn validate(&self) -> std::result::Result<(), &'static str> {
+    pub(crate) fn validate(&self) -> std::result::Result<(), &'static str> {
         if self.ip.parse::<std::net::IpAddr>().is_err() {
             return Err("host alias IP must be a valid IPv4 or IPv6 address");
         }
@@ -139,6 +139,12 @@ pub struct SandboxConfig {
     pub host_aliases: Vec<HostAlias>,
 }
 
+impl SandboxConfig {
+    pub(crate) fn validate_for_ingress(&self) -> std::result::Result<(), &'static str> {
+        self.host_aliases.iter().try_for_each(HostAlias::validate)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SandboxState {
     Ready,
@@ -199,6 +205,14 @@ pub struct ContainerConfig {
     pub security: Option<SecurityContext>,
 }
 
+impl ContainerConfig {
+    pub(crate) fn validate_for_ingress(&self) -> std::result::Result<(), &'static str> {
+        self.security
+            .as_ref()
+            .map_or(Ok(()), SecurityContext::validate)
+    }
+}
+
 /// v1.2 security-context subset mirrored from CRI
 /// `LinuxContainerSecurityContext`. Profiles and capability sets cross the
 /// canonical shell seam and reach the ns engine; unsupported platform/privilege
@@ -223,7 +237,7 @@ pub struct SecurityContext {
 }
 
 impl SecurityContext {
-    fn validate(&self) -> std::result::Result<(), &'static str> {
+    pub(crate) fn validate(&self) -> std::result::Result<(), &'static str> {
         if self.run_as_group.is_some() && self.run_as_user.is_none() {
             return Err("run_as_group requires run_as_user");
         }
@@ -309,6 +323,11 @@ mod tests {
         )
         .expect("v1.2 persisted sandbox record parses");
         assert!(old.config.host_aliases.is_empty());
+        let old: crate::util::ContainerRecord = serde_json::from_str(
+            r#"{"id":"container","sandbox":"sandbox","config":{"name":"ctr","attempt":0,"image_ref":"example:v12","command":[]},"state":"Created","created_at_nanos":0,"started_at_nanos":0,"finished_at_nanos":0,"exit_code":0}"#,
+        )
+        .expect("v1.2 persisted container record parses");
+        assert_eq!(old.config.security, None);
         assert!(serde_json::from_str::<SecurityContext>(r#"{"run_as_group":1000}"#).is_err());
     }
 }
