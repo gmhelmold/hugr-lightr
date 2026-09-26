@@ -324,10 +324,28 @@ mod tests {
         .expect("v1.2 persisted sandbox record parses");
         assert!(old.config.host_aliases.is_empty());
         let old: crate::util::ContainerRecord = serde_json::from_str(
-            r#"{"id":"container","sandbox":"sandbox","config":{"name":"ctr","attempt":0,"image_ref":"example:v12","command":[]},"state":"Created","created_at_nanos":0,"started_at_nanos":0,"finished_at_nanos":0,"exit_code":0}"#,
+            r#"{"id":"container","sandbox":"sandbox","config":{"name":"ctr","attempt":0,"image_ref":"example:v12","command":[],"security":{"apparmor":{"profile_type":"Localhost","localhost_ref":"cri-profile"},"seccomp":{"profile_type":"RuntimeDefault","localhost_ref":""},"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["NET_RAW"]}}},"state":"Created","created_at_nanos":0,"started_at_nanos":0,"finished_at_nanos":0,"exit_code":0}"#,
         )
         .expect("v1.2 persisted container record parses");
-        assert_eq!(old.config.security, None);
+        assert_eq!(
+            old.config.security,
+            Some(SecurityContext {
+                apparmor: Some(SecurityProfile {
+                    profile_type: ProfileType::Localhost,
+                    localhost_ref: "cri-profile".into(),
+                }),
+                seccomp: Some(SecurityProfile {
+                    profile_type: ProfileType::RuntimeDefault,
+                    localhost_ref: String::new(),
+                }),
+                capabilities: Some(Capabilities {
+                    add: vec!["NET_BIND_SERVICE".into()],
+                    drop: vec!["NET_RAW".into()],
+                }),
+                run_as_user: None,
+                run_as_group: None,
+            })
+        );
         assert!(serde_json::from_str::<SecurityContext>(r#"{"run_as_group":1000}"#).is_err());
     }
 }
