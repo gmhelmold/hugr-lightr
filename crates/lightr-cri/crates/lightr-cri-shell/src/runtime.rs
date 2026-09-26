@@ -214,6 +214,11 @@ fn decode_security_profile(
 fn decode_security_context(
     context: &proto::LinuxContainerSecurityContext,
 ) -> Result<SecurityContext, &'static str> {
+    let run_as_user = decode_identity(context.run_as_user.as_ref(), "run_as_user")?;
+    let run_as_group = decode_identity(context.run_as_group.as_ref(), "run_as_group")?;
+    if run_as_group.is_some() && run_as_user.is_none() {
+        return Err("run_as_group requires run_as_user");
+    }
     Ok(SecurityContext {
         apparmor: context
             .apparmor
@@ -229,10 +234,15 @@ fn decode_security_context(
             add: caps.add_capabilities.clone(),
             drop: caps.drop_capabilities.clone(),
         }),
-        // v1.3 seam retains identity; CRI decoding lands with descriptor planning.
-        run_as_user: None,
-        run_as_group: None,
+        run_as_user,
+        run_as_group,
     })
+}
+
+fn decode_identity(value: Option<&proto::Int64Value>, field: &'static str) -> Result<Option<u32>, &'static str> {
+    value
+        .map(|value| u32::try_from(value.value).map_err(|_| field))
+        .transpose()
 }
 
 fn build_sandbox_status(s: &lightr_cri_backend::SandboxStatus) -> proto::PodSandboxStatus {
@@ -1306,6 +1316,34 @@ mod tests {
             ..Default::default()
         };
         assert!(decode_security_context(&ctx).is_err());
+    }
+
+    #[test]
+    fn decode_security_context_preserves_identity() {
+        let ctx = proto::LinuxContainerSecurityContext {
+            run_as_user: Some(proto::Int64Value { value: 1001 }),
+            run_as_group: Some(proto::Int64Value { value: 1002 }),
+            ..Default::default()
+        };
+        let decoded = decode_security_context(&ctx).expect("security context decodes");
+        assert_eq!(decoded.run_as_user, Some(1001));
+        assert_eq!(decoded.run_as_group, Some(1002));
+    }
+
+    #[test]
+    fn decode_security_context_rejects_invalid_identity() {
+        for (run_as_user, run_as_group) in [
+            (Some(-1), None),
+            (Some(i64::from(u32::MAX) + 1), None),
+            (None, Some(1000)),
+        ] {
+            let ctx = proto::LinuxContainerSecurityContext {
+                run_as_user: run_as_user.map(|value| proto::Int64Value { value }),
+                run_as_group: run_as_group.map(|value| proto::Int64Value { value }),
+                ..Default::default()
+            };
+            assert!(decode_security_context(&ctx).is_err());
+        }
     }
 
     #[test]

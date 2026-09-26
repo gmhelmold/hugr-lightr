@@ -1052,9 +1052,9 @@ jobs:
           {
             "metadata": { "name": "kpi3-ctr", "attempt": 1 },
             "image": { "image": "alpine:latest" },
-            "command": ["/bin/sh", "-c", "echo PID=$$; echo ALPINE_RELEASE=$(cat /etc/alpine-release); echo ROOTLS=$(ls / | tr '\\n' ',' ); echo NETNS_INODE=$(stat -L -c %i /proc/self/ns/net); sleep 600"],
+            "command": ["/bin/sh", "-c", "echo PID=$$; echo ALPINE_RELEASE=$(cat /etc/alpine-release); echo ROOTLS=$(ls / | tr '\\n' ',' ); echo NETNS_INODE=$(stat -L -c %i /proc/self/ns/net); id -u; id -g; sleep 600"],
             "log_path": "kpi3-ctr.log",
-            "linux": {}
+            "linux": { "security_context": { "run_as_user": { "value": 1001 }, "run_as_group": { "value": 1002 } } }
           }
           JSON
 
@@ -1129,7 +1129,16 @@ jobs:
             CR stop "$CTR_ID" >/dev/null 2>&1; CR rmp -f "$POD_ID" >/dev/null 2>&1; sudo pkill -f lightr-cri-serve
             exit 1
           fi
-          echo "KPI3_REAL=PASS (container is PID 1 in its own netns/pidns, rooted at the ALPINE rootfs — real ns container, not a host process)"
+           echo "KPI3_REAL=PASS (container is PID 1 in its own netns/pidns, rooted at the ALPINE rootfs — real ns container, not a host process)"
+
+           # WP-#106: CRI RunAsUser/RunAsGroup must reach ExecSpec.user in the real
+           # ns container. Assert framed CRI log payloads exactly, not host output.
+           ID_LOGS=$(sudo awk '$2 == "stdout" && $3 == "F" && ($4 == "1001" || $4 == "1002") { print $4 }' "$CLOG")
+           if [ "$ID_LOGS" != "$(printf '1001\n1002')" ]; then
+             echo "KPI3_SECURITY_CONTEXT=FAIL (expected exact CRI log UID/GID 1001/1002, got: [$ID_LOGS])"
+             sudo cat /tmp/serve.log; CR stop "$CTR_ID" >/dev/null 2>&1; CR rmp -f "$POD_ID" >/dev/null 2>&1; sudo pkill -f lightr-cri-serve; exit 1
+           fi
+           echo "KPI3_SECURITY_CONTEXT=PASS (real ns CRI container logged uid=1001 gid=1002)"
 
           # ── WP-#100 EXEC GATE: `crictl exec` must ENTER the running ns container
           # (nsenter/setns model), NOT spawn a host process. `CR exec` is synchronous

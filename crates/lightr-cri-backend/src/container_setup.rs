@@ -119,6 +119,17 @@ impl LightrBackend {
                 .and_then(|security| security.seccomp.as_ref()),
         )?;
 
+        let user = map_identity(
+            rec.config
+                .security
+                .as_ref()
+                .and_then(|security| security.run_as_user),
+            rec.config
+                .security
+                .as_ref()
+                .and_then(|security| security.run_as_group),
+        );
+
         // WP-#107 (CRI GAP 1, "starting container with volume" + symlink-host-path):
         // map the CRI `ContainerConfig.mounts` to the descriptor. Resolve `host_path`
         // HOST-SIDE here (the symlink-host-path spec creates a symlink to the real
@@ -183,6 +194,7 @@ impl LightrBackend {
             // WP-#108: seccomp profile from the canonical security seam. The ns
             // engine compiles it before pivot and installs cBPF before execv.
             seccomp,
+            user,
             // WP-#107 (CRI GAP 1/2/3): the volume bind mounts (host-side realpath'd),
             // the synthesized /etc/resolv.conf, and the sandbox hostname. The ns engine
             // applies them in PID 1 (mounts + resolv.conf + hostname/UTS), fail-closed.
@@ -239,6 +251,14 @@ fn map_seccomp_profile(profile: Option<&crate::vocab::SecurityProfile>) -> Resul
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
+fn map_identity(user: Option<u32>, group: Option<u32>) -> Option<String> {
+    user.map(|user| match group {
+        Some(group) => format!("{user}:{group}"),
+        None => user.to_string(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -282,5 +302,15 @@ mod tests {
             .unwrap(),
             Some("default".to_string())
         );
+    }
+
+    #[test]
+    fn identity_maps_to_engine_user() {
+        assert_eq!(map_identity(Some(1001), None), Some("1001".to_string()));
+        assert_eq!(
+            map_identity(Some(1001), Some(1002)),
+            Some("1001:1002".to_string())
+        );
+        assert_eq!(map_identity(None, None), None);
     }
 }
