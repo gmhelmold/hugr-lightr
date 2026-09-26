@@ -22,7 +22,7 @@ const OWNERSHIP_XATTR: &[u8] = b"com.hugr.lightr.si01.owned-scratch\0";
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn malformed_ownership(path: &Path) {
     let file = fs::File::open(path).unwrap();
-    let bytes = [0u8; 4096];
+    let bytes = [0u8; 64];
     #[cfg(target_os = "linux")]
     let result = unsafe {
         libc::fsetxattr(
