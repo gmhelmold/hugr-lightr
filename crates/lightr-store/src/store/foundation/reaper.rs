@@ -2,6 +2,8 @@
 #![allow(dead_code)] // Internal recovery seam; no public route is active.
 use crate::store::foundation::{ExclusiveStoreLease, StoreLocks};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+use std::ffi::OsString;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::fs;
 use std::io;
 
@@ -26,11 +28,13 @@ pub(super) fn reap_owned_scratch(
     {
         let staging = guard.staging()?;
         let mut removed = 0;
-        for entry in fs::read_dir(staging.path())? {
-            let entry = entry?;
+        let entries: Vec<OsString> = fs::read_dir(staging.path())?
+            .map(|entry| Ok(entry?.file_name()))
+            .collect::<io::Result<_>>()?;
+        for entry in entries {
             if super::native::reap_owned_scratch(
                 staging.anchored_handle(),
-                &entry.file_name(),
+                &entry,
                 || {},
             )? {
                 removed += 1;
