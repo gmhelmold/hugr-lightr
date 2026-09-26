@@ -246,12 +246,14 @@ mod tests {
 
     #[test]
     fn localhost_seccomp_profile_must_be_absolute_path() {
-        let err = map_seccomp_profile(Some(&SecurityProfile {
-            profile_type: ProfileType::Localhost,
-            localhost_ref: "unconfined".to_string(),
-        }))
-        .expect_err("localhost profile must not select an engine sentinel");
-        assert!(err.to_string().contains("absolute path"));
+        for localhost_ref in ["unconfined", "default", "", "profiles/restricted.json"] {
+            let err = map_seccomp_profile(Some(&SecurityProfile {
+                profile_type: ProfileType::Localhost,
+                localhost_ref: localhost_ref.to_string(),
+            }))
+            .expect_err("localhost profile must not select an engine sentinel");
+            assert!(err.to_string().contains("absolute path"));
+        }
     }
 
     #[test]
