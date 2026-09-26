@@ -128,6 +128,7 @@ impl ExclusiveStoreLease {
     pub fn belongs_to(&self, domain: &StoreLocks) -> bool {
         self.domain.same_store(domain)
     }
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(super) fn staging(&self) -> io::Result<Directory> {
         self.domain.0.child(".si01-staging")
     }

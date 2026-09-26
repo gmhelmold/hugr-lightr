@@ -1,5 +1,6 @@
 //! Reap only scratch carrying a descriptor-bound ownership stamp.
 use crate::store::foundation::{ExclusiveStoreLease, StoreLocks};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::fs;
 use std::io;
 
