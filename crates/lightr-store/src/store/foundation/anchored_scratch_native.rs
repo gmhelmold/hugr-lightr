@@ -84,6 +84,11 @@ fn has_ownership(file: &File) -> io::Result<bool> {
     if error.raw_os_error() == Some(libc::ENOATTR) {
         return Ok(false);
     }
+    // Fixed-size stamp reads report ERANGE for an oversized foreign value.
+    // Treat it as unknown, not as a scan-wide I/O failure.
+    if error.raw_os_error() == Some(libc::ERANGE) {
+        return Ok(false);
+    }
     Err(error)
 }
 

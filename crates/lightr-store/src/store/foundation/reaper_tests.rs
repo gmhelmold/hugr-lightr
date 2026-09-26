@@ -3,6 +3,8 @@ use super::ScratchDirectory;
 use crate::store::foundation::{CacheLocks, StoreLocks, Wait};
 use std::fs;
 use std::io;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use std::os::fd::AsRawFd;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -11,6 +13,39 @@ use tempfile::TempDir;
 const CHILD: &str = "store::foundation::anchored_scratch::reaper_tests::reaper_child_probe";
 const ROOT_ENV: &str = "LIGHTR_SI01_REAPER_CHILD_ROOT";
 const READY_ENV: &str = "LIGHTR_SI01_REAPER_CHILD_READY";
+
+#[cfg(target_os = "linux")]
+const OWNERSHIP_XATTR: &[u8] = b"user.lightr.si01.owned-scratch\0";
+#[cfg(target_os = "macos")]
+const OWNERSHIP_XATTR: &[u8] = b"com.hugr.lightr.si01.owned-scratch\0";
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn malformed_ownership(path: &Path) {
+    let file = fs::File::open(path).unwrap();
+    let bytes = [0u8; 4096];
+    #[cfg(target_os = "linux")]
+    let result = unsafe {
+        libc::fsetxattr(
+            file.as_raw_fd(),
+            OWNERSHIP_XATTR.as_ptr().cast(),
+            bytes.as_ptr().cast(),
+            bytes.len(),
+            0,
+        )
+    };
+    #[cfg(target_os = "macos")]
+    let result = unsafe {
+        libc::fsetxattr(
+            file.as_raw_fd(),
+            OWNERSHIP_XATTR.as_ptr().cast(),
+            bytes.as_ptr().cast(),
+            bytes.len(),
+            0,
+            0,
+        )
+    };
+    assert_eq!(result, 0, "failed to create malformed ownership fixture");
+}
 
 #[test]
 fn reaper_child_probe() {
@@ -135,6 +170,47 @@ fn reaper_removes_owned_stale_scratch_after_owner_dies() {
 
     assert_eq!(reap_owned_scratch(&domain, &guard).unwrap(), 1);
     assert_eq!(fs::read_dir(staging).unwrap().count(), 0);
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn reaper_skips_malformed_ownership_and_reaps_later_owned_scratch() {
+    let root = TempDir::new().unwrap();
+    let signals = TempDir::new().unwrap();
+    let domain = StoreLocks::open_existing(root.path()).unwrap();
+    let staging = root.path().join(".si01-staging");
+    let malformed = staging.join("malformed");
+    fs::create_dir_all(&malformed).unwrap();
+    malformed_ownership(&malformed);
+
+    let ready = signals.path().join("reserved");
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", CHILD, "--nocapture"])
+        .env(ROOT_ENV, root.path())
+        .env(READY_ENV, &ready)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !ready.exists() {
+        if let Some(status) = child.try_wait().unwrap() {
+            panic!("child exited before reserving scratch: {status}");
+        }
+        assert!(
+            Instant::now() < deadline,
+            "child handshake watchdog expired"
+        );
+        std::thread::park_timeout(Duration::from_millis(2));
+    }
+    child.kill().unwrap();
+    assert!(!child.wait().unwrap().success());
+    let guard = domain.exclusive(Wait::Try).unwrap();
+
+    assert_eq!(reap_owned_scratch(&domain, &guard).unwrap(), 1);
+    assert!(malformed.is_dir());
+    assert_eq!(fs::read_dir(staging).unwrap().count(), 1);
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
