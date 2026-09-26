@@ -3,12 +3,10 @@ use super::{StoreLease, Wait};
 use std::io::{self, Read, Write};
 
 #[path = "reaper.rs"]
-#[cfg_attr(not(test), allow(dead_code))]
 mod reaper;
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[path = "anchored_scratch_native.rs"]
-#[cfg_attr(not(test), allow(dead_code))]
 mod native;
 
 /// An operation-owned directory in the Store's managed `.si01-staging` family.
