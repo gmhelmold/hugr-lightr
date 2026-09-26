@@ -35,7 +35,7 @@ use std::io::{Error, ErrorKind, Read};
 mod bpf;
 mod syscalls;
 use bpf::{ArgCondition, ArgOp, Rule};
-use syscalls::syscall_nr;
+use syscalls::{syscall_nr, target_arch, SeccompArch};
 
 // ── seccomp_data field offsets (uapi/linux/seccomp.h `struct seccomp_data`) ──────
 const SECCOMP_DATA_NR_OFFSET: u32 = 0; // u32 nr
@@ -43,8 +43,27 @@ const SECCOMP_DATA_ARCH_OFFSET: u32 = 4; // u32 arch
 const SECCOMP_DATA_ARGS_OFFSET: u32 = 16; // u64 args[0]
 const SECCOMP_MAX_ARGS: u32 = 6;
 
-// ── audit arch (uapi/linux/audit.h). x86_64 only (this engine's validated arch). ─
+// ── audit arch (uapi/linux/audit.h). ───────────────────────────────────────────
+#[cfg(target_arch = "x86_64")]
 const AUDIT_ARCH_X86_64: u32 = 0xC000_003E;
+// Compatibility name retained for x86-focused cBPF tests; production selection
+// always uses `audit_arch()`.
+#[cfg(target_arch = "aarch64")]
+const AUDIT_ARCH_X86_64: u32 = AUDIT_ARCH_AARCH64;
+const AUDIT_ARCH_AARCH64: u32 = 0xC000_00B7;
+const fn audit_arch() -> u32 {
+    match target_arch() {
+        SeccompArch::X86_64 => AUDIT_ARCH_X86_64,
+        SeccompArch::Aarch64 => AUDIT_ARCH_AARCH64,
+    }
+}
+
+const fn oci_arch_name() -> &'static str {
+    match target_arch() {
+        SeccompArch::X86_64 => "SCMP_ARCH_X86_64",
+        SeccompArch::Aarch64 => "SCMP_ARCH_AARCH64",
+    }
+}
 const X32_SYSCALL_BIT: u32 = 0x4000_0000;
 const SECCOMP_MAX_FILTER_INSNS: usize = 4096;
 
@@ -169,12 +188,18 @@ pub fn compile_from_path(path: &str) -> std::io::Result<CompiledSeccomp> {
 /// profile is embedded at build time (`include_str!`) so it needs no host file.
 pub fn compile_default() -> std::io::Result<CompiledSeccomp> {
     const DEFAULT_PROFILE: &str = include_str!("seccomp_default.json");
-    let profile: OciSeccomp = serde_json::from_str(DEFAULT_PROFILE).map_err(|e| {
+    let mut profile: OciSeccomp = serde_json::from_str(DEFAULT_PROFILE).map_err(|e| {
         Error::new(
             ErrorKind::InvalidData,
             format!("built-in seccomp profile parse: {e}"),
         )
     })?;
+    // This vendored profile is an allow-list. Select only names in target ABI's
+    // table; external profiles remain strict and reject unsupported names.
+    profile.architectures.clear();
+    for syscall in &mut profile.syscalls {
+        syscall.names.retain(|name| syscall_nr(name).is_some());
+    }
     compile(&profile)
 }
 
@@ -184,14 +209,12 @@ fn err_unsupported(msg: impl Into<String>) -> Error {
 
 fn compile(profile: &OciSeccomp) -> std::io::Result<CompiledSeccomp> {
     if profile.arch_map.is_some() {
-        return Err(err_unsupported(
-            "seccomp archMap selectors are unsupported on x86_64",
-        ));
+        return Err(err_unsupported("seccomp archMap selectors are unsupported"));
     }
     if profile
         .architectures
         .iter()
-        .any(|arch| arch != "SCMP_ARCH_X86_64")
+        .any(|arch| arch != oci_arch_name())
     {
         return Err(err_unsupported(
             "seccomp profile targets an unsupported architecture",

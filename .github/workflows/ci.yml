@@ -51,13 +51,26 @@ jobs:
             pkg-config \
             libssl-dev \
             clang \
-            lld
+            lld \
+            busybox-static
 
       - name: Build release binary (for acceptance tests)
         run: cargo build --release --bin lightr --features vz
 
       - name: Run unit tests (workspace)
         run: cargo test --workspace --features vz --lib --bins
+
+      - name: Prove aarch64 seccomp default installs a filter
+        run: |
+          set -euo pipefail
+          ROOT=/tmp/lightr-seccomp-aarch64-root
+          rm -rf "$ROOT"
+          mkdir -p "$ROOT/bin"
+          cp /bin/busybox "$ROOT/bin/busybox"
+          ./target/release/lightr snapshot --dir "$ROOT" --name seccomp-aarch64
+          ./target/release/lightr run --engine ns --seccomp default --rootfs seccomp-aarch64 -- /bin/busybox sh -c 'grep "^Seccomp:[[:space:]]*2$" /proc/self/status; echo SECCOMP_AARCH64_OK' >/tmp/seccomp-aarch64.txt
+          grep -q '^Seccomp:[[:space:]]*2$' /tmp/seccomp-aarch64.txt
+          grep -q '^SECCOMP_AARCH64_OK$' /tmp/seccomp-aarch64.txt
 
       - name: Run acceptance tests (with binary)
         run: |

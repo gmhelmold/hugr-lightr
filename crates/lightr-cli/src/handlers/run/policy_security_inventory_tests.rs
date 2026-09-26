@@ -554,7 +554,10 @@ fn cli_parser_lowers_all_security_controls_through_production_conversions() {
     );
     assert_eq!(
         engine_capability_policy(EngineKind::Ns, &rc),
-        seccomp_arch_policy(rc.seccomp.as_deref(), cfg!(target_arch = "x86_64"))
+        seccomp_arch_policy(
+            rc.seccomp.as_deref(),
+            cfg!(any(target_arch = "x86_64", target_arch = "aarch64")),
+        )
     );
     assert_eq!(engine_capability_policy(EngineKind::Native, &rc), Some(2));
 }
