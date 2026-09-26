@@ -36,6 +36,7 @@ fn sb_cfg(name: &str) -> SandboxConfig {
         host_network: false,
         dns: None,
         port_mappings: Vec::new(),
+        host_aliases: Vec::new(),
     }
 }
 

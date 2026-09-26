@@ -68,6 +68,7 @@ fn ready_sandbox(b: &LightrBackend, name: &str) -> crate::vocab::SandboxId {
         host_network: true,
         dns: None,
         port_mappings: Vec::new(),
+        host_aliases: Vec::new(),
     })
     .expect("run_sandbox")
 }

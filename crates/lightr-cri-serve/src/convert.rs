@@ -125,6 +125,20 @@ pub fn l2c_port(p: local::PortMapping) -> canon::PortMapping {
     }
 }
 
+pub fn c2l_host_alias(alias: canon::HostAlias) -> local::HostAlias {
+    local::HostAlias {
+        ip: alias.ip,
+        hostnames: alias.hostnames,
+    }
+}
+
+pub fn l2c_host_alias(alias: local::HostAlias) -> canon::HostAlias {
+    canon::HostAlias {
+        ip: alias.ip,
+        hostnames: alias.hostnames,
+    }
+}
+
 pub fn c2l_mount(m: canon::Mount) -> local::Mount {
     local::Mount {
         container_path: m.container_path,
@@ -170,6 +184,8 @@ fn c2l_security(s: canon::SecurityContext) -> local::SecurityContext {
             add: c.add,
             drop: c.drop,
         }),
+        run_as_user: s.run_as_user,
+        run_as_group: s.run_as_group,
     }
 }
 
@@ -181,6 +197,8 @@ fn l2c_security(s: local::SecurityContext) -> canon::SecurityContext {
             add: c.add,
             drop: c.drop,
         }),
+        run_as_user: s.run_as_user,
+        run_as_group: s.run_as_group,
     }
 }
 
@@ -208,6 +226,7 @@ pub fn c2l_sandbox_cfg(c: canon::SandboxConfig) -> local::SandboxConfig {
         host_network: c.host_network,
         dns: c.dns.map(c2l_dns),
         port_mappings: c.port_mappings.into_iter().map(c2l_port).collect(),
+        host_aliases: c.host_aliases.into_iter().map(c2l_host_alias).collect(),
     }
 }
 pub fn l2c_sandbox_cfg(c: local::SandboxConfig) -> canon::SandboxConfig {
@@ -223,6 +242,7 @@ pub fn l2c_sandbox_cfg(c: local::SandboxConfig) -> canon::SandboxConfig {
         host_network: c.host_network,
         dns: c.dns.map(l2c_dns),
         port_mappings: c.port_mappings.into_iter().map(l2c_port).collect(),
+        host_aliases: c.host_aliases.into_iter().map(l2c_host_alias).collect(),
     }
 }
 
@@ -375,5 +395,57 @@ pub fn l2c_stream(s: local::StreamSession) -> canon::StreamSession {
         stderr: s.stderr,
         pty_master: s.pty_master,
         waiter: Box::new(WaiterBridge(s.waiter)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn v13_configs_round_trip_through_transcription() {
+        let sandbox = canon::SandboxConfig {
+            name: "pod".into(),
+            uid: "uid".into(),
+            namespace: "ns".into(),
+            attempt: 0,
+            labels: BTreeMap::new(),
+            annotations: BTreeMap::new(),
+            log_directory: String::new(),
+            hostname: String::new(),
+            host_network: false,
+            dns: None,
+            port_mappings: vec![],
+            host_aliases: vec![canon::HostAlias {
+                ip: "10.0.0.10".into(),
+                hostnames: vec!["cache.internal".into()],
+            }],
+        };
+        assert_eq!(l2c_sandbox_cfg(c2l_sandbox_cfg(sandbox.clone())), sandbox);
+
+        let container = canon::ContainerConfig {
+            name: "ctr".into(),
+            attempt: 0,
+            image_ref: "example:v13".into(),
+            command: vec![],
+            args: vec![],
+            working_dir: String::new(),
+            envs: vec![],
+            mounts: vec![],
+            labels: BTreeMap::new(),
+            annotations: BTreeMap::new(),
+            log_path: String::new(),
+            tty: false,
+            stdin: false,
+            security: Some(canon::SecurityContext {
+                apparmor: None,
+                seccomp: None,
+                capabilities: None,
+                run_as_user: Some(1000),
+                run_as_group: Some(1000),
+            }),
+        };
+        assert_eq!(l2c_container_cfg(c2l_container_cfg(container.clone())), container);
     }
 }

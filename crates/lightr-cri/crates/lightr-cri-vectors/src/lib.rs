@@ -1026,6 +1026,48 @@ mod tests {
     use super::*;
 
     #[test]
+    fn v13_vocab_round_trips_and_v12_records_default() {
+        let sandbox: SandboxConfig = serde_json::from_str(
+            r#"{"name":"pod","uid":"uid","namespace":"ns","attempt":0,"host_aliases":[{"ip":"10.0.0.10","hostnames":["cache.internal"]}]}"#,
+        )
+        .expect("v1.3 sandbox parses");
+        assert_eq!(
+            serde_json::to_value(&sandbox).expect("sandbox serializes"),
+            serde_json::json!({"name":"pod","uid":"uid","namespace":"ns","attempt":0,"labels":{},"annotations":{},"log_directory":"","hostname":"","host_network":false,"dns":null,"port_mappings":[],"host_aliases":[{"ip":"10.0.0.10","hostnames":["cache.internal"]}]}),
+        );
+
+        let container: ContainerConfig = serde_json::from_str(
+            r#"{"name":"ctr","attempt":0,"image_ref":"example:v13","command":[],"security":{"run_as_user":1000,"run_as_group":1000}}"#,
+        )
+        .expect("v1.3 container parses");
+        assert_eq!(
+            serde_json::to_value(&container).expect("container serializes")["security"],
+            serde_json::json!({"apparmor":null,"seccomp":null,"capabilities":null,"run_as_user":1000,"run_as_group":1000}),
+        );
+
+        let old: SandboxConfig =
+            serde_json::from_str(r#"{"name":"pod","uid":"uid","namespace":"ns","attempt":0}"#)
+                .expect("v1.2 record parses");
+        assert!(old.host_aliases.is_empty());
+    }
+
+    #[test]
+    fn v13_malformed_identity_and_aliases_fail_closed() {
+        assert!(serde_json::from_str::<SandboxConfig>(
+            r#"{"name":"pod","uid":"uid","namespace":"ns","attempt":0,"host_aliases":[{"ip":"not-an-ip","hostnames":["cache"]}]}"#,
+        )
+        .is_err());
+        assert!(serde_json::from_str::<ContainerConfig>(
+            r#"{"name":"ctr","attempt":0,"image_ref":"example:v13","command":[],"security":{"run_as_group":1000}}"#,
+        )
+        .is_err());
+        assert!(serde_json::from_str::<ContainerConfig>(
+            r#"{"name":"ctr","attempt":0,"image_ref":"example:v13","command":[],"security":{"run_as_user":-1}}"#,
+        )
+        .is_err());
+    }
+
+    #[test]
     fn subst_replaces_dollar_n() {
         let results = vec![Some("sandbox-abc".to_string()), Some("ctr-xyz".to_string())];
         assert_eq!(subst("$0", &results), "sandbox-abc");

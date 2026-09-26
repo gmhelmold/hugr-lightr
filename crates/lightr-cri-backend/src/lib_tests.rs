@@ -45,6 +45,7 @@ fn sandbox_runs_and_streaming_fails_closed() {
             host_network: false,
             dns: None,
             port_mappings: Vec::new(),
+            host_aliases: Vec::new(),
         })
         .expect("run_sandbox succeeds");
     let st = b.sandbox_status(&id).unwrap();

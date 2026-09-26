@@ -95,6 +95,7 @@ fn sandbox_cfg() -> SandboxConfig {
         host_network: false,
         dns: None,
         port_mappings: Vec::new(),
+        host_aliases: Vec::new(),
     }
 }
 

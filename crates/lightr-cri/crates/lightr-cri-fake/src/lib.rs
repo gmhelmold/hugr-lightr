@@ -2481,6 +2481,7 @@ mod tests {
             host_network: false,
             dns: None,
             port_mappings: vec![],
+            host_aliases: vec![],
         }
     }
 
