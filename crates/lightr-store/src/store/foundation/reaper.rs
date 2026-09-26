@@ -1,4 +1,5 @@
 //! Reap only scratch carrying a descriptor-bound ownership stamp.
+#![allow(dead_code)] // Internal recovery seam; no public route is active.
 use crate::store::foundation::{ExclusiveStoreLease, StoreLocks};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::fs;
@@ -14,7 +15,10 @@ fn mismatch() -> io::Error {
 /// Remove stale scratch owned by this Store while its exclusive guard is held.
 /// Legacy and unknown entries are never adopted. This is not a hostile-writer
 /// confinement boundary; stable managed roots remain a StoreLocks precondition.
-pub fn reap_owned_scratch(domain: &StoreLocks, guard: &ExclusiveStoreLease) -> io::Result<usize> {
+pub(super) fn reap_owned_scratch(
+    domain: &StoreLocks,
+    guard: &ExclusiveStoreLease,
+) -> io::Result<usize> {
     if !guard.belongs_to(domain) {
         return Err(mismatch());
     }
@@ -24,16 +28,13 @@ pub fn reap_owned_scratch(domain: &StoreLocks, guard: &ExclusiveStoreLease) -> i
         let mut removed = 0;
         for entry in fs::read_dir(staging.path())? {
             let entry = entry?;
-            let file_type = entry.file_type()?;
-            if !file_type.is_dir() || file_type.is_symlink() {
-                continue;
+            if super::native::reap_owned_scratch(
+                staging.anchored_handle(),
+                &entry.file_name(),
+                || {},
+            )? {
+                removed += 1;
             }
-            let directory = super::native::open_existing_directory(&entry.path())?;
-            if !super::native::has_ownership(&directory)? {
-                continue;
-            }
-            fs::remove_dir_all(entry.path())?;
-            removed += 1;
         }
         Ok(removed)
     }

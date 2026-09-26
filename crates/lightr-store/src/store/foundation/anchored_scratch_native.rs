@@ -1,11 +1,11 @@
 //! Owned, single-component mutations inside a private, lease-protected reserve.
 use super::Wait;
-use std::ffi::CString;
-use std::fs::{File, OpenOptions};
+use std::ffi::{CStr, CString, OsStr};
+use std::fs::File;
 use std::io::{self, Read, Seek, Write};
 use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
-use std::os::unix::fs::OpenOptionsExt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -49,14 +49,8 @@ fn set_ownership(file: &File) -> io::Result<()> {
     }
 }
 
-pub(super) fn open_existing_directory(path: &std::path::Path) -> io::Result<File> {
-    OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
-        .open(path)
-}
-
-pub(super) fn has_ownership(file: &File) -> io::Result<bool> {
+#[allow(dead_code)] // Internal recovery seam; no public route is active.
+fn has_ownership(file: &File) -> io::Result<bool> {
     let mut stamp = [0; OWNERSHIP_STAMP.len()];
     #[cfg(target_os = "linux")]
     let result = unsafe {
@@ -91,6 +85,144 @@ pub(super) fn has_ownership(file: &File) -> io::Result<bool> {
         return Ok(false);
     }
     Err(error)
+}
+
+#[allow(dead_code)] // Internal recovery seam; no public route is active.
+fn component_os(name: &OsStr) -> io::Result<CString> {
+    let name = name.as_bytes();
+    if name.is_empty() || name == b"." || name == b".." || name.contains(&b'/') {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "expected one normal component",
+        ));
+    }
+    CString::new(name).map_err(Into::into)
+}
+
+#[allow(dead_code)] // Internal recovery seam; no public route is active.
+fn open_directory(parent: &File, name: &CStr) -> io::Result<File> {
+    let flags = libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC;
+    // SAFETY: retained parent descriptor and one NUL-terminated component.
+    let fd = unsafe { libc::openat(parent.as_raw_fd(), name.as_ptr(), flags) };
+    if fd < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        // SAFETY: successful openat transfers unique descriptor ownership.
+        Ok(unsafe { File::from_raw_fd(fd) })
+    }
+}
+
+#[allow(dead_code)] // Internal recovery seam; no public route is active.
+fn remove_entry(parent: &File, name: &CStr) -> io::Result<()> {
+    let expected = identity(parent, &name.to_owned())?;
+    if expected.2 == 0o040000 {
+        let directory = open_directory(parent, name)?;
+        clear_directory(&directory)?;
+    }
+    if identity(parent, &name.to_owned())? != expected {
+        return Err(changed());
+    }
+    let flags = if expected.2 == 0o040000 {
+        libc::AT_REMOVEDIR
+    } else {
+        0
+    };
+    // SAFETY: exact retained parent and identity revalidated immediately before removal.
+    if unsafe { libc::unlinkat(parent.as_raw_fd(), name.as_ptr(), flags) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[allow(dead_code)] // Internal recovery seam; no public route is active.
+fn errno_ptr() -> *mut libc::c_int {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        libc::__errno_location()
+    }
+    #[cfg(target_os = "macos")]
+    unsafe {
+        libc::__error()
+    }
+}
+
+#[allow(dead_code)] // Internal recovery seam; no public route is active.
+fn clear_directory(directory: &File) -> io::Result<()> {
+    // SAFETY: duplicates a live descriptor for fdopendir ownership.
+    let fd = unsafe { libc::fcntl(directory.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 0) };
+    if fd < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: fd is a directory descriptor. fdopendir owns it on success.
+    let stream = unsafe { libc::fdopendir(fd) };
+    if stream.is_null() {
+        // SAFETY: fdopendir failed and did not consume this descriptor.
+        unsafe { libc::close(fd) };
+        return Err(io::Error::last_os_error());
+    }
+    struct Stream(*mut libc::DIR);
+    impl Drop for Stream {
+        fn drop(&mut self) {
+            // SAFETY: this type owns exactly one fdopendir result.
+            unsafe { libc::closedir(self.0) };
+        }
+    }
+    let stream = Stream(stream);
+    loop {
+        // SAFETY: write errno only for this readdir EOF/error distinction.
+        unsafe { *errno_ptr() = 0 };
+        // SAFETY: stream remains live until this scope exits.
+        let entry = unsafe { libc::readdir(stream.0) };
+        if entry.is_null() {
+            // SAFETY: errno pointer remains valid for current thread.
+            let errno = unsafe { *errno_ptr() };
+            return if errno == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::from_raw_os_error(errno))
+            };
+        }
+        // SAFETY: readdir returned a live dirent whose d_name is NUL-terminated.
+        let name = unsafe { CStr::from_ptr((*entry).d_name.as_ptr()) };
+        if name.to_bytes() == b"." || name.to_bytes() == b".." {
+            continue;
+        }
+        remove_entry(directory, name)?;
+    }
+}
+
+/// Reap a root only after validating its ownership xattr through this descriptor.
+/// All descendants and final unlink use descriptor-relative syscalls. A name
+/// replacement after validation is detected before final unlink and preserved.
+#[allow(dead_code)] // Internal recovery seam; no public route is active.
+pub(super) fn reap_owned_scratch(
+    parent: &File,
+    name: &OsStr,
+    after_validation: impl FnOnce(),
+) -> io::Result<bool> {
+    let name = component_os(name)?;
+    let expected = match identity(parent, &name) {
+        Ok(identity) => identity,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error),
+    };
+    if expected.2 != 0o040000 {
+        return Ok(false);
+    }
+    let directory = open_directory(parent, &name)?;
+    if !has_ownership(&directory)? {
+        return Ok(false);
+    }
+    clear_directory(&directory)?;
+    after_validation();
+    if identity(parent, &name)? != expected {
+        return Err(changed());
+    }
+    // SAFETY: owned root identity was revalidated against retained staging parent.
+    if unsafe { libc::unlinkat(parent.as_raw_fd(), name.as_ptr(), libc::AT_REMOVEDIR) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(true)
 }
 
 fn component(name: &str) -> io::Result<CString> {
