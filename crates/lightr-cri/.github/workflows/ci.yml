@@ -1,0 +1,274 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  # ── macOS: compile + unit lanes (no crictl/critest) ──────────────────────
+  mac-compile:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install rust 1.96.0
+        run: |
+          # GitHub-hosted macOS: rustup is pre-installed. (Moved off the
+          # self-hosted mac runner, which flaked mid-build — rustc ENOENT
+          # under host file races on a loaded machine.)
+          rustup toolchain install 1.96.0 --profile minimal --no-self-update
+          rustup override set 1.96.0
+          rustup component add clippy
+
+      - name: cargo build --workspace
+        run: cargo build --workspace
+
+      - name: cargo clippy -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test (unit lanes)
+        run: |
+          cargo test -p lightr-cri-vectors \
+                     -p lightr-cri-fake \
+                     -p lightr-cri-shell
+
+  # ── Linux: full conformance (vectors A9, fake, shell, acceptance A1–A8, A10) ──
+  linux-conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      LIGHTR_CRI_REQUIRE_PROBES: "1"
+      LIGHTR_BUDGET_CLASS: hosted-linux
+      # CI safety net: cap any single streaming session so a stuck exec/attach
+      # can't hang the whole critest suite (a hung attach once ate the 60min
+      # budget). Unset in production — sessions are legitimately long-lived.
+      LIGHTR_STREAM_MAX_SESSION_SECS: "120"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install rust 1.96.0
+        run: |
+          # Runner-agnostic: ~/.cargo/bin (rustup lives here) may not be on the
+          # service runner's PATH (.path resets on runner update). Prepend it.
+          export PATH="$HOME/.cargo/bin:$PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          rustup toolchain install 1.96.0 --profile minimal --no-self-update
+          rustup override set 1.96.0
+          rustup component add clippy
+
+      - name: cargo build --release --workspace
+        run: cargo build --release --workspace
+
+      - name: cargo clippy -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: install pinned cri-tools v1.33.0
+        run: |
+          set -euo pipefail
+          CRICTL_SHA256="8307399e714626e69d1213a4cd18c8dec3d0201ecdac009b1802115df8973f0f"
+          CRITEST_SHA256="31baec20eda89276b3466ec24cfdfc54258baf27651997db7b5d4205f60ea61b"
+          BASE="https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.33.0"
+
+          curl -fsSL -o /tmp/crictl.tar.gz "${BASE}/crictl-v1.33.0-linux-amd64.tar.gz"
+          echo "${CRICTL_SHA256}  /tmp/crictl.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/crictl.tar.gz -C /tmp
+          sudo mv /tmp/crictl /usr/local/bin/crictl
+          sudo chmod +x /usr/local/bin/crictl
+
+          curl -fsSL -o /tmp/critest.tar.gz "${BASE}/critest-v1.33.0-linux-amd64.tar.gz"
+          echo "${CRITEST_SHA256}  /tmp/critest.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/critest.tar.gz -C /tmp
+          sudo mv /tmp/critest /usr/local/bin/critest
+          sudo chmod +x /usr/local/bin/critest
+
+          crictl --version
+          critest --version
+
+      - name: install iptables + iproute2 (CNI bridge/portmap NAT + netns)
+        run: |
+          set -euo pipefail
+          # The bridge plugin (ipMasq) and portmap need iptables for NAT;
+          # iproute2 for veth/netns tooling. rust:1.96-bookworm ships neither.
+          sudo apt-get update -qq
+          # busybox + netcat: the acceptance B3/B4/B5 tests start an in-container
+          # HTTP responder (the fake execs the command on the host) — need nc/busybox.
+          sudo apt-get install -y -qq iptables iproute2 busybox netcat-openbsd
+          # CNI plugins exec iptables via $PATH; ensure /usr/sbin is on it for
+          # the server + test steps (Actions step PATH can be restricted).
+          echo "/usr/sbin" >> "$GITHUB_PATH"
+          PATH="/usr/sbin:$PATH" command -v iptables
+          # hostPort DNAT to a loopback hostIP (127.0.0.1) only routes when
+          # route_localnet is enabled — otherwise the kernel treats the 127/8
+          # source as a martian and the DNAT'd packet is dropped, so
+          # curl 127.0.0.1:<hostPort> is refused (b5_hostport). The portmap
+          # plugin itself sets route_localnet on the *routable* host interface
+          # (cni0, via netlink RouteGet on the pod IP), but a host-ORIGINATED
+          # curl to 127.0.0.1 traverses OUTPUT bound to `lo` first; the reroute
+          # of that 127-sourced packet toward cni0 needs route_localnet on the
+          # ingress (`lo`) side too. `all` does NOT OR into the per-iface value
+          # for this check, so set all + lo + (best-effort) cni0 explicitly.
+          # Real nodes set these for hostPort; enable them on the runner.
+          sudo sysctl -w net.ipv4.conf.all.route_localnet=1
+          sudo sysctl -w net.ipv4.conf.lo.route_localnet=1
+          # cni0 may not exist yet (created on first CNI ADD); ignore if absent.
+          sudo sysctl -w net.ipv4.conf.cni0.route_localnet=1 2>/dev/null || true
+
+      - name: install CNI plugins v1.9.1 and kubelet v1.33.13 (pinned sha256)
+        run: |
+          set -euo pipefail
+
+          # CNI plugins v1.9.1 — amd64
+          CNI_SHA256="b98f74a0f8522f0a83867178729c1aa70f2158f90c45a2ca8fa791db1c76b303"
+          CNI_URL="https://github.com/containernetworking/plugins/releases/download/v1.9.1/cni-plugins-linux-amd64-v1.9.1.tgz"
+          curl -fsSL -o /tmp/cni-plugins.tgz "${CNI_URL}"
+          echo "${CNI_SHA256}  /tmp/cni-plugins.tgz" | sha256sum -c -
+          sudo mkdir -p /opt/cni/bin
+          sudo tar -C /opt/cni/bin -xzf /tmp/cni-plugins.tgz
+          rm /tmp/cni-plugins.tgz
+
+          # Write bridge+host-local+portmap conflist (smallest honest setup per r1-cni.md)
+          sudo mkdir -p /etc/cni/net.d
+          sudo tee /etc/cni/net.d/10-lightr.conflist >/dev/null <<'CONFLIST_EOF'
+          {
+            "cniVersion": "1.0.0",
+            "name": "lightr",
+            "plugins": [
+              {
+                "type": "bridge",
+                "bridge": "cni0",
+                "isGateway": true,
+                "ipMasq": true,
+                "ipam": {
+                  "type": "host-local",
+                  "subnet": "10.88.0.0/16",
+                  "routes": [{ "dst": "0.0.0.0/0" }]
+                }
+              },
+              {
+                "type": "portmap",
+                "capabilities": { "portMappings": true }
+              }
+            ]
+          }
+          CONFLIST_EOF
+          echo "CNI plugins installed; conflist written to /etc/cni/net.d/10-lightr.conflist"
+
+          # kubelet v1.33.13 — cache at /tmp/kubelet-cache/kubelet
+          KUBELET_SHA256="0415ef7778646172f7aad830cbe09a7d903461eef9e15cd34193b85d95dfff0d"
+          KUBELET_URL="https://dl.k8s.io/release/v1.33.13/bin/linux/amd64/kubelet"
+          KUBELET_CACHE="/tmp/kubelet-cache"
+          mkdir -p "${KUBELET_CACHE}"
+          curl -fsSL -o "${KUBELET_CACHE}/kubelet" "${KUBELET_URL}"
+          echo "${KUBELET_SHA256}  ${KUBELET_CACHE}/kubelet" | sha256sum -c -
+          chmod +x "${KUBELET_CACHE}/kubelet"
+          # put kubelet on PATH: the dedicated kubelet-smoke gate uses KUBELET_BIN,
+          # but the acceptance B7 probe (in cargo test) checks PATH for `kubelet`.
+          echo "${KUBELET_CACHE}" >> "$GITHUB_PATH"
+          echo "kubelet v1.33.13 cached at ${KUBELET_CACHE}/kubelet"
+
+      # NOTE: A10 critest (the canonical k8s conformance gate) runs BEFORE the
+      # house cargo-test acceptance suite, so the real R1 conformance bar is
+      # always visible even while the heavier house streaming/networking b-tests
+      # are still being brought to green. cargo test --workspace runs last (below).
+      - name: A10 critest gate
+        run: sudo -E env "PATH=$PATH" bash ci/critest-gate.sh
+
+      - name: budgets gate
+        run: bash ci/budget.sh
+
+      - name: greenlist gate
+        run: bash ci/greenlist-gate.sh
+
+      # Sign the structural KPIs (cold-start, idle RSS, crash-recovery) of the
+      # daemonless/crash-only shell. Measurement only — emits a signed JSON
+      # artifact; CAS-tier KPIs are out of scope here (real backend). Fail-closed
+      # on a missing core probe (crictl) since REQUIRE_PROBES=1.
+      - name: bench (sign structural KPIs)
+        run: bash ci/bench.sh
+
+      - name: upload bench artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: ci/bench-results.json
+          if-no-files-found: warn
+
+      - name: B7 kubelet-smoke gate
+        env:
+          LIGHTR_CRI_BIN: target/release/lightr-cri
+          KUBELET_BIN: /tmp/kubelet-cache/kubelet
+        run: sudo -E env "PATH=$PATH" bash ci/kubelet-smoke.sh
+
+      - name: cargo test --workspace (A9 vectors + fake + shell + acceptance A1–A8)
+        # Runs LAST: the canonical critest gate above is the R1 conformance bar;
+        # this house suite (incl. the heavier streaming/networking b-tests) is
+        # supplementary. Hosted ubuntu runs as non-root; netns/CNI tests need
+        # CAP_SYS_ADMIN — sudo -E preserves HOME/CARGO_HOME; env pins PATH.
+        run: sudo -E env "PATH=$PATH" cargo test --workspace
+
+  # ── verify-codegen: regenerate proto, diff must be empty ─────────────────
+  verify-codegen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install rust 1.96.0
+        run: |
+          # Runner-agnostic: ~/.cargo/bin (rustup lives here) may not be on the
+          # service runner's PATH (.path resets on runner update). Prepend it.
+          export PATH="$HOME/.cargo/bin:$PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          rustup toolchain install 1.96.0 --profile minimal --no-self-update
+          rustup override set 1.96.0
+          rustup component add clippy
+
+      - name: install pinned protoc v25.3
+        run: |
+          set -euo pipefail
+          PROTOC_ZIP="protoc-25.3-linux-x86_64.zip"
+          curl -fsSL -o /tmp/protoc.zip \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v25.3/${PROTOC_ZIP}"
+          rm -rf /tmp/protoc && unzip -oq /tmp/protoc.zip -d /tmp/protoc
+          sudo mv /tmp/protoc/bin/protoc /usr/local/bin/protoc
+          sudo chmod +x /usr/local/bin/protoc
+          # well-known types (google/protobuf/*.proto): the zip ships them in
+          # include/ and protoc looks for them in /usr/local/include
+          sudo cp -rf /tmp/protoc/include/google /usr/local/include/
+          protoc --version
+
+      - name: verify vendored proto sha256s against PROVENANCE.md
+        run: |
+          set -euo pipefail
+          PROV="crates/lightr-cri-proto/PROVENANCE.md"
+
+          # api.proto
+          EXPECTED_API=$(grep 'sha256:' "$PROV" | head -1 | grep -oE '[0-9a-f]{64}')
+          ACTUAL_API=$(sha256sum crates/lightr-cri-proto/proto/api.proto | awk '{print $1}')
+          if [ "$ACTUAL_API" != "$EXPECTED_API" ]; then
+            echo "FAIL: api.proto sha256 mismatch"
+            echo "  expected: $EXPECTED_API"
+            echo "  actual:   $ACTUAL_API"
+            exit 1
+          fi
+          echo "OK: api.proto sha256 matches PROVENANCE.md"
+
+          # gogo.proto
+          EXPECTED_GOGO=$(grep 'sha256' "$PROV" | grep -oE '[0-9a-f]{64}' | tail -1)
+          ACTUAL_GOGO=$(sha256sum crates/lightr-cri-proto/proto/github.com/gogo/protobuf/gogoproto/gogo.proto | awk '{print $1}')
+          if [ "$ACTUAL_GOGO" != "$EXPECTED_GOGO" ]; then
+            echo "FAIL: gogo.proto sha256 mismatch"
+            echo "  expected: $EXPECTED_GOGO"
+            echo "  actual:   $ACTUAL_GOGO"
+            exit 1
+          fi
+          echo "OK: gogo.proto sha256 matches PROVENANCE.md"
+
+      - name: regenerate codegen
+        run: cargo run -p protogen
+
+      - name: diff generated (drift = red)
+        run: git diff --exit-code crates/lightr-cri-proto/src/generated/

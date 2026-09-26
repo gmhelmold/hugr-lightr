@@ -2,10 +2,9 @@
 
 - **From:** hugr-lightr TL (the `lightr-cri-backend` / real `CriBackend` side)
 - **Date:** 2026-06-25
-- **Status:** request (cross-repo). This doc lives in **hugr-lightr** and asks the
-  **lightr-cri** TL for work in **their** repo. Per the cross-repo protocol I do
-  **not** touch lightr-cri; this is the channel. Nothing here pressures the frozen
-  `docs/contract/` seam — it is a request to exercise it, not change it.
+- **Status:** historical request, superseded by vendoring. The lightr-cri
+  workspace now lives at `crates/lightr-cri`; `lightr-cri-serve` owns composition
+  in this repository. Nothing here changes the frozen `docs/contract/` seam.
 - **Companion docs:** [`cri-backend-ready.md`](cri-backend-ready.md) (the backend
   handoff), this repo's `docs/runbooks/linux-validation.md`,
   `docs/benchmarks/RESULTS.md` (the signed numbers so far), and your

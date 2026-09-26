@@ -2,7 +2,7 @@
 # KPI 1 — Pull dedup (0-byte re-pull).
 #
 # SOURCE OF TRUTH: lightr-cri handoff §1
-#   ../lightr-cri/docs/handoff/bench-cas-kpis-request.md
+#   crates/lightr-cri/docs/handoff/bench-cas-kpis-request.md
 #
 # CLAIM TO SIGN: content already in the CAS is NOT re-stored on a second pull;
 # the first pull writes only the novel blobs.
@@ -39,7 +39,7 @@
 set -euo pipefail
 
 echo "KPI 1 — pull dedup (0 new CAS bytes on re-pull)"
-echo "spec: ../lightr-cri/docs/handoff/bench-cas-kpis-request.md §1"
+echo "spec: crates/lightr-cri/docs/handoff/bench-cas-kpis-request.md §1"
 
 if [ "${KPI_BACKEND_READY:-0}" != "1" ]; then
   echo "::error::KPI 1 not yet wired — set KPI_BACKEND_READY=1 on a Linux runner with"

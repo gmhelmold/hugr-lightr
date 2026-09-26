@@ -3,22 +3,28 @@
 //! (no `seccompiler`, no `libseccomp`) — just `serde_json` (already a workspace
 //! dep) for the profile parse and raw `libc` for the install.
 //!
-//! Scope (FROZEN, fail-closed): only the simple, common OCI shapes are supported.
-//! Anything outside the supported set returns an `io::Error` so the caller
-//! (PID 1, pre-execv) `_exit`s rather than exec under a WRONG/absent filter —
-//! the same fail-closed discipline as #106 AppArmor.
+//! Scope (FROZEN, fail-closed): supported OCI rules compile without broadening
+//! a rule on parse or code-generation failure. Anything outside the supported
+//! set returns an `io::Error` so the caller (PID 1, pre-execv) `_exit`s rather
+//! than exec under a WRONG/absent filter — the same fail-closed discipline as
+//! #106 AppArmor.
 //!
 //! SUPPORTED:
 //!   * `defaultAction` ∈ {ALLOW, ERRNO, KILL, KILL_PROCESS, KILL_THREAD}.
-//!   * Per-syscall entries with NO `args` (arg-conditioned rules UNSUPPORTED).
-//!   * ALL syscall entries share ONE action (mixed per-syscall actions
-//!     UNSUPPORTED) — that action ∈ the same set as `defaultAction`.
+//!   * Per-syscall entries with zero or more OCI `args` conditions. Conditions
+//!     are ANDed, and entries are evaluated in profile order.
+//!   * Per-syscall entries may use different actions. The first matching entry
+//!     returns its action; no match returns `defaultAction`.
 //!   * Syscall NAMEs resolved → numbers via a `libc::SYS_*` table (so the numbers
 //!     are target-correct). An unknown name FAILS CLOSED.
+//!   * x86_64 architecture only. `archMap`, `includes`, and `excludes` are
+//!     rejected rather than silently ignored; capability-aware profiles need a
+//!     later runtime contract.
 //!
-//! The compiled filter is a flat two-ret-block cBPF program:
-//!   load arch → (foreign arch ⇒ default-action) → load nr → for each listed
-//!   syscall JEQ→listed-action ret, else fall through to the default-action ret.
+//! The compiled filter is a cBPF decision tree:
+//!   load arch → (foreign arch ⇒ KILL_PROCESS) → load nr → x32 guard → ordered rules;
+//!   each rule tests syscall number, then 64-bit arguments, then returns its
+//!   action. Rule skips use `JA` (32-bit offsets), never u8 conditional jumps.
 
 #![cfg(target_os = "linux")]
 
@@ -26,15 +32,21 @@ use std::io::{Error, ErrorKind, Read};
 
 // WP godfile-split: the syscall-name→number table (~320 LOC on its own) lives in
 // `syscalls.rs`; the compiler core + apply stay here. `syscall_nr` is `pub(super)`.
+mod bpf;
 mod syscalls;
+use bpf::{ArgCondition, ArgOp, Rule};
 use syscalls::syscall_nr;
 
 // ── seccomp_data field offsets (uapi/linux/seccomp.h `struct seccomp_data`) ──────
 const SECCOMP_DATA_NR_OFFSET: u32 = 0; // u32 nr
 const SECCOMP_DATA_ARCH_OFFSET: u32 = 4; // u32 arch
+const SECCOMP_DATA_ARGS_OFFSET: u32 = 16; // u64 args[0]
+const SECCOMP_MAX_ARGS: u32 = 6;
 
 // ── audit arch (uapi/linux/audit.h). x86_64 only (this engine's validated arch). ─
 const AUDIT_ARCH_X86_64: u32 = 0xC000_003E;
+const X32_SYSCALL_BIT: u32 = 0x4000_0000;
+const SECCOMP_MAX_FILTER_INSNS: usize = 4096;
 
 // ── seccomp return actions (uapi/linux/seccomp.h) ───────────────────────────────
 const SECCOMP_RET_KILL_PROCESS: u32 = 0x8000_0000;
@@ -47,7 +59,13 @@ const BPF_LD: u16 = 0x00;
 const BPF_W: u16 = 0x00;
 const BPF_ABS: u16 = 0x20;
 const BPF_JMP: u16 = 0x05;
+const BPF_JA: u16 = 0x00;
 const BPF_JEQ: u16 = 0x10;
+const BPF_JGT: u16 = 0x20;
+const BPF_JGE: u16 = 0x30;
+const BPF_JSET: u16 = 0x40;
+const BPF_ALU: u16 = 0x04;
+const BPF_AND: u16 = 0x50;
 const BPF_K: u16 = 0x00;
 const BPF_RET: u16 = 0x06;
 
@@ -58,41 +76,68 @@ const SECCOMP_MODE_FILTER: libc::c_int = 2;
 // ── OCI seccomp profile JSON (the runtime-spec subset we accept) ─────────────────
 
 #[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 struct OciSeccomp {
     default_action: String,
     #[serde(default)]
-    #[allow(dead_code)] // parsed for completeness; we always compile for x86_64.
+    default_errno_ret: Option<u32>,
+    #[serde(rename = "_comment", default)]
+    #[allow(dead_code)]
+    _comment: Option<String>,
+    #[serde(default)]
     architectures: Vec<String>,
+    #[serde(default)]
+    arch_map: Option<serde_json::Value>,
     #[serde(default)]
     syscalls: Vec<OciSyscall>,
 }
 
 #[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 struct OciSyscall {
     names: Vec<String>,
     action: String,
     #[serde(default)]
-    #[allow(dead_code)] // accepted shape carries no errno per-entry use beyond `action`.
     errno_ret: Option<u32>,
-    /// Arg-conditioned rules are UNSUPPORTED — a non-empty `args` FAILS CLOSED.
     #[serde(default)]
-    args: Vec<serde_json::Value>,
+    args: Vec<OciArg>,
+    #[serde(default)]
+    includes: Option<serde_json::Value>,
+    #[serde(default)]
+    excludes: Option<serde_json::Value>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    comment: Option<String>,
+}
+
+#[derive(Clone, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+struct OciArg {
+    index: u32,
+    value: u64,
+    #[serde(default)]
+    value_two: Option<u64>,
+    op: String,
 }
 
 /// Map an OCI `SCMP_ACT_*` string + optional errnoRet to a `SECCOMP_RET_*` value.
 /// Unknown action ⇒ `None` (caller fails closed).
 fn action_ret(action: &str, errno_ret: Option<u32>) -> Option<u32> {
     Some(match action {
-        "SCMP_ACT_ALLOW" => SECCOMP_RET_ALLOW,
+        "SCMP_ACT_ALLOW" if errno_ret.is_none() => SECCOMP_RET_ALLOW,
         "SCMP_ACT_ERRNO" => {
             // errno = low 16 bits; default 1 (EPERM) when unspecified.
-            let errno = errno_ret.unwrap_or(1) & 0xffff;
+            let errno = errno_ret.unwrap_or(1);
+            if errno > 0xffff {
+                return None;
+            }
             SECCOMP_RET_ERRNO | errno
         }
-        "SCMP_ACT_KILL" | "SCMP_ACT_KILL_THREAD" => SECCOMP_RET_KILL_THREAD,
-        "SCMP_ACT_KILL_PROCESS" => SECCOMP_RET_KILL_PROCESS,
+        "SCMP_ACT_KILL" | "SCMP_ACT_KILL_THREAD" if errno_ret.is_none() => SECCOMP_RET_KILL_THREAD,
+        "SCMP_ACT_KILL_PROCESS" if errno_ret.is_none() => SECCOMP_RET_KILL_PROCESS,
         _ => return None,
     })
 }
@@ -138,97 +183,114 @@ fn err_unsupported(msg: impl Into<String>) -> Error {
 }
 
 fn compile(profile: &OciSeccomp) -> std::io::Result<CompiledSeccomp> {
-    // Default action — must be a supported shape.
-    let default_ret = action_ret(&profile.default_action, None).ok_or_else(|| {
-        err_unsupported(format!(
-            "unsupported seccomp defaultAction: {}",
-            profile.default_action
-        ))
-    })?;
+    if profile.arch_map.is_some() {
+        return Err(err_unsupported(
+            "seccomp archMap selectors are unsupported on x86_64",
+        ));
+    }
+    if profile
+        .architectures
+        .iter()
+        .any(|arch| arch != "SCMP_ARCH_X86_64")
+    {
+        return Err(err_unsupported(
+            "seccomp profile targets an unsupported architecture",
+        ));
+    }
 
-    // Collect every listed syscall NUMBER. All entries must share ONE action
-    // (mixed per-syscall actions UNSUPPORTED) and carry NO `args`.
-    let mut listed_ret: Option<u32> = None;
-    let mut nrs: Vec<i64> = Vec::new();
+    // Default action — must be a supported shape.
+    let default_ret =
+        action_ret(&profile.default_action, profile.default_errno_ret).ok_or_else(|| {
+            err_unsupported(format!(
+                "unsupported seccomp defaultAction: {}",
+                profile.default_action
+            ))
+        })?;
+
+    // Expand each OCI entry into one ordered rule per syscall name. Keeping
+    // entries separate preserves mixed actions and duplicate syscall entries
+    // whose argument predicates differ.
+    let mut rules = Vec::new();
     for sc in &profile.syscalls {
-        if !sc.args.is_empty() {
+        if sc.includes.is_some() || sc.excludes.is_some() {
             return Err(err_unsupported(
-                "arg-conditioned seccomp rules are unsupported (syscall entry has `args`)",
+                "seccomp syscall capability or architecture selectors are unsupported",
             ));
         }
         let ret = action_ret(&sc.action, sc.errno_ret).ok_or_else(|| {
             err_unsupported(format!("unsupported seccomp syscall action: {}", sc.action))
         })?;
-        match listed_ret {
-            None => listed_ret = Some(ret),
-            Some(prev) if prev != ret => {
-                return Err(err_unsupported(
-                    "mixed per-syscall seccomp actions are unsupported (all entries must share one action)",
-                ));
-            }
-            Some(_) => {}
+        if sc.names.is_empty() {
+            return Err(err_unsupported("seccomp syscall entry has no names"));
         }
+        let args = sc
+            .args
+            .iter()
+            .map(parse_arg)
+            .collect::<std::io::Result<Vec<_>>>()?;
         for name in &sc.names {
             let nr = syscall_nr(name).ok_or_else(|| {
                 err_unsupported(format!("unsupported syscall in seccomp profile: {name}"))
             })?;
-            nrs.push(nr);
+            rules.push(Rule {
+                nr: u32::try_from(nr)
+                    .map_err(|_| err_unsupported(format!("invalid syscall number for {name}")))?,
+                action: ret,
+                args: args.clone(),
+            });
         }
     }
 
-    // No listed syscalls ⇒ a degenerate "default only" filter (still valid).
-    let listed_ret = listed_ret.unwrap_or(default_ret);
-
-    // ── Build the cBPF program (OFFSET-SAFE for ANY number of syscalls) ───────
-    // EVERY conditional jump uses jt/jf of ONLY 0 or 1 — never a far jump — so the
-    // u8 jt/jf fields cannot overflow regardless of how many syscalls the profile
-    // lists. (The earlier "flat JEQ → far listed-RET" layout silently TRUNCATED the
-    // u8 offset once the first JEQ's distance to the listed-RET exceeded 255, i.e.
-    // for 256 or more syscalls — producing a WRONG filter: early JEQs jumped to
-    // garbage. That latent #108 bug was exposed by the 289-entry built-in default
-    // profile (#117): an early syscall like `arch_prctl` mapped wrong ⇒ the workload
-    // was denied at startup, before `main`. This
-    // inline-RET layout removes far jumps entirely.)
-    //
-    //   [0] LD  arch
-    //   [1] JEQ arch == X86_64 ? jt=1 (skip the foreign-RET) : jf=0 (fall into it)
-    //   [2] RET default            ; foreign arch → the default action (inline)
-    //   [3] LD  nr
-    //   per listed syscall (a 2-insn pair):
-    //     JEQ nr ? jt=0 (fall to its RET) : jf=1 (skip its RET, try the next)
-    //     RET listed-action
-    //   [last] RET default         ; no syscall matched → the default action
-    //
-    // The DEFAULT action is what a non-matching syscall reaches (the final RET); a
-    // MATCH falls into its own inline RET. (WP-#108's first cut inverted match vs
-    // default → deny-all: under a deny-list the workload's own execve was itself
-    // denied, so it never started — recorded as exit 139 at the time, unreproducible
-    // since. The `run_bpf` simulator tests below pin BOTH that selectivity AND —
-    // via a >256-entry profile — this no-overflow.)
-    let n = nrs.len();
-    let mut prog: Vec<libc::sock_filter> = Vec::with_capacity(4 + 2 * n + 1);
-
-    // [0] LD arch
-    prog.push(stmt(BPF_LD | BPF_W | BPF_ABS, SECCOMP_DATA_ARCH_OFFSET));
-    // [1] JEQ arch == X86_64: match → skip the foreign-RET; foreign → fall into it.
-    prog.push(jump(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_X86_64, 1, 0));
-    // [2] foreign arch → the default action (inline RET, no far jump). NOTE: an x32
-    // syscall carries arch == AUDIT_ARCH_X86_64, so it PASSES this gate and is not
-    // caught here; it reaches the default action only by matching no native-nr JEQ
-    // (the x32 deny-list-bypass gap — tracked, see the seccomp writeup Limitations).
-    prog.push(stmt(BPF_RET | BPF_K, default_ret));
-    // [3] LD nr
-    prog.push(stmt(BPF_LD | BPF_W | BPF_ABS, SECCOMP_DATA_NR_OFFSET));
-    // one (JEQ nr, RET listed) pair per listed syscall — all jt/jf are 0 or 1.
-    for nr in &nrs {
-        // match → jt=0 (fall to the RET below); no match → jf=1 (skip it).
-        prog.push(jump(BPF_JMP | BPF_JEQ | BPF_K, *nr as u32, 0, 1));
-        prog.push(stmt(BPF_RET | BPF_K, listed_ret));
+    let prog = bpf::compile(default_ret, &rules)?;
+    if prog.len() > SECCOMP_MAX_FILTER_INSNS {
+        return Err(err_unsupported(format!(
+            "seccomp filter has {} instructions; kernel limit is {}",
+            prog.len(),
+            SECCOMP_MAX_FILTER_INSNS
+        )));
     }
-    // no syscall matched → the default action.
-    prog.push(stmt(BPF_RET | BPF_K, default_ret));
-
     Ok(CompiledSeccomp { prog })
+}
+
+fn parse_arg(arg: &OciArg) -> std::io::Result<ArgCondition> {
+    if arg.index >= SECCOMP_MAX_ARGS {
+        return Err(err_unsupported(format!(
+            "seccomp argument index {} is outside 0..{}",
+            arg.index,
+            SECCOMP_MAX_ARGS - 1
+        )));
+    }
+    let op = match arg.op.as_str() {
+        "SCMP_CMP_EQ" => ArgOp::Eq,
+        "SCMP_CMP_NE" => ArgOp::Ne,
+        "SCMP_CMP_LT" => ArgOp::Lt,
+        "SCMP_CMP_LE" => ArgOp::Le,
+        "SCMP_CMP_GT" => ArgOp::Gt,
+        "SCMP_CMP_GE" => ArgOp::Ge,
+        "SCMP_CMP_MASKED_EQ" => ArgOp::MaskedEq,
+        _ => {
+            return Err(err_unsupported(format!(
+                "unsupported seccomp argument op: {}",
+                arg.op
+            )))
+        }
+    };
+    if matches!(op, ArgOp::MaskedEq) != arg.value_two.is_some() {
+        return Err(err_unsupported(
+            "seccomp valueTwo is required only for SCMP_CMP_MASKED_EQ",
+        ));
+    }
+    let offset = SECCOMP_DATA_ARGS_OFFSET + arg.index * 8;
+    let value_two = arg.value_two.unwrap_or(0);
+    Ok(ArgCondition {
+        low_offset: offset,
+        high_offset: offset + 4,
+        value_low: arg.value as u32,
+        value_high: (arg.value >> 32) as u32,
+        value_two_low: value_two as u32,
+        value_two_high: (value_two >> 32) as u32,
+        op,
+    })
 }
 
 #[inline]
@@ -259,8 +321,10 @@ impl CompiledSeccomp {
             return Err(Error::last_os_error());
         }
 
+        let len = u16::try_from(self.prog.len())
+            .map_err(|_| Error::new(ErrorKind::InvalidData, "seccomp filter is too large"))?;
         let fprog = libc::sock_fprog {
-            len: self.prog.len() as u16,
+            len,
             filter: self.prog.as_ptr() as *mut libc::sock_filter,
         };
 

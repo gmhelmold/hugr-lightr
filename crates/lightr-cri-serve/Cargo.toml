@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 publish = false
-description = "OPT-IN composition root: wires the real LightrBackend (this workspace) into the kubelet-facing lightr-cri server shell (sibling repo) via a thin type-adapter over the frozen CriBackend seam."
+description = "OPT-IN composition root: wires the real LightrBackend into the vendored kubelet-facing lightr-cri server shell via a thin type-adapter over the CriBackend seam."
 
 # OWN, ISOLATED WORKSPACE — decoupled from the hugr-lightr root workspace ON
 # PURPOSE. The root Cargo.toml ALSO lists this crate in `[workspace] exclude`,
 # so a normal `cargo build` / `cargo build --workspace` at the repo root NEVER
-# builds this crate and NEVER pulls the sibling `lightr-cri` repo. This is the
+# builds this crate or pulls tonic/gRPC into the core build. This is the
 # only crate in hugr-lightr that depends on the CRI shell (tonic/tokio/gRPC),
 # which the dependency firewall (ADR-0017 decision 5) keeps OUT of the default
 # build. Validate it explicitly:
@@ -21,26 +21,14 @@ name = "lightr-cri-serve"
 path = "src/main.rs"
 
 [dependencies]
-# The REAL backend (this workspace): LightrBackend + ITS transcribed vocab.
-lightr-cri-backend = { path = "../lightr-cri-backend" }
+# The REAL backend (this workspace): LightrBackend + its seam vocab.
+lightr-cri-backend = { package = "hugr-lightr-cri-backend", path = "../lightr-cri-backend" }
 
-# The CANONICAL seam trait + vocab (sibling lightr-cri repo), RENAMED via
-# `package` to dodge the crate-name collision — both crates are literally named
-# `lightr-cri-backend`, but cargo allows the same name from DISTINCT SOURCES
-# (this one = git; mine above = path), which is exactly how the collision is
-# resolved (verified building locally). `lightr-cri-server` binds THIS crate's
-# `CriBackend`, so the Adapter impls THIS one.
-#
-# GIT DEP, PINNED. The sibling is a PRIVATE repo, so both local and CI builds
-# need `CARGO_NET_GIT_FETCH_WITH_CLI=true` + an authed git (locally: the box's gh
-# creds; CI: the `LIGHTR_CRI_CI_TOKEN` fine-grained PAT configured via
-# url.insteadOf). Pinned to a rev so a future sibling rename of this crate does
-# not break us until we bump the pin. (If the sibling later renames the canonical
-# crate to a seam-y name, update `package` + the rev here — see
-# docs/handoff/integration-findings-2026-06-26.md.)
-cri-canon = { package = "lightr-cri-backend", git = "https://github.com/HumanGuardrail/lightr-cri", rev = "17008ca40bf5caf0f0dafc5a1405d5ad15569a76" }
+# Canonical seam + vocab, vendored into this repository. The package name
+# collides with this workspace's transcribed backend, so keep the dependency
+# renamed as `cri-canon`; both crates are path dependencies at distinct paths.
+cri-canon = { package = "lightr-cri-backend", path = "../lightr-cri/crates/lightr-cri-backend" }
 
-# The backend-agnostic server composition root (sibling). `default-features =
-# false` drops the in-repo fake backend + its `lightr-cri` conformance bin —
-# we only need the generic `run_blocking`/`serve` lib entry.
-lightr-cri-server = { git = "https://github.com/HumanGuardrail/lightr-cri", rev = "17008ca40bf5caf0f0dafc5a1405d5ad15569a76", default-features = false }
+# Backend-agnostic server composition root. `default-features = false` drops
+# the fake backend + conformance bin; we only need generic serving.
+lightr-cri-server = { path = "../lightr-cri/crates/lightr-cri-server", default-features = false }

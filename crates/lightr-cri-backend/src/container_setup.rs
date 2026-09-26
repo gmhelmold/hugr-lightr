@@ -6,13 +6,17 @@
 
 #[cfg(target_os = "linux")]
 use std::fs;
+#[cfg(any(target_os = "linux", test))]
+use std::path::Path;
 
 #[cfg(target_os = "linux")]
 use crate::container_wait::synth_resolv_conf;
 #[cfg(target_os = "linux")]
 use crate::util::ContainerRecord;
 #[cfg(target_os = "linux")]
-use crate::vocab::{BackendError, ContainerId, Result};
+use crate::vocab::ContainerId;
+#[cfg(any(target_os = "linux", test))]
+use crate::vocab::{BackendError, Result};
 #[cfg(target_os = "linux")]
 use crate::LightrBackend;
 
@@ -88,14 +92,10 @@ impl LightrBackend {
         };
 
         // WP-#106 (KPI 4): map the v1.2 security context's AppArmor profile to the
-        // profile NAME the ns engine execs under (aa_change_onexec). READY-BUT-INERT
-        // today: `rec.config.security` is usually `None` (the cross-repo seam #89 that
-        // maps the kubelet's proto profile into this field is not landed), so this is
-        // `None` and the start path is byte-identical to before. The mapping:
+        // profile NAME the ns engine execs under (aa_change_onexec). The mapping:
         //   Localhost      ⇒ the loaded profile name (`localhost_ref`)
         //   Unconfined     ⇒ "unconfined" (explicitly run unconfined)
-        //   RuntimeDefault ⇒ None (inherit for now — a named runtime-default profile
-        //                    is a future choice; documented, not yet wired)
+        //   RuntimeDefault ⇒ None (inherit host AppArmor policy)
         let apparmor: Option<String> = rec
             .config
             .security
@@ -107,24 +107,17 @@ impl LightrBackend {
                 crate::vocab::ProfileType::RuntimeDefault => None,
             });
 
-        // WP-#108 (seccomp): mirror the apparmor mapping above — `rec.config.security`
-        // is usually `None` today (the cross-repo seam mapping the kubelet's proto
-        // seccomp profile into this field is not landed), so this is `None` and the
-        // start path is byte-identical to before. The mapping:
+        // WP-#108 (seccomp): map the canonical security context to the OCI profile
+        // consumed by the ns engine. The mapping:
         //   Localhost      ⇒ the profile PATH (`localhost_ref`)
         //   Unconfined     ⇒ "unconfined" (explicitly run without a filter)
-        //   RuntimeDefault ⇒ None (inherit for now — a named runtime-default profile
-        //                    is a future choice; documented, not yet wired)
-        let seccomp: Option<String> = rec
-            .config
-            .security
-            .as_ref()
-            .and_then(|s| s.seccomp.as_ref())
-            .and_then(|p| match p.profile_type {
-                crate::vocab::ProfileType::Localhost => Some(p.localhost_ref.clone()),
-                crate::vocab::ProfileType::Unconfined => Some("unconfined".to_string()),
-                crate::vocab::ProfileType::RuntimeDefault => None,
-            });
+        //   RuntimeDefault ⇒ "default" (the built-in OCI seccomp profile)
+        let seccomp = map_seccomp_profile(
+            rec.config
+                .security
+                .as_ref()
+                .and_then(|security| security.seccomp.as_ref()),
+        )?;
 
         // WP-#107 (CRI GAP 1, "starting container with volume" + symlink-host-path):
         // map the CRI `ContainerConfig.mounts` to the descriptor. Resolve `host_path`
@@ -184,13 +177,11 @@ impl LightrBackend {
             // `start_container_impl` right before spawn (so the fd's lifetime is the
             // spawn's). The plan itself carries None.
             exec_ready_fd: None,
-            // WP-#106: ready-but-inert AppArmor profile (None until the seam #89 maps
-            // the kubelet profile into rec.config.security). The ns engine applies it
-            // via aa_change_onexec right before the container's execv (fail-closed).
+            // WP-#106: AppArmor profile from the canonical security seam. The ns
+            // engine applies it via aa_change_onexec before execv (fail-closed).
             apparmor,
-            // WP-#108: ready-but-inert seccomp profile (None until the seam maps the
-            // kubelet profile into rec.config.security). The ns engine compiles it
-            // before pivot and installs the cBPF filter right before execv (fail-closed).
+            // WP-#108: seccomp profile from the canonical security seam. The ns
+            // engine compiles it before pivot and installs cBPF before execv.
             seccomp,
             // WP-#107 (CRI GAP 1/2/3): the volume bind mounts (host-side realpath'd),
             // the synthesized /etc/resolv.conf, and the sandbox hostname. The ns engine
@@ -226,5 +217,70 @@ impl LightrBackend {
         fs::create_dir_all(&rootfs).map_err(BackendError::Io)?;
         lightr_index::hydrate(&rootfs, &store, &store_name).map_err(crate::util::map_lightr_err)?;
         Ok(rootfs)
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn map_seccomp_profile(profile: Option<&crate::vocab::SecurityProfile>) -> Result<Option<String>> {
+    match profile {
+        None => Ok(None),
+        Some(profile) => match profile.profile_type {
+            crate::vocab::ProfileType::Localhost => {
+                if !Path::new(&profile.localhost_ref).is_absolute() {
+                    return Err(BackendError::InvalidArgument(
+                        "localhost seccomp profile must be an absolute path".to_string(),
+                    ));
+                }
+                Ok(Some(profile.localhost_ref.clone()))
+            }
+            crate::vocab::ProfileType::Unconfined => Ok(Some("unconfined".to_string())),
+            crate::vocab::ProfileType::RuntimeDefault => Ok(Some("default".to_string())),
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::vocab::{ProfileType, SecurityProfile};
+
+    #[test]
+    fn localhost_seccomp_profile_must_be_absolute_path() {
+        for localhost_ref in ["unconfined", "default", "", "profiles/restricted.json"] {
+            let err = map_seccomp_profile(Some(&SecurityProfile {
+                profile_type: ProfileType::Localhost,
+                localhost_ref: localhost_ref.to_string(),
+            }))
+            .expect_err("localhost profile must not select an engine sentinel");
+            assert!(err.to_string().contains("absolute path"));
+        }
+    }
+
+    #[test]
+    fn seccomp_profile_modes_map_to_distinct_engine_inputs() {
+        assert_eq!(
+            map_seccomp_profile(Some(&SecurityProfile {
+                profile_type: ProfileType::Localhost,
+                localhost_ref: "/etc/lightr/seccomp.json".to_string(),
+            }))
+            .unwrap(),
+            Some("/etc/lightr/seccomp.json".to_string())
+        );
+        assert_eq!(
+            map_seccomp_profile(Some(&SecurityProfile {
+                profile_type: ProfileType::Unconfined,
+                localhost_ref: String::new(),
+            }))
+            .unwrap(),
+            Some("unconfined".to_string())
+        );
+        assert_eq!(
+            map_seccomp_profile(Some(&SecurityProfile {
+                profile_type: ProfileType::RuntimeDefault,
+                localhost_ref: String::new(),
+            }))
+            .unwrap(),
+            Some("default".to_string())
+        );
     }
 }

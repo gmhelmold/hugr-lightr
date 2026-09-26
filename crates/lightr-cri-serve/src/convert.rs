@@ -1,4 +1,4 @@
-//! Seam conversions: CANONICAL vocab (`cri_canon`, sibling lightr-cri) ⇄ LOCAL
+//! Seam conversions: CANONICAL vocab (`cri_canon`, vendored lightr-cri) ⇄ LOCAL
 //! vocab (`lightr_cri_backend`, this workspace).
 //!
 //! The two vocab crates are PARALLEL TRANSCRIPTIONS of the frozen seam —
@@ -8,17 +8,8 @@
 //!   * `c2l_*` = canonical → local  (incoming method ARGS)
 //!   * `l2c_*` = local → canonical  (outgoing RESULTS / errors)
 //!
-//! KNOWN DRIFT (reported to the lead, not papered over): the LOCAL
-//! `ContainerConfig` carries a v1.2 `security: Option<SecurityContext>` field
-//! (owner-approved 2026-06-25, for KPI-4 AppArmor) that the CANONICAL seam
-//! (still v1.1) does NOT have. Conversions therefore:
-//!   * `c2l_container_cfg` sets `security: None` — a kubelet AppArmor profile
-//!     CANNOT reach the backend through this composed path until the canonical
-//!     seam is bumped to v1.2.
-//!   * `l2c_container_cfg` DROPS `security` — it has no canonical counterpart.
-//!
-//! Both are loss-free in the wire sense (the canonical side never had the field)
-//! but mean the v1.2 security extension is currently UNREACHABLE end-to-end.
+//! v1.2 security context is now part of both vocabularies and is converted
+//! field-for-field, so kubelet security profiles reach the real backend.
 
 use cri_canon as canon;
 use lightr_cri_backend as local;
@@ -149,6 +140,50 @@ pub fn l2c_mount(m: local::Mount) -> canon::Mount {
     }
 }
 
+fn c2l_profile(p: canon::SecurityProfile) -> local::SecurityProfile {
+    local::SecurityProfile {
+        profile_type: match p.profile_type {
+            canon::ProfileType::RuntimeDefault => local::ProfileType::RuntimeDefault,
+            canon::ProfileType::Unconfined => local::ProfileType::Unconfined,
+            canon::ProfileType::Localhost => local::ProfileType::Localhost,
+        },
+        localhost_ref: p.localhost_ref,
+    }
+}
+
+fn l2c_profile(p: local::SecurityProfile) -> canon::SecurityProfile {
+    canon::SecurityProfile {
+        profile_type: match p.profile_type {
+            local::ProfileType::RuntimeDefault => canon::ProfileType::RuntimeDefault,
+            local::ProfileType::Unconfined => canon::ProfileType::Unconfined,
+            local::ProfileType::Localhost => canon::ProfileType::Localhost,
+        },
+        localhost_ref: p.localhost_ref,
+    }
+}
+
+fn c2l_security(s: canon::SecurityContext) -> local::SecurityContext {
+    local::SecurityContext {
+        apparmor: s.apparmor.map(c2l_profile),
+        seccomp: s.seccomp.map(c2l_profile),
+        capabilities: s.capabilities.map(|c| local::Capabilities {
+            add: c.add,
+            drop: c.drop,
+        }),
+    }
+}
+
+fn l2c_security(s: local::SecurityContext) -> canon::SecurityContext {
+    canon::SecurityContext {
+        apparmor: s.apparmor.map(l2c_profile),
+        seccomp: s.seccomp.map(l2c_profile),
+        capabilities: s.capabilities.map(|c| canon::Capabilities {
+            add: c.add,
+            drop: c.drop,
+        }),
+    }
+}
+
 pub fn c2l_auth(a: &canon::AuthConfig) -> local::AuthConfig {
     local::AuthConfig {
         username: a.username.clone(),
@@ -206,10 +241,7 @@ pub fn c2l_container_cfg(c: canon::ContainerConfig) -> local::ContainerConfig {
         log_path: c.log_path,
         tty: c.tty,
         stdin: c.stdin,
-        // DRIFT: canonical seam (v1.1) has no security field. A kubelet
-        // AppArmor/seccomp/caps context cannot arrive through this path until the
-        // canonical seam is bumped to v1.2. See module-level note.
-        security: None,
+        security: c.security.map(c2l_security),
     }
 }
 pub fn l2c_container_cfg(c: local::ContainerConfig) -> canon::ContainerConfig {
@@ -227,7 +259,7 @@ pub fn l2c_container_cfg(c: local::ContainerConfig) -> canon::ContainerConfig {
         log_path: c.log_path,
         tty: c.tty,
         stdin: c.stdin,
-        // DRIFT: local `security` (v1.2) has no canonical counterpart → dropped.
+        security: c.security.map(l2c_security),
     }
 }
 

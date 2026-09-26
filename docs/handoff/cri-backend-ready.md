@@ -11,6 +11,11 @@ The real backend exists, is wired across every plane, and passes the shared
 conformance vectors. You can swap your fake. This note states **exactly** what
 is proven, what is deferred (and why), and how to consume it — no overclaim.
 
+**Integration status:** the lightr-cri workspace is now vendored at
+`crates/lightr-cri`; `crates/lightr-cri-serve` composes its shell with this
+backend through the canonical v1.2 seam. The original transcribed backend
+remains available for the core workspace and vectors.
+
 ---
 
 ## 1. What's delivered
@@ -26,10 +31,9 @@ CAS crates (`lightr-core`, `lightr-store`, `lightr-oci`, `lightr-engine`,
   There is **no git/path dep on lightr-cri** — the house seam pattern
   (`crates/lightr-cri-backend/src/lib.rs:1–22`). Drift is caught by the shared
   vectors, never by a crate import.
-- **Dependency firewall held.** Zero `tonic`/`prost`/gRPC anywhere in the
-  hugr-lightr workspace — verified: the only match in any `Cargo.toml` is the
-  comment forbidding it (`crates/lightr-cri-backend/Cargo.toml:14`). gRPC stays
-  in front of the seam, in your shell.
+- **Dependency firewall held.** Zero `tonic`/`prost`/gRPC in the default root
+  workspace. The opt-in excluded CRI workspace contains gRPC and keeps it in
+  front of the seam, in the shell.
 - **All planes wired** (each delegates from the trait impl to a per-concern
   module, `lib.rs:210–305`):
   - **sandbox / pod** — state machine + persistent records; `cfg(linux)`

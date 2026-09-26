@@ -52,9 +52,10 @@
 [Rr]eopen  # reason → R2
 [Rr]eopen[Cc]ontainer[Ll]og  # reason → R2
 
-# Security Context (all sub-describes: NamespaceOption, bucket, SeccompProfilePath,
-# NoNewPrivs, setuid/seccomp/caps/namespaces) — needs real isolation engine.
-# All 23 items failed in R0; none passed. Whole block safe to skip. R2.
+# Security Context: namespace/capability/no-new-privs subfamilies still need
+# separate runtime proofs. SeccompProfilePath is now wired through seam v1.2,
+# but stays in this aggregate skip until a real Linux critest run witnesses the
+# exact family. Remove only after that gate is green.
 Security Context  # reason → R2
 
 # AppArmor — needs a real LSM/AppArmor enforcement engine (load + verify + reject
