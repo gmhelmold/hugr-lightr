@@ -19,6 +19,7 @@ TESTS = ["child_closes_standard_streams", "delayed_reader_keeps_output_after_all
          "setup_error_does_not_spawn_a_non_tty_workload", "actual_exec_keeps_raw_master_merged_output_and_exit_code", "invalid_slave_descriptor_preserves_ebadf"]
 ORIGINAL = "stream::tests::open_exec_tty_uses_pty_master_no_stderr"
 SOURCE = "crates/lightr-cri-backend/src/stream_tty.rs"
+CRI_BACKEND_PACKAGE = "hugr-lightr-cri-backend"
 
 
 def main():
@@ -52,7 +53,7 @@ def main():
         receipt["commands"].append({"label": label, "command": command, "exit": code})
         return code, log.read_text(errors="replace")
 
-    cargo = ["cargo", "+1.96.0", "test", "--locked", "-p", "lightr-cri-backend", "--lib"]
+    cargo = ["cargo", "+1.96.0", "test", "--locked", "-p", CRI_BACKEND_PACKAGE, "--lib"]
 
     def suites(root, label):
         code, text = run(root, cargo + [PREFIX, "--", "--test-threads=4"], label + "-regressions")
