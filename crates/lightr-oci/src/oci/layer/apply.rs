@@ -43,10 +43,8 @@ pub(super) enum PendingEntry {
         data: Vec<u8>,
         mode: u32,
     },
-    Symlink {
-        dest: PathBuf,
-        link_target: PathBuf,
-    },
+    #[cfg(unix)]
+    Symlink { dest: PathBuf, link_target: PathBuf },
     /// A hardlink: `dest` should be a copy of `src` (both relative to tempdir
     /// but `src` is the as-declared path from the tar header, still needs
     /// resolving against tempdir).
@@ -193,12 +191,16 @@ pub(super) fn collect_ops<R: Read>(
                     .map_err(LightrError::Io)?
                     .map(|p| p.into_owned())
                     .unwrap_or_else(|| PathBuf::from(""));
-                if !path_is_safe(&link_target) {
-                    return Err(LightrError::InvalidManifest(format!(
-                        "unsafe layer symlink target: {}",
-                        link_target.display()
-                    )));
+                // OCI symlink targets are opaque link text, not archive paths.
+                // Never normalize, contain, or dereference them during import.
+                #[cfg(not(unix))]
+                {
+                    let _ = (dest, link_target);
+                    return Err(LightrError::Unsupported(
+                        "OCI symlink import requires Unix symlink support".to_string(),
+                    ));
                 }
+                #[cfg(unix)]
                 pending.push(PendingEntry::Symlink { dest, link_target });
             }
             EntryType::Link => {
@@ -318,6 +320,7 @@ pub(super) fn apply_ops(
                     }
                 }
             }
+            #[cfg(unix)]
             PendingEntry::Symlink { dest, link_target } => {
                 if whited_out_paths.contains(dest.as_path()) {
                     continue;
@@ -329,27 +332,6 @@ pub(super) fn apply_ops(
                 let _ = fs::remove_file(dest);
                 #[cfg(unix)]
                 std::os::unix::fs::symlink(link_target, dest).map_err(LightrError::Io)?;
-                #[cfg(windows)]
-                {
-                    // WIN-PATH: symlink creation requires Developer Mode or admin on Windows.
-                    // Fall back to copying the target if symlink creation fails so import never hard-fails.
-                    use std::os::windows::fs::symlink_file;
-                    if symlink_file(link_target, dest).is_err() {
-                        // Symlink creation failed (no Dev Mode / not admin) — copy the target instead.
-                        // The target may itself be relative; resolve it against dest's parent.
-                        let resolved_target = if link_target.is_absolute() {
-                            link_target.to_path_buf()
-                        } else {
-                            dest.parent()
-                                .unwrap_or_else(|| std::path::Path::new("."))
-                                .join(link_target)
-                        };
-                        if resolved_target.exists() {
-                            fs::copy(&resolved_target, dest).map_err(LightrError::Io)?;
-                        }
-                        // If target does not exist either (broken symlink in the layer), skip — no error.
-                    }
-                }
             }
             PendingEntry::Hardlink { .. } => {} // handled below
         }
