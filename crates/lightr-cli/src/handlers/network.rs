@@ -9,14 +9,15 @@
 //!   network rm <name>…               remove a user network (error if absent/
 //!                                     predefined/in-use)
 //!   network inspect <name> [--json]  print subnet + members
-//!   network connect    <net> <ctr>   honest exit-2 (no daemonless hot-plug)
-//!   network disconnect <net> <ctr>   honest exit-2 (no daemonless hot-plug)
+//!   network connect    <net> <ctr>   exit-2: networks fixed at run spawn
+//!   network disconnect <net> <ctr>   exit-2: networks fixed at run spawn
 //!
 //! ## Why connect/disconnect are exit-2, not a no-op
 //! Docker hot-plugs a running container's networks because a daemon owns the
 //! veth/bridge state live. Lightr has no daemon: a container's networks are
 //! fixed at spawn via `--network`. Silently succeeding would lie; we fail
-//! closed with a usage-class (exit-2) error pointing at the real knob.
+//! closed with a usage-class (exit-2) error naming the run-scoped boundary and
+//! the supported `run --network` and Compose alternatives.
 //!
 //! ## Why we re-check existence around `create`
 //! The registry's `create` is intentionally idempotent (open-if-present) for
@@ -218,6 +219,18 @@ fn inspect(home: &Path, target: &str) -> Result<(), LightrError> {
     Ok(())
 }
 
+fn hot_plug_unsupported_message(verb: &str, network: &str) -> String {
+    match verb {
+        "connect" => format!(
+            "network connect is not supported: networks are run-scoped and fixed at spawn time; recreate the run with `lightr run --network {network} ...` or configure `compose.yml` `networks:`"
+        ),
+        "disconnect" => format!(
+            "network disconnect is not supported: networks are run-scoped and fixed at spawn time; recreate the run without `--network {network}` or configure `compose.yml` `networks:`"
+        ),
+        _ => unreachable!("only connect and disconnect use this diagnostic"),
+    }
+}
+
 // ── dispatch ────────────────────────────────────────────────────────────────
 
 pub fn run(subcmd: NetworkCmd) -> i32 {
@@ -228,10 +241,11 @@ pub fn run(subcmd: NetworkCmd) -> i32 {
         NetworkCmd::Rm { targets } => rm(&home, &targets),
         NetworkCmd::Inspect { target, json: _ } => inspect(&home, &target),
         // Daemonless model: no live hot-plug. Honest usage-class (exit-2) error.
-        NetworkCmd::Connect { .. } | NetworkCmd::Disconnect { .. } => {
-            return die_internal(
-                &"live network connect/disconnect not supported; set --network at run",
-            );
+        NetworkCmd::Connect { network, .. } => {
+            return die_internal(&hot_plug_unsupported_message("connect", &network));
+        }
+        NetworkCmd::Disconnect { network, .. } => {
+            return die_internal(&hot_plug_unsupported_message("disconnect", &network));
         }
     };
     match result {

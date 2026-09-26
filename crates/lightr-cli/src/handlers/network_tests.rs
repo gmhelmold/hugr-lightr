@@ -166,7 +166,11 @@ fn inspect_rejects_predefined_networks() {
 // ── connect / disconnect ──────────────────────────────────────────────────────
 
 #[test]
-fn connect_is_honest_exit_2() {
+fn connect_is_exit_2_with_spawn_time_alternative() {
+    assert_eq!(
+        hot_plug_unsupported_message("connect", "web"),
+        "network connect is not supported: networks are run-scoped and fixed at spawn time; recreate the run with `lightr run --network web ...` or configure `compose.yml` `networks:`"
+    );
     let code = run(NetworkCmd::Connect {
         network: "web".to_string(),
         container: "ctr1".to_string(),
@@ -175,7 +179,11 @@ fn connect_is_honest_exit_2() {
 }
 
 #[test]
-fn disconnect_is_honest_exit_2() {
+fn disconnect_is_exit_2_with_spawn_time_alternative() {
+    assert_eq!(
+        hot_plug_unsupported_message("disconnect", "web"),
+        "network disconnect is not supported: networks are run-scoped and fixed at spawn time; recreate the run without `--network web` or configure `compose.yml` `networks:`"
+    );
     let code = run(NetworkCmd::Disconnect {
         network: "web".to_string(),
         container: "ctr1".to_string(),

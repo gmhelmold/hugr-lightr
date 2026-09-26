@@ -366,6 +366,11 @@ no extra entitlement beyond `com.apple.security.virtualization`, which
 6. **CLI surface**: `lightr network create|ls|rm <name>`; `run --network <name>`;
    `compose.yml` `networks:` key.
 
+   `lightr network connect` and `disconnect` intentionally exit 2. Networks are
+   run-scoped and fixed at spawn time: recreate a run with or without
+   `--network <name>`, or declare the desired membership in `compose.yml`
+   `networks:`. Daemonless local scope has no live network hot-plug.
+
 **Spike gate (ADR-0018 status)**: `VZFileHandleNetworkDeviceAttachment` over a
 datagram socket is gated on a de-risk spike. GREEN unblocks integration WPs
 C1-C7; RED falls back to a host-relay alternative. ADR-0018 will be updated on
