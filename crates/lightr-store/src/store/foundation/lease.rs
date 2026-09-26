@@ -128,6 +128,9 @@ impl ExclusiveStoreLease {
     pub fn belongs_to(&self, domain: &StoreLocks) -> bool {
         self.domain.same_store(domain)
     }
+    pub(super) fn staging(&self) -> io::Result<Directory> {
+        self.domain.0.child(".si01-staging")
+    }
 }
 
 /// A worker obtains key locks in one sorted set, or one cache leaf section.

@@ -1,13 +1,97 @@
 //! Owned, single-component mutations inside a private, lease-protected reserve.
 use super::Wait;
 use std::ffi::CString;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, Write};
 use std::os::fd::{AsRawFd, FromRawFd};
 use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::OpenOptionsExt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(target_os = "linux")]
+const OWNERSHIP_XATTR: &[u8] = b"user.lightr.si01.owned-scratch\0";
+#[cfg(target_os = "macos")]
+const OWNERSHIP_XATTR: &[u8] = b"com.hugr.lightr.si01.owned-scratch\0";
+const OWNERSHIP_STAMP: &[u8] = b"lightr-si01-owned-scratch-v1";
+
+fn ownership_name() -> *const libc::c_char {
+    OWNERSHIP_XATTR.as_ptr().cast()
+}
+
+fn set_ownership(file: &File) -> io::Result<()> {
+    #[cfg(target_os = "linux")]
+    let result = unsafe {
+        libc::fsetxattr(
+            file.as_raw_fd(),
+            ownership_name(),
+            OWNERSHIP_STAMP.as_ptr().cast(),
+            OWNERSHIP_STAMP.len(),
+            0,
+        )
+    };
+    #[cfg(target_os = "macos")]
+    let result = unsafe {
+        libc::fsetxattr(
+            file.as_raw_fd(),
+            ownership_name(),
+            OWNERSHIP_STAMP.as_ptr().cast(),
+            OWNERSHIP_STAMP.len(),
+            0,
+            0,
+        )
+    };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+pub(super) fn open_existing_directory(path: &std::path::Path) -> io::Result<File> {
+    OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)
+}
+
+pub(super) fn has_ownership(file: &File) -> io::Result<bool> {
+    let mut stamp = [0; OWNERSHIP_STAMP.len()];
+    #[cfg(target_os = "linux")]
+    let result = unsafe {
+        libc::fgetxattr(
+            file.as_raw_fd(),
+            ownership_name(),
+            stamp.as_mut_ptr().cast(),
+            stamp.len(),
+        )
+    };
+    #[cfg(target_os = "macos")]
+    let result = unsafe {
+        libc::fgetxattr(
+            file.as_raw_fd(),
+            ownership_name(),
+            stamp.as_mut_ptr().cast(),
+            stamp.len(),
+            0,
+            0,
+        )
+    };
+    if result >= 0 {
+        return Ok(result as usize == OWNERSHIP_STAMP.len() && stamp == OWNERSHIP_STAMP);
+    }
+    let error = io::Error::last_os_error();
+    #[cfg(target_os = "linux")]
+    if error.raw_os_error() == Some(libc::ENODATA) {
+        return Ok(false);
+    }
+    #[cfg(target_os = "macos")]
+    if error.raw_os_error() == Some(libc::ENOATTR) {
+        return Ok(false);
+    }
+    Err(error)
+}
 
 fn component(name: &str) -> io::Result<CString> {
     if name.is_empty() || name == "." || name == ".." || name.contains('/') {
@@ -154,6 +238,10 @@ impl Directory {
 
     pub(super) fn directory(&self, name: &str) -> io::Result<Self> {
         Self::create(&self.file, name)
+    }
+
+    pub(super) fn mark_owned_scratch(&self) -> io::Result<()> {
+        set_ownership(&self.file)
     }
 
     pub(super) fn file(&self, name: &str) -> io::Result<RegularFile> {
