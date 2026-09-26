@@ -32,11 +32,7 @@ pub(super) fn reap_owned_scratch(
             .map(|entry| Ok(entry?.file_name()))
             .collect::<io::Result<_>>()?;
         for entry in entries {
-            if super::native::reap_owned_scratch(
-                staging.anchored_handle(),
-                &entry,
-                || {},
-            )? {
+            if super::native::reap_owned_scratch(staging.anchored_handle(), &entry, || {})? {
                 removed += 1;
             }
         }
