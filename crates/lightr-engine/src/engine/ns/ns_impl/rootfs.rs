@@ -229,7 +229,7 @@ pub(super) fn setup_rootfs_and_pivot(
     // embedded). `unconfined` ⇒ no filter. Anything else is a PATH to an
     // OCI profile. `None` ⇒ byte-identical to the pre-#108 path.
     // seccomp COMPILE (host path visible, pre-pivot) → the filter carried to the
-    // late install. x86_64-linux-only; fails closed on other arches (see seccomp_ns).
+    // late install. x86_64/aarch64 Linux; other arches fail closed (see seccomp_ns).
     let compiled_seccomp: Option<super::SeccompFilter> =
         super::seccomp_ns::compile_seccomp(seccomp, exec_ready_fd);
 

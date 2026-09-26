@@ -66,17 +66,16 @@ pub(crate) fn named_volume_policy(runflags: &RunFlags, restart: Option<&str>) ->
 /// native is no sandbox by design, and vz caps/LSM/seccomp live inside the guest
 /// (not managed by this shim). A silent no-op on a security flag would give false
 /// security (the exact failure WP-#92 refused). `Some(2)` to reject, `None` to allow.
-/// `--seccomp` (a profile path OR the built-in `default`) is **x86_64-linux-only** —
-/// the seccomp-bpf filter is compiled for `AUDIT_ARCH_X86_64`. On any other arch,
-/// refuse rather than exec unfiltered (fail-closed law). Pure + `is_x86_64`-injected
+/// `--seccomp` (a profile path OR the built-in `default`) supports **x86_64 and
+/// aarch64 Linux**. On any other arch, refuse rather than exec unfiltered
+/// (fail-closed law). Pure + `is_supported_arch`-injected
 /// so the fail-closed decision is unit-testable on the x86_64 CI host. `Some(2)` ⇒
 /// abort with the honest Unsupported exit code; `None` ⇒ proceed.
-fn seccomp_arch_policy(seccomp: Option<&str>, is_x86_64: bool) -> Option<i32> {
-    if seccomp.is_some() && !is_x86_64 {
+fn seccomp_arch_policy(seccomp: Option<&str>, is_supported_arch: bool) -> Option<i32> {
+    if seccomp.is_some() && !is_supported_arch {
         eprintln!(
-            "lightr: --seccomp is x86_64-linux-only (the seccomp-bpf filter is compiled \
-             for AUDIT_ARCH_X86_64); refusing to run rather than exec unfiltered on this \
-             architecture"
+            "lightr: --seccomp supports only x86_64 and aarch64 Linux; refusing to run rather \
+              than exec unfiltered on this architecture"
         );
         return Some(2);
     }
@@ -84,7 +83,10 @@ fn seccomp_arch_policy(seccomp: Option<&str>, is_x86_64: bool) -> Option<i32> {
 }
 
 pub(super) fn engine_capability_policy(engine: EngineKind, rc: &RcConfig) -> Option<i32> {
-    if let Some(code) = seccomp_arch_policy(rc.seccomp.as_deref(), cfg!(target_arch = "x86_64")) {
+    if let Some(code) = seccomp_arch_policy(
+        rc.seccomp.as_deref(),
+        cfg!(any(target_arch = "x86_64", target_arch = "aarch64")),
+    ) {
         return Some(code);
     }
     if engine != EngineKind::Ns && (!rc.cap_add.is_empty() || !rc.cap_drop.is_empty()) {
@@ -180,10 +182,10 @@ pub(super) fn healthcheck_detach_note(has_healthcheck: bool, detach: bool) {
 }
 
 /// Networking Phase 1 policy for `-p/--publish` (frozen, honest — enforced in this
-/// order). A published service is a long-running server ⇒ it must be detached; and
-/// publishing is wired only for the native detached path + the vz detached
-/// container path (`--engine vz --rootfs <img>`). Other engines + vz-without-rootfs
-/// are Phase 2 — an honest error, never a dropped port. `Some(2)` to reject.
+/// order). Publishing is wired for native foreground and detached runs, plus the
+/// detached vz container path (`--engine vz --rootfs <img>`). Other engines +
+/// vz-without-rootfs are Phase 2 — an honest error, never a dropped port.
+/// `Some(2)` to reject.
 pub(super) fn publish_policy(
     publish_raw: &[String],
     detach: bool,
@@ -191,20 +193,14 @@ pub(super) fn publish_policy(
     rootfs_ref: Option<&str>,
 ) -> Option<i32> {
     if !publish_raw.is_empty() {
-        // 1. A published service is a long-running server ⇒ it must be detached.
-        if !detach {
-            eprintln!("lightr: -p/--publish requires -d (a published service runs detached)");
-            return Some(2);
-        }
-        // 2. Publishing is wired for the native detached path + the vz detached
-        //    container path (WP-NET2: `--engine vz --rootfs <img>`); other engines
-        //    + vz-without-rootfs are Phase 2 — an honest error, never a dropped port.
+        // Native owns a synchronous forwarder for foreground runs and its existing
+        // supervisor-owned forwarder for detached runs. vz needs its supervisor.
         let native = engine == EngineKind::Native && rootfs_ref.is_none();
-        let vz_container = engine == EngineKind::Vz && rootfs_ref.is_some();
+        let vz_container = detach && engine == EngineKind::Vz && rootfs_ref.is_some();
         if !native && !vz_container {
             eprintln!(
-                "lightr: -p/--publish is wired for the native and `--engine vz --rootfs` \
-                 detached paths; other engines are Phase 2"
+                "lightr: -p/--publish is wired for native foreground/detached runs and \
+                 `--engine vz --rootfs -d`; other engines are Phase 2"
             );
             return Some(2);
         }
@@ -355,12 +351,12 @@ mod tests {
     use super::seccomp_arch_policy;
 
     #[test]
-    fn seccomp_is_x86_64_only_and_fails_closed_elsewhere() {
-        // Non-x86_64: ANY --seccomp (a profile path OR the built-in `default`)
+    fn seccomp_supports_x86_64_and_aarch64_and_fails_closed_elsewhere() {
+        // Unsupported arches: ANY --seccomp (a profile path OR built-in `default`)
         // refuses with the honest exit 2 — never a silent unfiltered run.
         assert_eq!(seccomp_arch_policy(Some("default"), false), Some(2));
         assert_eq!(seccomp_arch_policy(Some("/etc/prof.json"), false), Some(2));
-        // x86_64: the filter is supported ⇒ proceed.
+        // x86_64/aarch64: per-arch filters are supported ⇒ proceed.
         assert_eq!(seccomp_arch_policy(Some("default"), true), None);
         assert_eq!(seccomp_arch_policy(Some("/etc/prof.json"), true), None);
         // No --seccomp ⇒ no error on any arch (runs without a filter, as before).

@@ -1,4 +1,4 @@
-//! WP-#108 seccomp: Linux syscall NAME -> x86_64 number table.
+//! Linux syscall NAME -> ABI-specific number tables.
 //! Extracted verbatim from the seccomp compiler for the <=400-LOC godfile
 //! invariant (behavior-preserving). Consumed by `super::compile`.
 
@@ -7,7 +7,45 @@
 /// the Docker default seccomp profile plus the common remainder; an unknown name
 /// returns `None` so the caller fails closed. The `libc::SYS_*` constants are
 /// `i64`, returned as such for the BPF `k` cast.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(dead_code)] // Target build constructs only its own ABI variant.
+pub(super) enum SeccompArch {
+    X86_64,
+    Aarch64,
+}
+
+pub(super) const fn target_arch() -> SeccompArch {
+    #[cfg(target_arch = "x86_64")]
+    {
+        SeccompArch::X86_64
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        SeccompArch::Aarch64
+    }
+}
+
 pub(super) fn syscall_nr(name: &str) -> Option<i64> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        x86_64_syscall_nr(name)
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        aarch64_syscall_nr(name)
+    }
+}
+
+#[cfg(test)]
+pub(super) fn syscall_nr_for_arch(name: &str, arch: SeccompArch) -> Option<i64> {
+    match arch {
+        SeccompArch::X86_64 => x86_64_test_nr(name),
+        SeccompArch::Aarch64 => aarch64_syscall_nr(name),
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+fn x86_64_syscall_nr(name: &str) -> Option<i64> {
     Some(match name {
         "accept" => libc::SYS_accept,
         "accept4" => libc::SYS_accept4,
@@ -322,6 +360,286 @@ pub(super) fn syscall_nr(name: &str) -> Option<i64> {
         "waitid" => libc::SYS_waitid,
         "write" => libc::SYS_write,
         "writev" => libc::SYS_writev,
+        _ => return None,
+    })
+}
+
+#[cfg(test)]
+fn x86_64_test_nr(name: &str) -> Option<i64> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        x86_64_syscall_nr(name)
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        Some(match name {
+            "read" => 0,
+            "write" => 1,
+            "mkdirat" => 258,
+            _ => return None,
+        })
+    }
+}
+
+// AArch64 Linux uses the asm-generic syscall ABI. Keep this table separate from
+// x86_64: same names frequently have different numbers, and x86-only names must
+// remain unsupported rather than map to an unrelated syscall.
+#[allow(dead_code)] // x86_64 builds select their own table.
+fn aarch64_syscall_nr(name: &str) -> Option<i64> {
+    Some(match name {
+        "accept" => 202,
+        "accept4" => 242,
+        "adjtimex" => 171,
+        "bind" => 200,
+        "brk" => 214,
+        "capget" => 90,
+        "capset" => 91,
+        "chdir" => 49,
+        "clock_adjtime" => 266,
+        "clock_getres" => 114,
+        "clock_gettime" => 113,
+        "clock_nanosleep" => 115,
+        "clone" => 220,
+        "clone3" => 435,
+        "close" => 57,
+        "close_range" => 436,
+        "connect" => 203,
+        "copy_file_range" => 285,
+        "dup" => 23,
+        "dup3" => 24,
+        "epoll_create1" => 20,
+        "epoll_ctl" => 21,
+        "epoll_pwait" => 22,
+        "epoll_pwait2" => 441,
+        "eventfd2" => 19,
+        "execve" => 221,
+        "execveat" => 281,
+        "exit" => 93,
+        "exit_group" => 94,
+        "faccessat" => 48,
+        "faccessat2" => 439,
+        "fallocate" => 47,
+        "fanotify_mark" => 263,
+        "fchdir" => 50,
+        "fchmod" => 52,
+        "fchmodat" => 53,
+        "fchown" => 55,
+        "fchownat" => 54,
+        "fcntl" => 25,
+        "fdatasync" => 83,
+        "fgetxattr" => 10,
+        "flistxattr" => 13,
+        "flock" => 32,
+        "fremovexattr" => 16,
+        "fsetxattr" => 7,
+        "fstat" => 80,
+        "fstatfs" => 44,
+        "fsync" => 82,
+        "ftruncate" => 46,
+        "futex" => 98,
+        "futex_waitv" => 449,
+        "get_robust_list" => 100,
+        "getcpu" => 168,
+        "getcwd" => 17,
+        "getdents64" => 61,
+        "getegid" => 177,
+        "geteuid" => 175,
+        "getgid" => 176,
+        "getgroups" => 158,
+        "getitimer" => 102,
+        "getpeername" => 205,
+        "getpgid" => 155,
+        "getpid" => 172,
+        "getppid" => 173,
+        "getpriority" => 141,
+        "getrandom" => 278,
+        "getresgid" => 150,
+        "getresuid" => 148,
+        "getrusage" => 165,
+        "getsid" => 156,
+        "getsockname" => 204,
+        "getsockopt" => 209,
+        "gettid" => 178,
+        "gettimeofday" => 169,
+        "getuid" => 174,
+        "getxattr" => 8,
+        "inotify_add_watch" => 27,
+        "inotify_init1" => 26,
+        "inotify_rm_watch" => 28,
+        "io_cancel" => 3,
+        "io_destroy" => 1,
+        "io_getevents" => 4,
+        "io_setup" => 0,
+        "io_submit" => 2,
+        "ioctl" => 29,
+        "ioprio_get" => 31,
+        "ioprio_set" => 30,
+        "kcmp" => 272,
+        "keyctl" => 219,
+        "kill" => 129,
+        "landlock_add_rule" => 445,
+        "landlock_create_ruleset" => 444,
+        "landlock_restrict_self" => 446,
+        "lgetxattr" => 9,
+        "linkat" => 37,
+        "listen" => 201,
+        "listxattr" => 11,
+        "llistxattr" => 12,
+        "lremovexattr" => 15,
+        "lseek" => 62,
+        "lsetxattr" => 6,
+        "madvise" => 233,
+        "mbind" => 235,
+        "membarrier" => 283,
+        "memfd_create" => 279,
+        "mincore" => 232,
+        "mkdirat" => 34,
+        "mknodat" => 33,
+        "mlock" => 228,
+        "mlock2" => 284,
+        "mlockall" => 230,
+        "mmap" => 222,
+        "mprotect" => 226,
+        "mq_getsetattr" => 185,
+        "mq_notify" => 184,
+        "mq_open" => 180,
+        "mq_timedreceive" => 183,
+        "mq_timedsend" => 182,
+        "mq_unlink" => 181,
+        "mremap" => 216,
+        "msgctl" => 187,
+        "msgget" => 186,
+        "msgrcv" => 188,
+        "msgsnd" => 189,
+        "msync" => 227,
+        "munlock" => 229,
+        "munlockall" => 231,
+        "munmap" => 215,
+        "name_to_handle_at" => 264,
+        "nanosleep" => 101,
+        "newfstatat" => 79,
+        "openat" => 56,
+        "openat2" => 437,
+        "pidfd_open" => 434,
+        "pidfd_send_signal" => 424,
+        "pipe2" => 59,
+        "pkey_alloc" => 289,
+        "pkey_free" => 290,
+        "pkey_mprotect" => 288,
+        "ppoll" => 73,
+        "prctl" => 167,
+        "pread64" => 67,
+        "preadv" => 69,
+        "preadv2" => 286,
+        "prlimit64" => 261,
+        "process_madvise" => 440,
+        "process_mrelease" => 448,
+        "process_vm_readv" => 270,
+        "process_vm_writev" => 271,
+        "pselect6" => 72,
+        "ptrace" => 117,
+        "pwrite64" => 68,
+        "pwritev" => 70,
+        "pwritev2" => 287,
+        "read" => 63,
+        "readahead" => 213,
+        "readlinkat" => 78,
+        "readv" => 65,
+        "reboot" => 142,
+        "recvfrom" => 207,
+        "recvmmsg" => 243,
+        "recvmsg" => 212,
+        "remap_file_pages" => 234,
+        "removexattr" => 14,
+        "renameat2" => 276,
+        "restart_syscall" => 128,
+        "rseq" => 293,
+        "rt_sigaction" => 134,
+        "rt_sigpending" => 136,
+        "rt_sigprocmask" => 135,
+        "rt_sigqueueinfo" => 138,
+        "rt_sigreturn" => 139,
+        "rt_sigsuspend" => 133,
+        "rt_sigtimedwait" => 137,
+        "rt_tgsigqueueinfo" => 240,
+        "sched_get_priority_max" => 125,
+        "sched_get_priority_min" => 126,
+        "sched_getaffinity" => 123,
+        "sched_getattr" => 275,
+        "sched_getparam" => 121,
+        "sched_getscheduler" => 120,
+        "sched_rr_get_interval" => 127,
+        "sched_setaffinity" => 122,
+        "sched_setattr" => 274,
+        "sched_setparam" => 118,
+        "sched_setscheduler" => 119,
+        "sched_yield" => 124,
+        "seccomp" => 277,
+        "semctl" => 191,
+        "semget" => 190,
+        "semop" => 193,
+        "semtimedop" => 192,
+        "sendmmsg" => 269,
+        "sendmsg" => 211,
+        "sendto" => 206,
+        "set_robust_list" => 99,
+        "set_tid_address" => 96,
+        "setfsgid" => 152,
+        "setfsuid" => 151,
+        "setgid" => 144,
+        "setgroups" => 159,
+        "setitimer" => 103,
+        "setns" => 268,
+        "setpgid" => 154,
+        "setpriority" => 140,
+        "setregid" => 143,
+        "setresgid" => 149,
+        "setresuid" => 147,
+        "setreuid" => 145,
+        "setsid" => 157,
+        "setsockopt" => 208,
+        "settimeofday" => 170,
+        "setuid" => 146,
+        "setxattr" => 5,
+        "shmat" => 196,
+        "shmctl" => 195,
+        "shmdt" => 197,
+        "shmget" => 194,
+        "shutdown" => 210,
+        "sigaltstack" => 132,
+        "signalfd4" => 74,
+        "socket" => 198,
+        "socketpair" => 199,
+        "splice" => 76,
+        "statfs" => 43,
+        "statx" => 291,
+        "symlinkat" => 36,
+        "sync" => 81,
+        "syncfs" => 267,
+        "sysinfo" => 179,
+        "syslog" => 116,
+        "tee" => 77,
+        "tgkill" => 131,
+        "timer_create" => 107,
+        "timer_delete" => 111,
+        "timer_getoverrun" => 109,
+        "timer_gettime" => 108,
+        "timer_settime" => 110,
+        "timerfd_create" => 85,
+        "timerfd_gettime" => 87,
+        "timerfd_settime" => 86,
+        "times" => 153,
+        "tkill" => 130,
+        "truncate" => 45,
+        "umask" => 166,
+        "uname" => 160,
+        "unlinkat" => 35,
+        "utimensat" => 88,
+        "vmsplice" => 75,
+        "wait4" => 260,
+        "waitid" => 95,
+        "write" => 64,
+        "writev" => 66,
         _ => return None,
     })
 }

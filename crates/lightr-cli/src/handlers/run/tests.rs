@@ -1,4 +1,5 @@
-use super::{parse_publish, run, HealthFlags};
+use super::{parse_publish, policy, run, HealthFlags};
+use lightr_engine::EngineKind;
 
 // ── parse_publish ───────────────────────────────────────────────────────
 
@@ -44,38 +45,23 @@ fn publish_rejects_out_of_range_and_nonnumeric() {
 // ── policy guards (return 2 BEFORE any store/engine work) ─────────────────
 
 #[test]
-fn publish_without_detach_exits_2() {
-    // -p given, detach=false ⇒ exit 2 (guard 1), before Store::open.
-    let code = run(
-        ".",
-        &[],
-        &[],
-        &["true".to_string()],
-        false, // json
-        false, // explain
-        false, // detach  ← NOT detached
-        &["39000:39001".to_string()],
-        false, // publish_all (WP-B2)
-        &[],
-        "native",
+fn publish_policy_allows_native_foreground_and_rejects_unwired_engines() {
+    let ports = ["39000:39001".to_string()];
+    assert_eq!(
+        policy::publish_policy(&ports, false, EngineKind::Native, None),
         None,
-        "host", // net (WP-NET-ISO)
-        false,
-        None,
-        None,
-        &[],
-        &[],
-        &[],  // env_set (WP-RC-1)
-        None, // env_file (WP-RC-1)
-        None, // workdir (WP-RC-WORKDIR)
-        None, // user (WP-RC-USER)
-        None, // restart (WP-RC-RESTART)
-        None, // stop_signal (WP-RC-STOPSIGNAL)
-        &HealthFlags::default(),
-        super::RawRcFlags::default(),  // WP-CLI-TRIO / RC-FLAGS
-        super::RawRunFlags::default(), // WP-RUNFLAGS
+        "native foreground publish is wired"
     );
-    assert_eq!(code, 2, "-p without -d must exit 2");
+    assert_eq!(
+        policy::publish_policy(&ports, false, EngineKind::Vz, Some("image")),
+        Some(2),
+        "vz publish still requires its detached supervisor"
+    );
+    assert_eq!(
+        policy::publish_policy(&ports, false, EngineKind::Ns, None),
+        Some(2),
+        "unwired engines fail closed"
+    );
 }
 
 #[test]

@@ -1,6 +1,7 @@
 //! WP-#107/#108 seccomp compiler unit tests (cBPF `run_bpf` simulator + shape/
 //! selectivity/overflow guards). Extracted for the <=400-LOC godfile invariant.
 
+use super::syscalls::{syscall_nr_for_arch, SeccompArch};
 use super::*;
 
 mod arg_rules;
@@ -76,14 +77,36 @@ fn run_bpf_args(prog: &[libc::sock_filter], arch: u32, nr: u32, args: [u64; 6]) 
 const I386_ARCH: u32 = 0x4000_0003; // AUDIT_ARCH_I386 — a "foreign" arch here.
 
 #[test]
+fn syscall_tables_select_target_abi_numbers() {
+    assert_eq!(syscall_nr_for_arch("read", SeccompArch::X86_64), Some(0));
+    assert_eq!(
+        syscall_nr_for_arch("mkdirat", SeccompArch::X86_64),
+        Some(258)
+    );
+    assert_eq!(syscall_nr_for_arch("read", SeccompArch::Aarch64), Some(63));
+    assert_eq!(
+        syscall_nr_for_arch("mkdirat", SeccompArch::Aarch64),
+        Some(34)
+    );
+    assert_eq!(
+        syscall_nr_for_arch("arch_prctl", SeccompArch::Aarch64),
+        None
+    );
+}
+
+#[test]
 fn deny_list_selectively_blocks_only_listed_syscalls() {
     // default ALLOW, mkdir/mkdirat → ERRNO(EPERM). The filter MUST block ONLY
     // mkdir/mkdirat and ALLOW everything else (the bug was: it blocked all).
-    let c = profile(
-            r#"{ "defaultAction": "SCMP_ACT_ALLOW",
-                 "syscalls": [ { "names": ["mkdir","mkdirat"], "action": "SCMP_ACT_ERRNO", "errnoRet": 1 } ] }"#,
-        )
-        .expect("supported profile compiles");
+    let mkdir = if cfg!(target_arch = "aarch64") {
+        "mkdirat"
+    } else {
+        "mkdir"
+    };
+    let c = profile(&format!(
+        r#"{{ "defaultAction": "SCMP_ACT_ALLOW", "syscalls": [ {{ "names": ["{mkdir}","mkdirat"], "action": "SCMP_ACT_ERRNO", "errnoRet": 1 }} ] }}"#,
+    ))
+    .expect("supported profile compiles");
     // ld arch, arch-kill, initial ld nr, x32-kill, 2×(ld nr,jeq,ja,ret), final ret = 15.
     assert_eq!(
         c.prog.len(),
@@ -92,7 +115,7 @@ fn deny_list_selectively_blocks_only_listed_syscalls() {
     );
     let nr = |n| syscall_nr(n).unwrap() as u32;
     assert_eq!(
-        run_bpf(&c.prog, AUDIT_ARCH_X86_64, nr("mkdir")),
+        run_bpf(&c.prog, AUDIT_ARCH_X86_64, nr(mkdir)),
         SECCOMP_RET_ERRNO | 1,
         "mkdir must be ERRNO(EPERM)"
     );
@@ -114,12 +137,13 @@ fn deny_list_selectively_blocks_only_listed_syscalls() {
     );
     // Foreign and x32 execution must never inherit default ALLOW.
     assert_eq!(
-        run_bpf(&c.prog, I386_ARCH, nr("mkdir")),
+        run_bpf(&c.prog, I386_ARCH, nr(mkdir)),
         SECCOMP_RET_KILL_PROCESS,
         "foreign arch must fail closed"
     );
+    #[cfg(target_arch = "x86_64")]
     assert_eq!(
-        run_bpf(&c.prog, AUDIT_ARCH_X86_64, nr("mkdir") | X32_SYSCALL_BIT),
+        run_bpf(&c.prog, AUDIT_ARCH_X86_64, nr(mkdir) | X32_SYSCALL_BIT),
         SECCOMP_RET_KILL_PROCESS,
         "x32 syscall ABI must fail closed"
     );
@@ -140,8 +164,13 @@ fn allow_list_default_deny_allows_only_listed() {
         SECCOMP_RET_ALLOW,
         "listed write must be ALLOW"
     );
+    let non_listed = if cfg!(target_arch = "aarch64") {
+        "mkdirat"
+    } else {
+        "mkdir"
+    };
     assert_eq!(
-        run_bpf(&c.prog, AUDIT_ARCH_X86_64, nr("mkdir")),
+        run_bpf(&c.prog, AUDIT_ARCH_X86_64, nr(non_listed)),
         SECCOMP_RET_ERRNO | 1,
         "non-listed syscall must hit default ERRNO"
     );
@@ -166,19 +195,27 @@ fn unknown_syscall_name_is_unsupported() {
 
 #[test]
 fn mixed_actions_are_selected_per_rule() {
-    let r = profile(
-        r#"{ "defaultAction": "SCMP_ACT_ALLOW",
-                 "syscalls": [ { "names": ["mkdir"], "action": "SCMP_ACT_ERRNO", "errnoRet": 13 },
-                               { "names": ["rmdir"], "action": "SCMP_ACT_KILL" } ] }"#,
-    )
+    let mkdir = if cfg!(target_arch = "aarch64") {
+        "mkdirat"
+    } else {
+        "mkdir"
+    };
+    let rmdir = if cfg!(target_arch = "aarch64") {
+        "unlinkat"
+    } else {
+        "rmdir"
+    };
+    let r = profile(&format!(
+        r#"{{ "defaultAction": "SCMP_ACT_ALLOW", "syscalls": [ {{ "names": ["{mkdir}"], "action": "SCMP_ACT_ERRNO", "errnoRet": 13 }}, {{ "names": ["{rmdir}"], "action": "SCMP_ACT_KILL" }} ] }}"#,
+    ))
     .expect("mixed per-syscall actions compile");
     let nr = |n| syscall_nr(n).unwrap() as u32;
     assert_eq!(
-        run_bpf(&r.prog, AUDIT_ARCH_X86_64, nr("mkdir")),
+        run_bpf(&r.prog, AUDIT_ARCH_X86_64, nr(mkdir)),
         SECCOMP_RET_ERRNO | 13
     );
     assert_eq!(
-        run_bpf(&r.prog, AUDIT_ARCH_X86_64, nr("rmdir")),
+        run_bpf(&r.prog, AUDIT_ARCH_X86_64, nr(rmdir)),
         SECCOMP_RET_KILL_THREAD
     );
     assert_eq!(
@@ -199,6 +236,7 @@ fn builtin_default_profile_compiles_and_is_default_deny() {
         SECCOMP_RET_ALLOW,
         "an allow-listed syscall (read) must be ALLOW"
     );
+    #[cfg(target_arch = "x86_64")]
     assert_eq!(
         run_bpf(&c.prog, AUDIT_ARCH_X86_64, nr("arch_prctl")),
         SECCOMP_RET_ALLOW,
@@ -241,6 +279,7 @@ fn builtin_default_profile_compiles_and_is_default_deny() {
         SECCOMP_RET_KILL_PROCESS,
         "foreign arch must fail closed"
     );
+    #[cfg(target_arch = "x86_64")]
     assert_eq!(
         run_bpf(&c.prog, AUDIT_ARCH_X86_64, nr("read") | X32_SYSCALL_BIT),
         SECCOMP_RET_KILL_PROCESS,

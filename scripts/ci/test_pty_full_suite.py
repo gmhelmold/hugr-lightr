@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+import pty_controls as controls
 import pty_full_suite as suite
 
 from pty_full_suite import (ORIGINAL, REGRESSION, DESCRIPTOR_TESTS, execute, listed_tests,
@@ -98,6 +99,11 @@ class PtyFullSuiteTests(unittest.TestCase):
         self.assertIn("if: always()", text)
         self.assertNotIn("continue-on-error", text)
         self.assertIn("scripts/ci/test_pty_full_suite.py", text)
+
+    def test_native_gates_target_root_cri_backend_package(self):
+        package = "hugr-lightr-cri-backend"
+        self.assertEqual(suite.CRI_BACKEND_PACKAGE, package)
+        self.assertEqual(controls.CRI_BACKEND_PACKAGE, package)
 
 
 class PtySuiteFailureEvidenceTests(unittest.TestCase):

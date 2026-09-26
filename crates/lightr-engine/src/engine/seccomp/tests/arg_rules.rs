@@ -177,7 +177,6 @@ fn invalid_arg_grammar_fails_closed() {
         r#"{ "defaultAction": "SCMP_ACT_ALLOW", "syscalls": [{ "names": ["ioctl"], "action": "SCMP_ACT_ALLOW", "errnoRet": 1 }] }"#,
         r#"{ "defaultAction": "SCMP_ACT_ALLOW", "syscalls": [{ "names": ["ioctl"], "action": "SCMP_ACT_KILL", "errnoRet": 1 }] }"#,
         r#"{ "defaultAction": "SCMP_ACT_ALLOW", "archMap": [], "syscalls": [] }"#,
-        r#"{ "defaultAction": "SCMP_ACT_ALLOW", "architectures": ["SCMP_ARCH_AARCH64"], "syscalls": [] }"#,
         r#"{ "defaultAction": "SCMP_ACT_ALLOW", "syscalls": [{ "names": ["ioctl"], "action": "SCMP_ACT_ALLOW", "includes": { "caps": ["CAP_SYS_ADMIN"] } }] }"#,
         r#"{ "defaultAction": "SCMP_ACT_ALLOW", "unknownField": true, "syscalls": [] }"#,
     ] {
@@ -186,6 +185,14 @@ fn invalid_arg_grammar_fails_closed() {
             "invalid seccomp arg grammar must fail closed"
         );
     }
+    assert_eq!(
+        profile(
+            r#"{ "defaultAction": "SCMP_ACT_ALLOW", "architectures": ["SCMP_ARCH_AARCH64"], "syscalls": [] }"#,
+        )
+        .is_err(),
+        cfg!(target_arch = "x86_64"),
+        "profile architecture must match the active seccomp ABI"
+    );
 }
 
 #[test]

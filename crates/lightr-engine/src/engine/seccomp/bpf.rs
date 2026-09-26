@@ -92,12 +92,7 @@ pub(super) fn compile(default_ret: u32, rules: &[Rule]) -> std::io::Result<Vec<l
         BPF_LD | BPF_W | BPF_ABS,
         super::SECCOMP_DATA_ARCH_OFFSET,
     ));
-    b.push(jump(
-        BPF_JMP | BPF_JEQ | BPF_K,
-        super::AUDIT_ARCH_X86_64,
-        1,
-        0,
-    ));
+    b.push(jump(BPF_JMP | BPF_JEQ | BPF_K, super::audit_arch(), 1, 0));
     b.push(stmt(BPF_RET | BPF_K, super::SECCOMP_RET_KILL_PROCESS));
     b.push(stmt(
         BPF_LD | BPF_W | BPF_ABS,

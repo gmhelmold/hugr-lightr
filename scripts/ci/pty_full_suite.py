@@ -19,6 +19,7 @@ DESCRIPTOR_TESTS = ["stream_io::descriptor_tests::" + name for name in (
     "pty_descriptors_are_close_on_exec_at_return",
     "pty_descriptor_duplicates_are_close_on_exec",
     "pty_descriptors_are_absent_after_unrelated_exec")]
+CRI_BACKEND_PACKAGE = "hugr-lightr-cri-backend"
 
 
 def error_record(error):
@@ -165,7 +166,7 @@ def main():
                 ["git", "rev-parse", *arguments], cwd=ROOT, text=True, timeout=10).strip()
         receipt["compiler"] = subprocess.check_output(
             ["rustc", "+1.96.0", "-Vv"], cwd=ROOT, text=True, timeout=30)
-        _, text = run(["cargo", "+1.96.0", "test", "--locked", "-p", "lightr-cri-backend",
+        _, text = run(["cargo", "+1.96.0", "test", "--locked", "-p", CRI_BACKEND_PACKAGE,
                        "--features", "lightr-run/vz", "--lib", "--no-run",
                        "--message-format=json"], "build", 900)
         binary = select_executable(text, ROOT)
