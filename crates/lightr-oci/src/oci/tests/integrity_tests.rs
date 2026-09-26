@@ -52,24 +52,29 @@ fn make_symlink_layer(target: &str, write_through_link: bool) -> Vec<u8> {
     tar.into_inner().unwrap().finish().unwrap()
 }
 
+#[cfg(unix)]
 #[test]
-fn test_symlink_target_traversal_rejects_import_without_ref() {
+fn test_opaque_oci_symlink_targets_import_and_hydrate_exactly() {
     let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-    for (suffix, target) in [("absolute", "/etc/passwd"), ("parent", "../escape")] {
+    for (suffix, target) in [("absolute", "/bin/busybox"), ("parent", "../outside")] {
         let tmp = TempDir::new().unwrap();
         let (_home, store) = tmp_store_and_home();
         let layout_dir = make_layout(tmp.path(), &[make_symlink_layer(target, false)]);
         let name = format!("symlink-{suffix}");
-        let result = import_layout(&layout_dir, &store, &name);
-
+        import_layout(&layout_dir, &store, &name).unwrap();
+        let hydrate_dir = tmp.path().join(format!("hydrated-{suffix}"));
+        fs::create_dir_all(&hydrate_dir).unwrap();
+        lightr_index::hydrate(&hydrate_dir, &store, &name).unwrap();
         assert!(
-            matches!(&result, Err(LightrError::InvalidManifest(msg)) if msg.contains("unsafe layer symlink target")),
-            "{suffix} symlink target must reject import, got: {:?}",
-            result.as_ref().err()
+            fs::symlink_metadata(hydrate_dir.join("link"))
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "{suffix} target must remain a symlink"
         );
-        assert!(
-            store.ref_get(&name).unwrap().is_none(),
-            "rejected symlink target must not publish ref"
+        assert_eq!(
+            fs::read_link(hydrate_dir.join("link")).unwrap(),
+            Path::new(target)
         );
     }
 }
@@ -79,7 +84,7 @@ fn test_write_through_symlink_component_rejects_import_without_ref() {
     let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
     let tmp = TempDir::new().unwrap();
     let (_home, store) = tmp_store_and_home();
-    let layout_dir = make_layout(tmp.path(), &[make_symlink_layer("target", true)]);
+    let layout_dir = make_layout(tmp.path(), &[make_symlink_layer("/bin/busybox", true)]);
     let result = import_layout(&layout_dir, &store, "symlink-component");
 
     assert!(
@@ -91,6 +96,19 @@ fn test_write_through_symlink_component_rejects_import_without_ref() {
         store.ref_get("symlink-component").unwrap().is_none(),
         "rejected symlink-component import must not publish ref"
     );
+}
+
+#[cfg(not(unix))]
+#[test]
+fn test_oci_symlink_import_is_unsupported_without_ref() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let tmp = TempDir::new().unwrap();
+    let (_home, store) = tmp_store_and_home();
+    let layout_dir = make_layout(tmp.path(), &[make_symlink_layer("/bin/busybox", false)]);
+    let result = import_layout(&layout_dir, &store, "unsupported-symlink");
+
+    assert!(matches!(result, Err(LightrError::Unsupported(_))));
+    assert!(store.ref_get("unsupported-symlink").unwrap().is_none());
 }
 
 #[cfg(unix)]
