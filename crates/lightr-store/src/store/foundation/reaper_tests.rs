@@ -20,9 +20,8 @@ const OWNERSHIP_XATTR: &[u8] = b"user.lightr.si01.owned-scratch\0";
 const OWNERSHIP_XATTR: &[u8] = b"com.hugr.lightr.si01.owned-scratch\0";
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn malformed_ownership(path: &Path) {
+fn malformed_ownership(path: &Path, bytes: &[u8]) {
     let file = fs::File::open(path).unwrap();
-    let bytes = [0u8; 64];
     #[cfg(target_os = "linux")]
     let result = unsafe {
         libc::fsetxattr(
@@ -181,7 +180,48 @@ fn reaper_skips_malformed_ownership_and_reaps_later_owned_scratch() {
     let staging = root.path().join(".si01-staging");
     let malformed = staging.join("malformed");
     fs::create_dir_all(&malformed).unwrap();
-    malformed_ownership(&malformed);
+    malformed_ownership(&malformed, &[0; 64]);
+
+    let ready = signals.path().join("reserved");
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", CHILD, "--nocapture"])
+        .env(ROOT_ENV, root.path())
+        .env(READY_ENV, &ready)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !ready.exists() {
+        if let Some(status) = child.try_wait().unwrap() {
+            panic!("child exited before reserving scratch: {status}");
+        }
+        assert!(
+            Instant::now() < deadline,
+            "child handshake watchdog expired"
+        );
+        std::thread::park_timeout(Duration::from_millis(2));
+    }
+    child.kill().unwrap();
+    assert!(!child.wait().unwrap().success());
+    let guard = domain.exclusive(Wait::Try).unwrap();
+
+    assert_eq!(reap_owned_scratch(&domain, &guard).unwrap(), 1);
+    assert!(malformed.is_dir());
+    assert_eq!(fs::read_dir(staging).unwrap().count(), 1);
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn reaper_skips_short_malformed_ownership_and_reaps_later_owned_scratch() {
+    let root = TempDir::new().unwrap();
+    let signals = TempDir::new().unwrap();
+    let domain = StoreLocks::open_existing(root.path()).unwrap();
+    let staging = root.path().join(".si01-staging");
+    let malformed = staging.join("short-malformed");
+    fs::create_dir_all(&malformed).unwrap();
+    malformed_ownership(&malformed, &[0]);
 
     let ready = signals.path().join("reserved");
     let mut child = Command::new(std::env::current_exe().unwrap())
