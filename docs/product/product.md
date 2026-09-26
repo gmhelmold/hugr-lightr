@@ -116,7 +116,7 @@ Workspaces never sees a "Lightr" line item.
 
 1. **License** — MIT/Apache (max adoption) vs BSL (hyperscaler protection).
    The funnel needs *free*, not necessarily *open*; strategic call.
-2. **clw seam** — frozen `C-SELF-01` (`CLAUDE.md` §9): direct dependency
+2. **clw seam** — frozen `C-SELF-01` (`docs/spec/lightr_index_contract.md`): direct dependency
    (`ARCH-02` approved); `WP-SELF-10` (`clw` absorption into `lightr-views`,
    `F-103` `CoW` `hydrate`). No wire contract (`docs/spec/` `lightr_index_contract.md`
    documents `interface` `lightr_index` `snapshot`/`hydrate` as frozen reference).
