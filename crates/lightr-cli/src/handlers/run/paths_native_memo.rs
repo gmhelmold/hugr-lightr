@@ -190,6 +190,22 @@ pub(crate) fn run_native_memo(req: NativeRun) -> i32 {
         return 2;
     }
 
+    // Foreground runs own their forwarders directly: bind every listener before
+    // workload execution, then let this local vector tear all listeners down on
+    // every return path (including memo/workload errors and cache replay).
+    let mut forwarders = Vec::with_capacity(spec.ports.len());
+    for port in &spec.ports {
+        match lightr_run::portforward::start_on(
+            port.bind_ip(),
+            port.host,
+            "127.0.0.1",
+            port.container,
+        ) {
+            Ok(forwarder) => forwarders.push(forwarder),
+            Err(error) => return die_lightr(&error),
+        }
+    }
+
     if explain {
         let os_arch = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
         eprintln!(

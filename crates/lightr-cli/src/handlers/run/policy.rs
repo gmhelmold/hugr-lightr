@@ -180,10 +180,10 @@ pub(super) fn healthcheck_detach_note(has_healthcheck: bool, detach: bool) {
 }
 
 /// Networking Phase 1 policy for `-p/--publish` (frozen, honest — enforced in this
-/// order). A published service is a long-running server ⇒ it must be detached; and
-/// publishing is wired only for the native detached path + the vz detached
-/// container path (`--engine vz --rootfs <img>`). Other engines + vz-without-rootfs
-/// are Phase 2 — an honest error, never a dropped port. `Some(2)` to reject.
+/// order). Publishing is wired for native foreground and detached runs, plus the
+/// detached vz container path (`--engine vz --rootfs <img>`). Other engines +
+/// vz-without-rootfs are Phase 2 — an honest error, never a dropped port.
+/// `Some(2)` to reject.
 pub(super) fn publish_policy(
     publish_raw: &[String],
     detach: bool,
@@ -191,20 +191,14 @@ pub(super) fn publish_policy(
     rootfs_ref: Option<&str>,
 ) -> Option<i32> {
     if !publish_raw.is_empty() {
-        // 1. A published service is a long-running server ⇒ it must be detached.
-        if !detach {
-            eprintln!("lightr: -p/--publish requires -d (a published service runs detached)");
-            return Some(2);
-        }
-        // 2. Publishing is wired for the native detached path + the vz detached
-        //    container path (WP-NET2: `--engine vz --rootfs <img>`); other engines
-        //    + vz-without-rootfs are Phase 2 — an honest error, never a dropped port.
+        // Native owns a synchronous forwarder for foreground runs and its existing
+        // supervisor-owned forwarder for detached runs. vz needs its supervisor.
         let native = engine == EngineKind::Native && rootfs_ref.is_none();
-        let vz_container = engine == EngineKind::Vz && rootfs_ref.is_some();
+        let vz_container = detach && engine == EngineKind::Vz && rootfs_ref.is_some();
         if !native && !vz_container {
             eprintln!(
-                "lightr: -p/--publish is wired for the native and `--engine vz --rootfs` \
-                 detached paths; other engines are Phase 2"
+                "lightr: -p/--publish is wired for native foreground/detached runs and \
+                 `--engine vz --rootfs -d`; other engines are Phase 2"
             );
             return Some(2);
         }
