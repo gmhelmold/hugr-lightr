@@ -172,7 +172,7 @@ fn emit_eq_word(b: &mut BpfBuilder, offset: u32, value: u32, fail: Label) {
 fn emit_masked_eq_word(b: &mut BpfBuilder, offset: u32, value: u32, mask: u32, fail: Label) {
     b.push(stmt(BPF_LD | BPF_W | BPF_ABS, offset));
     b.push(stmt(BPF_ALU | BPF_AND | BPF_K, mask));
-    b.push(jump(BPF_JMP | BPF_JEQ | BPF_K, value & mask, 1, 0));
+    b.push(jump(BPF_JMP | BPF_JEQ | BPF_K, value, 1, 0));
     b.jump_to(fail);
 }
 

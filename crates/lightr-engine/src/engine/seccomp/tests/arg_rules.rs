@@ -123,7 +123,7 @@ fn all_arg_operators_have_selective_64_bit_semantics() {
 }
 
 #[test]
-fn masked_eq_masks_expected_value_bits() {
+fn masked_eq_does_not_mask_expected_value_bits() {
     let c = profile(
         r#"{ "defaultAction": "SCMP_ACT_ERRNO", "syscalls": [
              { "names": ["ioctl"], "action": "SCMP_ACT_ALLOW",
@@ -134,8 +134,8 @@ fn masked_eq_masks_expected_value_bits() {
     let nr = syscall_nr("ioctl").unwrap() as u32;
     assert_eq!(
         run_bpf_args(&c.prog, AUDIT_ARCH_X86_64, nr, [0x1f, 0, 0, 0, 0, 0]),
-        SECCOMP_RET_ALLOW,
-        "value bits outside mask must be ignored"
+        SECCOMP_RET_ERRNO | 1,
+        "unmasked expected bits make this predicate unsatisfiable"
     );
     assert_eq!(
         run_bpf_args(&c.prog, AUDIT_ARCH_X86_64, nr, [0x2f, 0, 0, 0, 0, 0]),
@@ -145,7 +145,7 @@ fn masked_eq_masks_expected_value_bits() {
 }
 
 #[test]
-fn masked_eq_compares_high_word_with_mask() {
+fn masked_eq_compares_high_word_without_masking_expected_value() {
     let c = profile(
         r#"{ "defaultAction": "SCMP_ACT_ERRNO", "syscalls": [
              { "names": ["ioctl"], "action": "SCMP_ACT_ALLOW",
@@ -161,8 +161,8 @@ fn masked_eq_compares_high_word_with_mask() {
             nr,
             [0x2_0000_001f, 0, 0, 0, 0, 0]
         ),
-        SECCOMP_RET_ALLOW,
-        "masked-eq must mask high-word expected bits"
+        SECCOMP_RET_ERRNO | 1,
+        "unmasked high-word expected bits make this predicate unsatisfiable"
     );
 }
 

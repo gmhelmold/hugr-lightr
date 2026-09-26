@@ -204,11 +204,13 @@ jobs:
         run: rustup toolchain install 1.96.0 --profile minimal --no-self-update && rustup default 1.96.0
       - name: Install CNI plugins + a bridge conflist
         run: |
-          set -e -x
+          set -euo pipefail
           sudo mkdir -p /opt/cni/bin /etc/cni/net.d /run/netns
-          curl -sL https://github.com/containernetworking/plugins/releases/download/v1.5.1/cni-plugins-linux-amd64-v1.5.1.tgz \
-            | sudo tar -xz -C /opt/cni/bin
-          ls /opt/cni/bin | head
+          CNI_SHA256="77baa2f669980a82255ffa2f2717de823992480271ee778aa51a9c60ae89ff9b"
+          curl -fsSL -o /tmp/cni-plugins.tgz https://github.com/containernetworking/plugins/releases/download/v1.5.1/cni-plugins-linux-amd64-v1.5.1.tgz
+          echo "${CNI_SHA256}  /tmp/cni-plugins.tgz" | sha256sum -c -
+          sudo tar -xzf /tmp/cni-plugins.tgz -C /opt/cni/bin
+          test -x /opt/cni/bin/bridge
           sudo tee /etc/cni/net.d/10-lightr-bridge.conflist >/dev/null <<'JSON'
           { "cniVersion":"1.0.0","name":"lightrnet","plugins":[
             {"type":"bridge","bridge":"lightr0","isGateway":true,"ipMasq":true,
@@ -238,11 +240,13 @@ jobs:
         run: rustup toolchain install 1.96.0 --profile minimal --no-self-update && rustup default 1.96.0
       - name: Install CNI plugins + a bridge conflist (same as cri-linux)
         run: |
-          set -e -x
+          set -euo pipefail
           sudo mkdir -p /opt/cni/bin /etc/cni/net.d /run/netns
-          curl -sL https://github.com/containernetworking/plugins/releases/download/v1.5.1/cni-plugins-linux-amd64-v1.5.1.tgz \
-            | sudo tar -xz -C /opt/cni/bin
-          ls /opt/cni/bin | head
+          CNI_SHA256="77baa2f669980a82255ffa2f2717de823992480271ee778aa51a9c60ae89ff9b"
+          curl -fsSL -o /tmp/cni-plugins.tgz https://github.com/containernetworking/plugins/releases/download/v1.5.1/cni-plugins-linux-amd64-v1.5.1.tgz
+          echo "${CNI_SHA256}  /tmp/cni-plugins.tgz" | sha256sum -c -
+          sudo tar -xzf /tmp/cni-plugins.tgz -C /opt/cni/bin
+          test -x /opt/cni/bin/bridge
           sudo tee /etc/cni/net.d/10-lightr-bridge.conflist >/dev/null <<'JSON'
           { "cniVersion":"1.0.0","name":"lightrnet","plugins":[
             {"type":"bridge","bridge":"lightr0","isGateway":true,"ipMasq":true,
@@ -910,9 +914,11 @@ jobs:
         run: cargo build --release --locked --manifest-path crates/lightr-cri-serve/Cargo.toml -j2
       - name: Install crictl
         run: |
-          set -e -x
-          V=v1.31.1
-          curl -sL "https://github.com/kubernetes-sigs/cri-tools/releases/download/$V/crictl-$V-linux-amd64.tar.gz" | sudo tar -xz -C /usr/local/bin
+          set -euo pipefail
+          CRICTL_SHA256="0a03ba6b1e4c253d63627f8d210b2ea07675a8712587e697657b236d06d7d231"
+          curl -fsSL -o /tmp/crictl.tar.gz https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.31.1/crictl-v1.31.1-linux-amd64.tar.gz
+          echo "${CRICTL_SHA256}  /tmp/crictl.tar.gz" | sha256sum -c -
+          sudo tar -xzf /tmp/crictl.tar.gz -C /usr/local/bin
           crictl --version
       - name: Start lightr cri serve + prove it answers crictl
         run: |
@@ -959,22 +965,26 @@ jobs:
       - name: Toolchain
         run: rustup toolchain install 1.96.0 --profile minimal --no-self-update && rustup default 1.96.0
       - name: Build lightr-cri-serve (real backend + vendored shell)
-        run: cargo build --release --manifest-path crates/lightr-cri-serve/Cargo.toml -j2
+        run: cargo build --release --locked --manifest-path crates/lightr-cri-serve/Cargo.toml -j2
       - name: Build lightr (release) — for the pre-seed image fallback
         run: cargo build -p lightr-cli --release --locked -j2
       - name: Install crictl
         run: |
-          set -e -x
-          V=v1.31.1
-          curl -sL "https://github.com/kubernetes-sigs/cri-tools/releases/download/$V/crictl-$V-linux-amd64.tar.gz" | sudo tar -xz -C /usr/local/bin
+          set -euo pipefail
+          CRICTL_SHA256="0a03ba6b1e4c253d63627f8d210b2ea07675a8712587e697657b236d06d7d231"
+          curl -fsSL -o /tmp/crictl.tar.gz https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.31.1/crictl-v1.31.1-linux-amd64.tar.gz
+          echo "${CRICTL_SHA256}  /tmp/crictl.tar.gz" | sha256sum -c -
+          sudo tar -xzf /tmp/crictl.tar.gz -C /usr/local/bin
           crictl --version
       - name: Install CNI plugins + a bridge conflist (same as cri-linux)
         run: |
-          set -e -x
+          set -euo pipefail
           sudo mkdir -p /opt/cni/bin /etc/cni/net.d /run/netns
-          curl -sL https://github.com/containernetworking/plugins/releases/download/v1.5.1/cni-plugins-linux-amd64-v1.5.1.tgz \
-            | sudo tar -xz -C /opt/cni/bin
-          ls /opt/cni/bin | head
+          CNI_SHA256="77baa2f669980a82255ffa2f2717de823992480271ee778aa51a9c60ae89ff9b"
+          curl -fsSL -o /tmp/cni-plugins.tgz https://github.com/containernetworking/plugins/releases/download/v1.5.1/cni-plugins-linux-amd64-v1.5.1.tgz
+          echo "${CNI_SHA256}  /tmp/cni-plugins.tgz" | sha256sum -c -
+          sudo tar -xzf /tmp/cni-plugins.tgz -C /opt/cni/bin
+          test -x /opt/cni/bin/bridge
           sudo tee /etc/cni/net.d/10-lightr-bridge.conflist >/dev/null <<'JSON'
           { "cniVersion":"1.0.0","name":"lightrnet","plugins":[
             {"type":"bridge","bridge":"lightr0","isGateway":true,"ipMasq":true,
@@ -1499,9 +1509,9 @@ jobs:
       - name: Toolchain
         run: rustup toolchain install 1.96.0 --profile minimal --no-self-update && rustup default 1.96.0
       - name: Build lightr-cri-serve (real backend + vendored shell)
-        run: cargo build --release --manifest-path crates/lightr-cri-serve/Cargo.toml -j2
+        run: cargo build --release --locked --manifest-path crates/lightr-cri-serve/Cargo.toml -j2
       - name: Build lightr (release) — for the pre-seed image fallback
-        run: cargo build -p lightr-cli --release -j2
+        run: cargo build -p lightr-cli --release --locked -j2
       - name: Install jq (critest JSON-report parsing)
         run: |
           set -e -x
@@ -1532,11 +1542,13 @@ jobs:
           critest --version
       - name: Install CNI plugins + a bridge conflist (same as cri-kpi3)
         run: |
-          set -e -x
+          set -euo pipefail
           sudo mkdir -p /opt/cni/bin /etc/cni/net.d /run/netns
-          curl -sL https://github.com/containernetworking/plugins/releases/download/v1.5.1/cni-plugins-linux-amd64-v1.5.1.tgz \
-            | sudo tar -xz -C /opt/cni/bin
-          ls /opt/cni/bin | head
+          CNI_SHA256="77baa2f669980a82255ffa2f2717de823992480271ee778aa51a9c60ae89ff9b"
+          curl -fsSL -o /tmp/cni-plugins.tgz https://github.com/containernetworking/plugins/releases/download/v1.5.1/cni-plugins-linux-amd64-v1.5.1.tgz
+          echo "${CNI_SHA256}  /tmp/cni-plugins.tgz" | sha256sum -c -
+          sudo tar -xzf /tmp/cni-plugins.tgz -C /opt/cni/bin
+          test -x /opt/cni/bin/bridge
           sudo tee /etc/cni/net.d/10-lightr-bridge.conflist >/dev/null <<'JSON'
           { "cniVersion":"1.0.0","name":"lightrnet","plugins":[
             {"type":"bridge","bridge":"lightr0","isGateway":true,"ipMasq":true,

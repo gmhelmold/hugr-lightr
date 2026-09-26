@@ -6,13 +6,17 @@
 
 #[cfg(target_os = "linux")]
 use std::fs;
+#[cfg(any(target_os = "linux", test))]
+use std::path::Path;
 
 #[cfg(target_os = "linux")]
 use crate::container_wait::synth_resolv_conf;
 #[cfg(target_os = "linux")]
 use crate::util::ContainerRecord;
 #[cfg(target_os = "linux")]
-use crate::vocab::{BackendError, ContainerId, Result};
+use crate::vocab::ContainerId;
+#[cfg(any(target_os = "linux", test))]
+use crate::vocab::{BackendError, Result};
 #[cfg(target_os = "linux")]
 use crate::LightrBackend;
 
@@ -108,16 +112,12 @@ impl LightrBackend {
         //   Localhost      ⇒ the profile PATH (`localhost_ref`)
         //   Unconfined     ⇒ "unconfined" (explicitly run without a filter)
         //   RuntimeDefault ⇒ "default" (the built-in OCI seccomp profile)
-        let seccomp: Option<String> = rec
-            .config
-            .security
-            .as_ref()
-            .and_then(|s| s.seccomp.as_ref())
-            .map(|p| match p.profile_type {
-                crate::vocab::ProfileType::Localhost => p.localhost_ref.clone(),
-                crate::vocab::ProfileType::Unconfined => "unconfined".to_string(),
-                crate::vocab::ProfileType::RuntimeDefault => "default".to_string(),
-            });
+        let seccomp = map_seccomp_profile(
+            rec.config
+                .security
+                .as_ref()
+                .and_then(|security| security.seccomp.as_ref()),
+        )?;
 
         // WP-#107 (CRI GAP 1, "starting container with volume" + symlink-host-path):
         // map the CRI `ContainerConfig.mounts` to the descriptor. Resolve `host_path`
@@ -217,5 +217,68 @@ impl LightrBackend {
         fs::create_dir_all(&rootfs).map_err(BackendError::Io)?;
         lightr_index::hydrate(&rootfs, &store, &store_name).map_err(crate::util::map_lightr_err)?;
         Ok(rootfs)
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn map_seccomp_profile(profile: Option<&crate::vocab::SecurityProfile>) -> Result<Option<String>> {
+    match profile {
+        None => Ok(None),
+        Some(profile) => match profile.profile_type {
+            crate::vocab::ProfileType::Localhost => {
+                if !Path::new(&profile.localhost_ref).is_absolute() {
+                    return Err(BackendError::InvalidArgument(
+                        "localhost seccomp profile must be an absolute path".to_string(),
+                    ));
+                }
+                Ok(Some(profile.localhost_ref.clone()))
+            }
+            crate::vocab::ProfileType::Unconfined => Ok(Some("unconfined".to_string())),
+            crate::vocab::ProfileType::RuntimeDefault => Ok(Some("default".to_string())),
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::vocab::{ProfileType, SecurityProfile};
+
+    #[test]
+    fn localhost_seccomp_profile_must_be_absolute_path() {
+        let err = map_seccomp_profile(Some(&SecurityProfile {
+            profile_type: ProfileType::Localhost,
+            localhost_ref: "unconfined".to_string(),
+        }))
+        .expect_err("localhost profile must not select an engine sentinel");
+        assert!(err.to_string().contains("absolute path"));
+    }
+
+    #[test]
+    fn seccomp_profile_modes_map_to_distinct_engine_inputs() {
+        assert_eq!(
+            map_seccomp_profile(Some(&SecurityProfile {
+                profile_type: ProfileType::Localhost,
+                localhost_ref: "/etc/lightr/seccomp.json".to_string(),
+            }))
+            .unwrap(),
+            Some("/etc/lightr/seccomp.json".to_string())
+        );
+        assert_eq!(
+            map_seccomp_profile(Some(&SecurityProfile {
+                profile_type: ProfileType::Unconfined,
+                localhost_ref: String::new(),
+            }))
+            .unwrap(),
+            Some("unconfined".to_string())
+        );
+        assert_eq!(
+            map_seccomp_profile(Some(&SecurityProfile {
+                profile_type: ProfileType::RuntimeDefault,
+                localhost_ref: String::new(),
+            }))
+            .unwrap(),
+            Some("default".to_string())
+        );
     }
 }
