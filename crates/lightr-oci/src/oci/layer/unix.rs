@@ -12,7 +12,33 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
+#[cfg(test)]
+use std::sync::{Mutex, OnceLock};
+
 static NEXT: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(test)]
+struct PreMutationHook {
+    component: OsString,
+    hook: Box<dyn FnOnce() + Send>,
+}
+#[cfg(test)]
+fn pre_mutation_hook() -> &'static Mutex<Option<PreMutationHook>> {
+    static HOOK: OnceLock<Mutex<Option<PreMutationHook>>> = OnceLock::new();
+    HOOK.get_or_init(|| Mutex::new(None))
+}
+#[cfg(test)]
+fn run_pre_mutation_hook(component: &std::ffi::OsStr) {
+    let mut hook = pre_mutation_hook().lock().unwrap();
+    if hook
+        .as_ref()
+        .is_some_and(|hook| hook.component == component)
+    {
+        (hook.take().expect("checked hook").hook)();
+    }
+}
+#[cfg(not(test))]
+fn run_pre_mutation_hook(_component: &std::ffi::OsStr) {}
 fn invalid(error: rustix::io::Errno) -> LightrError {
     LightrError::InvalidManifest(format!("confined layer apply failed: {error}"))
 }
@@ -55,6 +81,8 @@ fn unlink_one(parent: &File, component: &std::ffi::OsStr) -> Result<()> {
         Err(error) => return Err(invalid(error)),
     };
     let directory = FileType::from_raw_mode(stat.st_mode) == FileType::Directory;
+    // Test seam: attacker replacement lands after type observation, before mutation.
+    run_pre_mutation_hook(component);
     if directory {
         let child = open_dir(parent, component)?;
         clear(&child)?;
@@ -207,6 +235,15 @@ impl LayerFs for UnixLayerFs {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::MutexGuard;
+
+    fn hook_guard() -> MutexGuard<'static, Option<PreMutationHook>> {
+        pre_mutation_hook().lock().unwrap()
+    }
+    fn race_serial() -> &'static Mutex<()> {
+        static SERIAL: OnceLock<Mutex<()>> = OnceLock::new();
+        SERIAL.get_or_init(|| Mutex::new(()))
+    }
 
     fn path(parts: &[&str]) -> Vec<OsString> {
         parts.iter().map(OsString::from).collect()
@@ -248,5 +285,83 @@ mod tests {
         })
         .unwrap();
         assert_eq!(std::fs::read(outside.path()).unwrap(), b"retained");
+    }
+
+    fn replace_checked_leaf_with_outside_link(
+        fs: &UnixLayerFs,
+        outside: &tempfile::TempDir,
+    ) -> Box<dyn FnOnce() + Send> {
+        let stage = fs.path().to_path_buf();
+        let outside = outside.path().to_path_buf();
+        Box::new(move || {
+            std::fs::rename(stage.join("dir/victim"), stage.join("dir/parked")).unwrap();
+            std::os::unix::fs::symlink(outside, stage.join("dir/victim")).unwrap();
+        })
+    }
+
+    #[test]
+    fn replacement_before_regular_delete_cannot_reach_outside() {
+        let _serial = race_serial().lock().unwrap();
+        let outside = tempfile::TempDir::new().unwrap();
+        let sentinel = outside.path().join("sentinel");
+        std::fs::write(&sentinel, b"retained").unwrap();
+        let mut fs = UnixLayerFs::new().unwrap();
+        fs.apply(&LayerOp::Directory(path(&["dir", "victim"])))
+            .unwrap();
+        let mut hook = hook_guard();
+        *hook = Some(PreMutationHook {
+            component: OsString::from("victim"),
+            hook: replace_checked_leaf_with_outside_link(&fs, &outside),
+        });
+        drop(hook);
+        assert!(fs
+            .apply(&LayerOp::Regular {
+                dest: path(&["dir", "victim"]),
+                data: b"new".to_vec(),
+                mode: 0o644,
+            })
+            .is_err());
+        assert_eq!(std::fs::read(&sentinel).unwrap(), b"retained");
+        drop(fs);
+        assert_eq!(std::fs::read(&sentinel).unwrap(), b"retained");
+    }
+
+    #[test]
+    fn replacement_before_whiteout_delete_cannot_reach_outside() {
+        let _serial = race_serial().lock().unwrap();
+        let outside = tempfile::TempDir::new().unwrap();
+        let sentinel = outside.path().join("sentinel");
+        std::fs::write(&sentinel, b"retained").unwrap();
+        let mut fs = UnixLayerFs::new().unwrap();
+        fs.apply(&LayerOp::Directory(path(&["dir", "victim"])))
+            .unwrap();
+        let mut hook = hook_guard();
+        *hook = Some(PreMutationHook {
+            component: OsString::from("victim"),
+            hook: replace_checked_leaf_with_outside_link(&fs, &outside),
+        });
+        drop(hook);
+        assert!(fs
+            .apply(&LayerOp::Whiteout {
+                parent: path(&["dir"]),
+                name: Some(OsString::from("victim")),
+            })
+            .is_err());
+        assert_eq!(std::fs::read(&sentinel).unwrap(), b"retained");
+        drop(fs);
+        assert_eq!(std::fs::read(&sentinel).unwrap(), b"retained");
+    }
+
+    #[test]
+    fn stage_cleanup_keeps_replacement_with_different_identity() {
+        let fs = UnixLayerFs::new().unwrap();
+        let stage = fs.path().to_path_buf();
+        let moved = stage.with_extension("moved");
+        std::fs::rename(&stage, &moved).unwrap();
+        std::fs::create_dir(&stage).unwrap();
+        drop(fs);
+        assert!(stage.is_dir(), "cleanup removed replacement staging name");
+        std::fs::remove_dir(&stage).unwrap();
+        std::fs::remove_dir(&moved).unwrap();
     }
 }
