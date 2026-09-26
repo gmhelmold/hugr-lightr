@@ -15,7 +15,7 @@ Status: frozen. Direct dependency (`clw` crate path-deps) supersedes wire contra
 
 ## Dependency rules (`v0.1` core)
 
-One-way: `core` ← `store` ← `index` ← `run` ← `cli`. `clw` crates are direct `path` deps (`../corelink-workspaces/crates/<name>`), `publish = false`, never mutated from this repo (`CLAUDE.md` §9, `ADR-0002` / `ADR-0011` reconciliation). Baseline `corelink-workspaces @ f8f5edf` (`build-spec-v0.1.md`).
+One-way: `core` ← `store` ← `index` ← `run` ← `cli`. `clw` crates are direct `path` deps (`../corelink-workspaces/crates/<name>`), `publish = false`, never mutated from this repo (`ADR-0002` / `ADR-0011` reconciliation). Baseline `corelink-workspaces @ f8f5edf` (`build-spec-v0.1.md`).
 
 ## WP-SELF-10 (`clw` absorption)
 
